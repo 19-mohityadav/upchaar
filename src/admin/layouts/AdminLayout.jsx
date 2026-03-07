@@ -2,14 +2,16 @@ import { NavLink, Outlet, Navigate } from 'react-router-dom';
 import { useAdmin } from '../context/AdminContext.jsx';
 import AdminTopbar from './AdminTopbar.jsx';
 import {
-    LayoutDashboard, Users, UserCog, CalendarCheck2,
-    Bell, ScrollText, Settings, ChevronLeft, ChevronRight, Stethoscope
+    LayoutDashboard, Users, CalendarCheck2,
+    Bell, ScrollText, Settings, ChevronLeft, ChevronRight,
+    Stethoscope, Building2, UserCog, PenLine
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const NAV_ITEMS = [
+// Base nav items visible to all admins
+const BASE_NAV = [
     { to: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/admin/doctors', icon: Stethoscope, label: 'Doctors' },
     { to: '/admin/patients', icon: Users, label: 'Patients' },
@@ -19,11 +21,20 @@ const NAV_ITEMS = [
     { to: '/admin/settings', icon: Settings, label: 'Settings' },
 ];
 
+// Extra items only for super_admin
+const SUPER_ADMIN_NAV = [
+    { to: '/admin/facilities', icon: Building2, label: 'Facilities' },
+    { to: '/admin/support-admins', icon: UserCog, label: 'Support Admins' },
+    { to: '/admin/bloggers', icon: PenLine, label: 'Bloggers' },
+];
+
 export default function AdminLayout() {
-    const { admin } = useAdmin();
+    const { admin, isSuperAdmin } = useAdmin();
     const [collapsed, setCollapsed] = useState(false);
 
     if (!admin) return <Navigate to="/admin/login" replace />;
+
+    const navItems = isSuperAdmin ? [...BASE_NAV, ...SUPER_ADMIN_NAV] : BASE_NAV;
 
     return (
         <div className="flex h-screen bg-[#f1f5f9] overflow-hidden">
@@ -55,7 +66,11 @@ export default function AdminLayout() {
 
                 {/* Nav */}
                 <nav className="flex flex-col gap-1 p-3 flex-1 overflow-y-auto">
-                    {NAV_ITEMS.map(({ to, icon: Icon, label }) => (
+                    {/* Super Admin section divider */}
+                    {isSuperAdmin && !collapsed && (
+                        <p className="px-3 pt-2 pb-1 text-[10px] font-bold text-slate-400 uppercase tracking-widest">General</p>
+                    )}
+                    {BASE_NAV.map(({ to, icon: Icon, label }) => (
                         <NavLink
                             key={to}
                             to={to}
@@ -71,13 +86,7 @@ export default function AdminLayout() {
                                     <Icon className={cn('h-4.5 w-4.5 flex-shrink-0', isActive ? 'text-white' : 'text-slate-400 group-hover:text-slate-600')} size={18} />
                                     <AnimatePresence>
                                         {!collapsed && (
-                                            <motion.span
-                                                initial={{ opacity: 0 }}
-                                                animate={{ opacity: 1 }}
-                                                exit={{ opacity: 0 }}
-                                                transition={{ duration: 0.1 }}
-                                                className="whitespace-nowrap"
-                                            >
+                                            <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.1 }} className="whitespace-nowrap">
                                                 {label}
                                             </motion.span>
                                         )}
@@ -86,6 +95,41 @@ export default function AdminLayout() {
                             )}
                         </NavLink>
                     ))}
+
+                    {/* Super Admin exclusive items */}
+                    {isSuperAdmin && (
+                        <>
+                            {!collapsed && (
+                                <p className="px-3 pt-3 pb-1 text-[10px] font-bold text-amber-500 uppercase tracking-widest">Super Admin Only</p>
+                            )}
+                            {collapsed && <div className="my-2 border-t border-slate-100" />}
+                            {SUPER_ADMIN_NAV.map(({ to, icon: Icon, label }) => (
+                                <NavLink
+                                    key={to}
+                                    to={to}
+                                    className={({ isActive }) => cn(
+                                        'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group',
+                                        isActive
+                                            ? 'bg-amber-500 text-white shadow-md shadow-amber-400/30'
+                                            : 'text-slate-500 hover:bg-amber-50 hover:text-amber-700'
+                                    )}
+                                >
+                                    {({ isActive }) => (
+                                        <>
+                                            <Icon className={cn('flex-shrink-0', isActive ? 'text-white' : 'text-amber-400 group-hover:text-amber-600')} size={18} />
+                                            <AnimatePresence>
+                                                {!collapsed && (
+                                                    <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.1 }} className="whitespace-nowrap">
+                                                        {label}
+                                                    </motion.span>
+                                                )}
+                                            </AnimatePresence>
+                                        </>
+                                    )}
+                                </NavLink>
+                            ))}
+                        </>
+                    )}
                 </nav>
 
                 {/* Collapse toggle */}

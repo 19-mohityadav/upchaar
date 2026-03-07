@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useBlog } from '@/blog/context/BlogContext.jsx';
-import { BLOG_CATEGORIES } from '@/blog/data/mockBlogs.js';
+import { BLOG_CATEGORIES } from '@/lib/constants.js';
 import { Search, Heart, Eye, Clock, ChevronRight, Rss, TrendingUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { DEFAULT_SETTINGS } from '../data/mock.js';
+import { DEFAULT_SETTINGS } from '@/lib/constants.js';
 import { Plus, Trash2, Save, CheckCircle, Image, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';

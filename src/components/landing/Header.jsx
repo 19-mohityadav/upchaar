@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { Search, Menu, X, Stethoscope } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Search, Menu, X, Stethoscope, UserCircle, LogOut, LayoutDashboard, ChevronDown } from 'lucide-react';
 import { DoctorOnboardingModal } from './DoctorOnboardingModal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,35 +14,81 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useAuth } from '@/auth/AuthContext.jsx';
+
+// ── Helper: get user's initials from full name ────────────
+function getInitials(name) {
+    if (!name) return '?';
+    return name
+        .split(' ')
+        .filter(Boolean)
+        .slice(0, 2)
+        .map(w => w[0].toUpperCase())
+        .join('');
+}
+
+// ── Role label for display ────────────────────────────────
+const ROLE_LABELS = {
+    patient: 'Patient',
+    doctor: 'Doctor',
+    clinic: 'Clinic',
+    medical: 'Medical Store',
+    hospital: 'Hospital',
+};
+
+// ── Dashboard path per role ───────────────────────────────
+const ROLE_DASHBOARD = {
+    patient: '/',
+    doctor: '/doctor/dashboard',
+    clinic: '/clinic/dashboard',
+    medical: '/medical/dashboard',
+    hospital: '/hospital/dashboard',
+};
 
 export const Header = () => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [isDoctorModalOpen, setIsDoctorModalOpen] = useState(false);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
+    const [isProfileOpen, setIsProfileOpen] = useState(false);
     const searchInputRef = useRef(null);
+    const profileRef = useRef(null);
     const isMobile = useIsMobile();
+    const navigate = useNavigate();
+
+    const { user, profile, signOut, loading } = useAuth();
+    const isLoggedIn = !loading && !!user && !!profile;
+
+    // Close profile dropdown on outside click
+    useEffect(() => {
+        function handleClickOutside(e) {
+            if (profileRef.current && !profileRef.current.contains(e.target)) {
+                setIsProfileOpen(false);
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     useEffect(() => {
         if (isSearchOpen && searchInputRef.current) {
-            // A small delay to allow the animation to complete before focusing
             setTimeout(() => searchInputRef.current?.focus(), 100);
         }
     }, [isSearchOpen]);
 
     useEffect(() => {
-        // Close mobile search if menu is opened
-        if (isMobile && isMenuOpen) {
-            setIsSearchOpen(false);
-        }
+        if (isMobile && isMenuOpen) setIsSearchOpen(false);
     }, [isMenuOpen, isMobile]);
 
     useEffect(() => {
-        // Close menu if mobile search is opened
-        if (isMobile && isSearchOpen) {
-            setIsMenuOpen(false);
-        }
+        if (isMobile && isSearchOpen) setIsMenuOpen(false);
     }, [isSearchOpen, isMobile]);
 
+    const handleSignOut = async () => {
+        setIsProfileOpen(false);
+        setIsMenuOpen(false);
+        await signOut();
+        navigate('/');
+    };
 
     const navLinks = [
         { href: '/', name: 'Home' },
@@ -51,8 +97,68 @@ export const Header = () => {
         { href: '#features', name: 'Our Services' },
     ];
 
-
     const searchTransition = { duration: 0.4, ease: 'easeInOut' };
+
+    // ── Profile dropdown (desktop) ─────────────────────────
+    const ProfileDropdown = () => (
+        <div className="relative" ref={profileRef}>
+            <button
+                onClick={() => setIsProfileOpen(s => !s)}
+                className="flex items-center gap-2 rounded-full border border-primary/30 bg-card/60 px-3 py-1.5 hover:bg-primary/10 transition focus:outline-none"
+            >
+                {/* Avatar circle with initials */}
+                <div className="h-7 w-7 rounded-full bg-gradient-to-br from-teal-500 to-emerald-400 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                    {getInitials(profile?.full_name)}
+                </div>
+                <span className="text-sm font-semibold text-foreground max-w-[110px] truncate hidden lg:block">
+                    {profile?.full_name?.split(' ')[0] ?? 'Account'}
+                </span>
+                <ChevronDown size={13} className={`text-primary/70 transition-transform ${isProfileOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            <AnimatePresence>
+                {isProfileOpen && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -8, scale: 0.97 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: -8, scale: 0.97 }}
+                        transition={{ duration: 0.18 }}
+                        className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-100 z-50 overflow-hidden"
+                    >
+                        {/* User info */}
+                        <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/70">
+                            <p className="text-sm font-bold text-slate-800 truncate">{profile?.full_name}</p>
+                            <p className="text-xs text-teal-600 font-medium mt-0.5">
+                                {ROLE_LABELS[profile?.profile_type] ?? profile?.profile_type}
+                            </p>
+                            <p className="text-[11px] text-slate-400 truncate mt-0.5">{user?.email}</p>
+                        </div>
+
+                        {/* Dashboard link */}
+                        <button
+                            onClick={() => {
+                                setIsProfileOpen(false);
+                                navigate(ROLE_DASHBOARD[profile?.profile_type] ?? '/');
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-teal-50 hover:text-teal-700 transition text-left"
+                        >
+                            <LayoutDashboard size={15} className="text-slate-400" />
+                            My Dashboard
+                        </button>
+
+                        {/* Sign out */}
+                        <button
+                            onClick={handleSignOut}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition text-left border-t border-slate-100"
+                        >
+                            <LogOut size={15} className="text-red-400" />
+                            Sign Out
+                        </button>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+    );
 
     return (
         <header className="w-full">
@@ -137,22 +243,30 @@ export const Header = () => {
                     </div>
                 </div>
 
-                {/* Desktop Auth Buttons */}
+                {/* Desktop Auth Buttons / Profile Icon */}
                 <div className="hidden md:flex items-center gap-2 ml-4">
-                    <Button
-                        variant="outline"
-                        onClick={() => setIsDoctorModalOpen(true)}
-                        className="rounded-full border-primary/60 text-primary hover:bg-primary/10 hover:text-primary gap-1.5 text-sm"
-                    >
-                        <Stethoscope className="h-4 w-4" />
-                        Join as a Doctor
-                    </Button>
-                    <Button variant="outline" className="rounded-full border-primary text-primary hover:bg-primary/10 hover:text-primary" asChild>
-                        <Link to="/dashboard">Sign In</Link>
-                    </Button>
-                    <Button className="rounded-full hover:bg-primary/90 shadow-[0_10px_30px_hsl(var(--primary)/0.15)]" asChild>
-                        <Link to="/dashboard">Sign Up</Link>
-                    </Button>
+                    {isLoggedIn ? (
+                        /* ── Logged-in: profile avatar dropdown ── */
+                        <ProfileDropdown />
+                    ) : (
+                        /* ── Logged-out: Sign In + Sign Up buttons ── */
+                        <>
+                            <Button
+                                variant="outline"
+                                onClick={() => setIsDoctorModalOpen(true)}
+                                className="rounded-full border-primary/60 text-primary hover:bg-primary/10 hover:text-primary gap-1.5 text-sm"
+                            >
+                                <Stethoscope className="h-4 w-4" />
+                                Join as a Doctor
+                            </Button>
+                            <Button variant="outline" className="rounded-full border-primary text-primary hover:bg-primary/10 hover:text-primary" asChild>
+                                <Link to="/login">Sign In</Link>
+                            </Button>
+                            <Button className="rounded-full hover:bg-primary/90 shadow-[0_10px_30px_hsl(var(--primary)/0.15)]" asChild>
+                                <Link to="/register">Sign Up</Link>
+                            </Button>
+                        </>
+                    )}
                 </div>
             </div>
 
@@ -197,20 +311,58 @@ export const Header = () => {
                                 </Link>
                             ))}
                             <div className="border-t border-border pt-4 flex flex-col gap-3">
-                                <Button
-                                    variant="outline"
-                                    onClick={() => { setIsMenuOpen(false); setIsDoctorModalOpen(true); }}
-                                    className="w-full rounded-full border-primary/60 text-primary gap-1.5"
-                                >
-                                    <Stethoscope className="h-4 w-4" />
-                                    Join as a Doctor
-                                </Button>
-                                <Button variant="outline" className="w-full rounded-full border-primary text-primary" asChild>
-                                    <Link to="/dashboard">Sign In</Link>
-                                </Button>
-                                <Button className="w-full rounded-full hover:bg-primary/90 shadow-[0_10px_30px_hsl(var(--primary)/0.15)]" asChild>
-                                    <Link to="/dashboard">Sign Up</Link>
-                                </Button>
+                                {isLoggedIn ? (
+                                    /* ── Logged-in mobile menu ── */
+                                    <>
+                                        {/* User info pill */}
+                                        <div className="flex items-center gap-3 px-3 py-2 rounded-xl bg-teal-50 border border-teal-100">
+                                            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-teal-500 to-emerald-400 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                                                {getInitials(profile?.full_name)}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-bold text-slate-800 truncate">{profile?.full_name}</p>
+                                                <p className="text-xs text-teal-600 font-medium">{ROLE_LABELS[profile?.profile_type]}</p>
+                                            </div>
+                                        </div>
+                                        <Button
+                                            variant="outline"
+                                            className="w-full rounded-full border-teal-300 text-teal-700 gap-2"
+                                            onClick={() => {
+                                                setIsMenuOpen(false);
+                                                navigate(ROLE_DASHBOARD[profile?.profile_type] ?? '/');
+                                            }}
+                                        >
+                                            <LayoutDashboard size={16} />
+                                            My Dashboard
+                                        </Button>
+                                        <Button
+                                            variant="outline"
+                                            className="w-full rounded-full border-red-200 text-red-600 gap-2"
+                                            onClick={handleSignOut}
+                                        >
+                                            <LogOut size={16} />
+                                            Sign Out
+                                        </Button>
+                                    </>
+                                ) : (
+                                    /* ── Logged-out mobile menu ── */
+                                    <>
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => { setIsMenuOpen(false); setIsDoctorModalOpen(true); }}
+                                            className="w-full rounded-full border-primary/60 text-primary gap-1.5"
+                                        >
+                                            <Stethoscope className="h-4 w-4" />
+                                            Join as a Doctor
+                                        </Button>
+                                        <Button variant="outline" className="w-full rounded-full border-primary text-primary" asChild>
+                                            <Link to="/login">Sign In</Link>
+                                        </Button>
+                                        <Button className="w-full rounded-full hover:bg-primary/90 shadow-[0_10px_30px_hsl(var(--primary)/0.15)]" asChild>
+                                            <Link to="/register">Sign Up</Link>
+                                        </Button>
+                                    </>
+                                )}
                             </div>
                         </nav>
                     </motion.div>

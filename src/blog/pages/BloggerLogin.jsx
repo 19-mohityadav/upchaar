@@ -46,7 +46,8 @@ export default function BloggerLogin() {
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1.5">Email Address</label>
-                            <input type="email" required value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                            <input type="email" required value={form.email}
+                                onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                                 placeholder="blogger@sanjiwani.health"
                                 className="w-full h-11 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition" />
                         </div>

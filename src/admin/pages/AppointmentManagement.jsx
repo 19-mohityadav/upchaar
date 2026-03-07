@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { MOCK_APPOINTMENTS } from '../data/mock.js';
+import { fetchAppointments } from '@/lib/adminApi.js';
 import { Search, ChevronLeft, ChevronRight, TrendingUp, Calendar, IndianRupee } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -16,18 +16,38 @@ export default function AppointmentManagement() {
     const [statusFilter, setStatusFilter] = useState('All');
     const [page, setPage] = useState(1);
 
-    const totalRevenue = MOCK_APPOINTMENTS.reduce((s, a) => s + a.platformRevenue, 0);
-    const completed = MOCK_APPOINTMENTS.filter(a => a.status === 'Completed').length;
-    const pending = MOCK_APPOINTMENTS.filter(a => a.status === 'Pending').length;
+    const [appointments, setAppointments] = useState([]);
+    const [loading, setLoading] = useState(true);
 
-    const filtered = useMemo(() => MOCK_APPOINTMENTS.filter(a => {
-        const matchStatus = statusFilter === 'All' || a.status === statusFilter;
+    useEffect(() => {
+        loadAppointments();
+    }, []);
+
+    const loadAppointments = async () => {
+        try {
+            setLoading(true);
+            const data = await fetchAppointments();
+            setAppointments(data);
+        } catch (err) {
+            console.error('Failed to load appointments', err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const totalRevenue = appointments.reduce((s, a) => s + (a.fee || 0) * 0.1, 0); // Assuming 10% platform fee
+    const completed = appointments.filter(a => a.status === 'Completed').length;
+    const pending = appointments.filter(a => a.status === 'Scheduled').length; // Scheduled in Supabase, Pending in UI
+
+    const filtered = useMemo(() => appointments.filter(a => {
+        const uStatus = a.status === 'Scheduled' ? 'Pending' : a.status;
+        const matchStatus = statusFilter === 'All' || uStatus === statusFilter;
         const matchSearch = !search
-            || a.patientName.toLowerCase().includes(search.toLowerCase())
-            || a.doctorName.toLowerCase().includes(search.toLowerCase())
-            || a.id.includes(search);
+            || (a.patientName || '').toLowerCase().includes(search.toLowerCase())
+            || (a.doctorName || '').toLowerCase().includes(search.toLowerCase())
+            || (a.id || '').includes(search);
         return matchStatus && matchSearch;
-    }), [search, statusFilter]);
+    }), [search, statusFilter, appointments]);
 
     const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
     const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -36,13 +56,13 @@ export default function AppointmentManagement() {
         <div className="space-y-5">
             <div>
                 <h1 className="text-xl font-bold text-slate-800">Appointment Management</h1>
-                <p className="text-sm text-slate-500 mt-0.5">{MOCK_APPOINTMENTS.length} total appointments</p>
+                <p className="text-sm text-slate-500 mt-0.5">{appointments.length} total appointments</p>
             </div>
 
             {/* Summary cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {[
-                    { label: 'Total', value: MOCK_APPOINTMENTS.length, icon: Calendar, color: 'from-primary to-teal-400' },
+                    { label: 'Total', value: appointments.length, icon: Calendar, color: 'from-primary to-teal-400' },
                     { label: 'Completed', value: completed, icon: TrendingUp, color: 'from-emerald-500 to-emerald-400' },
                     { label: 'Pending', value: pending, icon: Calendar, color: 'from-amber-500 to-orange-400' },
                     { label: 'Revenue', value: `₹${(totalRevenue / 1000).toFixed(1)}K`, icon: IndianRupee, color: 'from-violet-500 to-purple-400' },
@@ -90,30 +110,28 @@ export default function AppointmentManagement() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
-                            {paged.map(apt => (
-                                <tr key={apt.id} className="hover:bg-slate-50/70 transition-colors">
-                                    <td className="px-4 py-3 text-xs text-slate-400 font-mono">{apt.id}</td>
-                                    <td className="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">{apt.patientName}</td>
-                                    <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{apt.doctorName}</td>
-                                    <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">{apt.specialization}</td>
-                                    <td className="px-4 py-3 text-slate-600 whitespace-nowrap text-xs">
-                                        <p>{format(new Date(apt.date), 'dd MMM yyyy')}</p>
-                                        <p className="text-slate-400">{apt.timeSlot}</p>
-                                    </td>
-                                    <td className="px-4 py-3 text-slate-500 text-xs">{apt.type}</td>
-                                    <td className="px-4 py-3">
-                                        <span className={cn('px-2.5 py-1 rounded-full text-xs font-semibold border', STATUS_STYLES[apt.status])}>
-                                            {apt.status}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3 text-slate-700 font-semibold">₹{apt.fee}</td>
-                                    <td className="px-4 py-3">
-                                        <span className={cn('font-semibold', apt.platformRevenue > 0 ? 'text-emerald-600' : 'text-slate-300')}>
-                                            {apt.platformRevenue > 0 ? `₹${apt.platformRevenue}` : '—'}
-                                        </span>
-                                    </td>
-                                </tr>
-                            ))}
+                            <tr key={apt.id} className="hover:bg-slate-50/70 transition-colors">
+                                <td className="px-4 py-3 text-xs text-slate-400 font-mono">{apt.id}</td>
+                                <td className="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">{apt.patientName || 'Unknown Patient'}</td>
+                                <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{apt.doctorName || 'Dr. Unknown'}</td>
+                                <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">{apt.specialization || 'General'}</td>
+                                <td className="px-4 py-3 text-slate-600 whitespace-nowrap text-xs">
+                                    <p>{format(new Date(apt.date), 'dd MMM yyyy')}</p>
+                                    <p className="text-slate-400">{apt.time_slot || apt.timeSlot}</p>
+                                </td>
+                                <td className="px-4 py-3 text-slate-500 text-xs">{apt.consultation_type || apt.type || 'Online'}</td>
+                                <td className="px-4 py-3">
+                                    <span className={cn('px-2.5 py-1 rounded-full text-xs font-semibold border', STATUS_STYLES[apt.status === 'Scheduled' ? 'Pending' : apt.status] || STATUS_STYLES['Pending'])}>
+                                        {apt.status === 'Scheduled' ? 'Pending' : apt.status}
+                                    </span>
+                                </td>
+                                <td className="px-4 py-3 text-slate-700 font-semibold">₹{apt.fee || 0}</td>
+                                <td className="px-4 py-3">
+                                    <span className={cn('font-semibold', ((apt.fee || 0) * 0.1) > 0 ? 'text-emerald-600' : 'text-slate-300')}>
+                                        {((apt.fee || 0) * 0.1) > 0 ? `₹${((apt.fee || 0) * 0.1).toFixed(0)}` : '—'}
+                                    </span>
+                                </td>
+                            </tr>
                             {paged.length === 0 && (
                                 <tr><td colSpan={9} className="px-4 py-12 text-center text-slate-400 text-sm">No appointments found</td></tr>
                             )}

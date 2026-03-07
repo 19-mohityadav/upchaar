@@ -1,14 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useBlog } from '../context/BlogContext.jsx';
-import { BLOG_CATEGORIES, COVER_GRADIENTS } from '../data/mockBlogs.js';
+import { BLOG_CATEGORIES, COVER_GRADIENTS } from '@/lib/constants.js';
 import {
     Save, Send, Bold, Italic, Heading2, List, Quote, RotateCcw, CheckCircle,
-    ImagePlus, X, Eye, Heart, Clock, Calendar, Stethoscope,
+    ImagePlus, X, Eye, Heart, Clock, Calendar, Stethoscope, Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
+import { uploadBlogImage } from '@/lib/uploadImage.js';
+import { supabase } from '@/lib/supabase.js';
 
 const EMPTY = { title: '', category: BLOG_CATEGORIES[0], tags: '', excerpt: '', content: '', coverGradient: COVER_GRADIENTS[0], readTime: 5, imageUrl: '' };
 
@@ -131,17 +133,35 @@ function LivePreview({ form, blogger }) {
 }
 
 /* ── Image Upload ───────────────────────────────────────────────────────── */
-function ImageUpload({ imageUrl, onChange }) {
+function ImageUpload({ imageUrl, onChange, bloggerId }) {
     const fileInputRef = useRef(null);
     const [urlInput, setUrlInput] = useState('');
     const [urlMode, setUrlMode] = useState(false);
     const [dragOver, setDragOver] = useState(false);
+    const [uploading, setUploading] = useState(false);
+    const [uploadError, setUploadError] = useState('');
 
-    const handleFile = (file) => {
+    /**
+     * handleFile
+     * Uploads the selected/dropped image to Supabase Storage `blog-images`
+     * and calls onChange() with the returned public URL.
+     */
+    const handleFile = async (file) => {
         if (!file || !file.type.startsWith('image/')) return;
-        const reader = new FileReader();
-        reader.onload = (e) => onChange(e.target.result);
-        reader.readAsDataURL(file);
+        setUploadError('');
+        setUploading(true);
+        try {
+            // Get the current auth user ID for the storage path
+            const { data: { user } } = await supabase.auth.getUser();
+            const userId = user?.id || bloggerId || 'anonymous';
+            const url = await uploadBlogImage(file, userId);
+            onChange(url);
+        } catch (err) {
+            setUploadError(err.message || 'Upload failed. Try again.');
+        } finally {
+            setUploading(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
     };
 
     const handleDrop = (e) => {
@@ -169,7 +189,7 @@ function ImageUpload({ imageUrl, onChange }) {
                         <X size={12} />
                     </button>
                     <p className="text-[10px] text-emerald-600 mt-1.5 flex items-center gap-1">
-                        <CheckCircle size={9} /> Image set
+                        <CheckCircle size={9} /> Image uploaded to Supabase Storage
                     </p>
                 </div>
             ) : (
@@ -179,19 +199,36 @@ function ImageUpload({ imageUrl, onChange }) {
                         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
                         onDragLeave={() => setDragOver(false)}
                         onDrop={handleDrop}
-                        onClick={() => fileInputRef.current?.click()}
+                        onClick={() => !uploading && fileInputRef.current?.click()}
                         className={cn(
-                            'border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all',
+                            'border-2 border-dashed rounded-xl p-5 text-center transition-all',
+                            uploading ? 'cursor-default opacity-70' : 'cursor-pointer',
                             dragOver
                                 ? 'border-primary bg-primary/5'
                                 : 'border-slate-200 hover:border-primary/50 hover:bg-slate-50'
                         )}>
-                        <ImagePlus size={22} className="mx-auto text-slate-300 mb-2" />
-                        <p className="text-xs font-medium text-slate-500">Drop image or click to upload</p>
-                        <p className="text-[10px] text-slate-400 mt-0.5">PNG, JPG, WebP up to 5MB</p>
+                        {uploading ? (
+                            <>
+                                <Loader2 size={22} className="mx-auto text-primary mb-2 animate-spin" />
+                                <p className="text-xs font-medium text-primary">Uploading to Supabase…</p>
+                            </>
+                        ) : (
+                            <>
+                                <ImagePlus size={22} className="mx-auto text-slate-300 mb-2" />
+                                <p className="text-xs font-medium text-slate-500">Drop image or click to upload</p>
+                                <p className="text-[10px] text-slate-400 mt-0.5">PNG, JPG, WebP up to 10 MB</p>
+                            </>
+                        )}
                         <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
-                            onChange={(e) => handleFile(e.target.files[0])} />
+                            onChange={(e) => handleFile(e.target.files[0])} disabled={uploading} />
                     </div>
+
+                    {/* Upload error */}
+                    {uploadError && (
+                        <p className="mt-1.5 text-[11px] text-red-500 flex items-center gap-1">
+                            ⚠ {uploadError}
+                        </p>
+                    )}
 
                     {/* URL option */}
                     <div className="mt-2">
@@ -269,14 +306,29 @@ export default function PostEditor() {
         else { saveDraft(data); showToast('Draft saved ✓'); navigate('/blogger/posts'); }
     };
 
-    const handlePublish = () => {
+    const handlePublish = async () => {
         if (!form.title.trim() || !form.content.trim() || !form.excerpt.trim()) {
             showToast('Please fill in Title, Excerpt and Content before publishing.', 'error'); return;
         }
         const data = { ...form, tags: tagsArray(), status: 'published' };
-        if (id) { updatePost(id, { ...data, status: 'published' }); showToast('Post published! 🎉'); }
-        else { publishPost(data); showToast('Post published! 🎉'); }
-        setTimeout(() => navigate('/blogger/posts'), 1200);
+        try {
+            if (id) {
+                // Edit existing — update status to published
+                await updatePost(id, { ...data, status: 'published' });
+                showToast('Post published! 🎉');
+                // Find the slug from myPosts (state updated after updatePost)
+                const existing = myPosts.find(p => p.id === id);
+                const slug = existing?.slug || id;
+                setTimeout(() => navigate(`/blogs/${slug}`), 800);
+            } else {
+                // New post
+                const published = await publishPost(data);
+                showToast('Post published! 🎉');
+                setTimeout(() => navigate(`/blogs/${published.slug}`), 800);
+            }
+        } catch {
+            showToast('Failed to publish. Please try again.', 'error');
+        }
     };
 
     return (
@@ -376,7 +428,7 @@ export default function PostEditor() {
                     </div>
 
                     {/* Image Upload */}
-                    <ImageUpload imageUrl={form.imageUrl} onChange={(url) => set('imageUrl', url)} />
+                    <ImageUpload imageUrl={form.imageUrl} onChange={(url) => set('imageUrl', url)} bloggerId={blogger?.id} />
 
                     {/* Publish */}
                     <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-2">

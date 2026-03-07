@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { MOCK_NOTIFICATIONS, MOCK_DOCTORS, MOCK_PATIENTS } from '../data/mock.js';
+import { useEffect } from 'react';
+import { supabase } from '@/lib/supabase.js';
 import { Send, Megaphone, Mail, Users, Stethoscope, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -7,17 +8,41 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 export default function NotificationCenter() {
     const [tab, setTab] = useState('broadcast');
-    const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
+    const [notifications, setNotifications] = useState([]);
     const [broadcast, setBroadcast] = useState({ audience: 'All Doctors', subject: '', body: '' });
     const [individual, setIndividual] = useState({ search: '', selected: null, subject: '', body: '' });
     const [doctorSearch, setDoctorSearch] = useState('');
     const [toast, setToast] = useState(null);
+    const [users, setUsers] = useState([]);
+
+    useEffect(() => {
+        loadData();
+    }, []);
+
+    const loadData = async () => {
+        try {
+            const [docsRes, patsRes] = await Promise.all([
+                supabase.from('doctors').select('id, full_name, email, specialization, status'),
+                supabase.from('profiles').select('id, full_name, email')
+            ]);
+
+            const docs = docsRes.data ? docsRes.data.map(d => ({ ...d, type: 'Doctor' })) : [];
+            const pats = patsRes.data ? patsRes.data.map(p => ({ ...p, type: 'Patient' })) : [];
+
+            setUsers([...docs, ...pats]);
+
+            // For now, keep notifications local or fetch from activity_logs if you want them persistent
+            setNotifications([]);
+        } catch (err) {
+            console.error('Failed to load users for notifications', err);
+        }
+    };
 
     const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
-    const searchResults = [...MOCK_DOCTORS, ...MOCK_PATIENTS].filter(u =>
-        (u.fullName || u.name || '').toLowerCase().includes(doctorSearch.toLowerCase())
-        || u.email.toLowerCase().includes(doctorSearch.toLowerCase())
+    const searchResults = users.filter(u =>
+        (u.full_name || '').toLowerCase().includes(doctorSearch.toLowerCase())
+        || (u.email || '').toLowerCase().includes(doctorSearch.toLowerCase())
     ).slice(0, 6);
 
     const sendBroadcast = () => {
@@ -35,7 +60,7 @@ export default function NotificationCenter() {
         if (!individual.selected || !individual.subject.trim() || !individual.body.trim()) return;
         const newNotif = {
             id: Date.now(), type: 'individual',
-            audience: individual.selected.fullName || individual.selected.name,
+            audience: individual.selected.full_name,
             subject: individual.subject, sentAt: new Date().toISOString(), sentBy: 'Admin',
         };
         setNotifications(prev => [newNotif, ...prev]);
@@ -105,10 +130,10 @@ export default function NotificationCenter() {
                                     {individual.selected ? (
                                         <div className="flex items-center gap-2 p-2.5 rounded-xl border border-primary/30 bg-primary/5">
                                             <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-sm">
-                                                {(individual.selected.fullName || individual.selected.name)[0]}
+                                                {(individual.selected.full_name || '?')[0]}
                                             </div>
                                             <div className="flex-1">
-                                                <p className="text-sm font-medium text-slate-800">{individual.selected.fullName || individual.selected.name}</p>
+                                                <p className="text-sm font-medium text-slate-800">{individual.selected.full_name}</p>
                                                 <p className="text-xs text-slate-500">{individual.selected.email}</p>
                                             </div>
                                             <button onClick={() => { setIndividual(i => ({ ...i, selected: null })); setDoctorSearch(''); }}
@@ -125,10 +150,10 @@ export default function NotificationCenter() {
                                                         <button key={u.id} className="w-full flex items-center gap-2 px-3 py-2 hover:bg-slate-50 transition text-left"
                                                             onClick={() => { setIndividual(i => ({ ...i, selected: u })); setDoctorSearch(''); }}>
                                                             <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-xs flex-shrink-0">
-                                                                {(u.fullName || u.name)[0]}
+                                                                {(u.full_name || '?')[0]}
                                                             </div>
                                                             <div>
-                                                                <p className="text-sm text-slate-800">{u.fullName || u.name}</p>
+                                                                <p className="text-sm text-slate-800">{u.full_name}</p>
                                                                 <p className="text-xs text-slate-400">{u.email} · {u.specialization || 'Patient'}</p>
                                                             </div>
                                                         </button>

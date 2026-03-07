@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
-import { MOCK_LOGS } from '../data/mock.js';
+import { fetchLogs } from '@/lib/adminApi.js';
+import { useEffect } from 'react';
 import { Search, Filter } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -20,14 +21,32 @@ const ACTIONS = ['All Actions', 'Approved Doctor', 'Rejected Doctor', 'Suspended
 export default function ActivityLogs() {
     const [search, setSearch] = useState('');
     const [actionFilter, setActionFilter] = useState('All Actions');
+    const [logs, setLogs] = useState([]);
+    const [loading, setLoading] = useState(true);
 
-    const filtered = useMemo(() => MOCK_LOGS.filter(l => {
+    useEffect(() => {
+        loadLogs();
+    }, []);
+
+    const loadLogs = async () => {
+        try {
+            setLoading(true);
+            const data = await fetchLogs();
+            setLogs(data);
+        } catch (err) {
+            console.error('Failed to load logs', err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const filtered = useMemo(() => logs.filter(l => {
         const matchAction = actionFilter === 'All Actions' || l.action === actionFilter;
-        const matchSearch = !search || l.target.toLowerCase().includes(search.toLowerCase())
-            || l.admin.toLowerCase().includes(search.toLowerCase())
-            || l.action.toLowerCase().includes(search.toLowerCase());
+        const matchSearch = !search || (l.target || '').toLowerCase().includes(search.toLowerCase())
+            || (l.admin || '').toLowerCase().includes(search.toLowerCase())
+            || (l.action || '').toLowerCase().includes(search.toLowerCase());
         return matchAction && matchSearch;
-    }), [search, actionFilter]);
+    }), [search, actionFilter, logs]);
 
     return (
         <div className="space-y-5">
@@ -66,11 +85,11 @@ export default function ActivityLogs() {
                         {filtered.map((log, i) => (
                             <tr key={log.id} className={cn('hover:bg-slate-50/70 transition-colors', i % 2 === 0 ? '' : 'bg-slate-50/30')}>
                                 <td className="px-4 py-3 font-mono text-xs text-slate-400 whitespace-nowrap">
-                                    {format(new Date(log.timestamp), 'dd MMM yyyy')}<br />
-                                    <span className="text-[10px]">{format(new Date(log.timestamp), 'HH:mm:ss')}</span>
+                                    {format(new Date(log.timestamp || log.created_at || new Date()), 'dd MMM yyyy')}<br />
+                                    <span className="text-[10px]">{format(new Date(log.timestamp || log.created_at || new Date()), 'HH:mm:ss')}</span>
                                 </td>
                                 <td className="px-4 py-3 font-medium text-slate-800 whitespace-nowrap">{log.admin}</td>
-                                <td className="px-4 py-3 text-xs font-mono text-slate-400">{log.adminId}</td>
+                                <td className="px-4 py-3 text-xs font-mono text-slate-400">{log.admin_id || log.adminId || 'System'}</td>
                                 <td className="px-4 py-3">
                                     <span className={cn('px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap', ACTION_STYLES[log.action] || 'bg-slate-100 text-slate-600')}>
                                         {log.action}

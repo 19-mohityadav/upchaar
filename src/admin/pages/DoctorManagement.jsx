@@ -1,12 +1,15 @@
-import { useState, useMemo } from 'react';
-import { MOCK_DOCTORS } from '../data/mock.js';
+import { useState, useMemo, useEffect } from 'react';
+import { SPECIALIZATIONS } from '@/lib/constants.js';
+import { useAdmin } from '../context/AdminContext.jsx';
+import { fetchDoctors, updateDoctorStatus } from '@/lib/adminApi.js';
 import {
-    Search, Filter, Eye, CheckCircle, XCircle, ShieldAlert,
-    ChevronLeft, ChevronRight, ExternalLink, X, FileText, Phone, Mail
+    Search, Eye, CheckCircle, XCircle, ShieldAlert,
+    ChevronLeft, ChevronRight, ExternalLink, X, FileText, Phone, Mail, Plus, Trash2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
+import { supabase } from '@/lib/supabase.js';
 
 const STATUSES = ['All', 'Pending', 'Approved', 'Rejected', 'Suspended'];
 const PAGE_SIZE = 8;
@@ -18,8 +21,12 @@ const STATUS_STYLES = {
     Suspended: 'bg-slate-100 text-slate-500 border-slate-200',
 };
 
+const EMPTY_DOCTOR_FORM = { fullName: '', email: '', phone: '', specialization: SPECIALIZATIONS[0], city: 'Delhi', consultationFee: 500, experience: 5 };
+
 export default function DoctorManagement() {
-    const [doctors, setDoctors] = useState(MOCK_DOCTORS);
+    const { isSuperAdmin, admin } = useAdmin();
+    const [doctors, setDoctors] = useState([]);
+    const [dataLoading, setDataLoading] = useState(true);
     const [activeStatus, setActiveStatus] = useState('All');
     const [search, setSearch] = useState('');
     const [page, setPage] = useState(1);
@@ -27,22 +34,58 @@ export default function DoctorManagement() {
     const [rejectModal, setRejectModal] = useState({ open: false, doc: null });
     const [rejectReason, setRejectReason] = useState('');
     const [toast, setToast] = useState(null);
+    const [deleteTarget, setDeleteTarget] = useState(null);
+    const [showAdd, setShowAdd] = useState(false);
+    const [addForm, setAddForm] = useState(EMPTY_DOCTOR_FORM);
+
+    useEffect(() => {
+        fetchDoctors()
+            .then(data => setDoctors(data.map(d => ({
+                ...d,
+                fullName: d.full_name,
+                appliedAt: d.applied_at,
+                approvedAt: d.approved_at,
+                consultationFee: d.consultation_fee,
+                consultationType: d.consultation_type,
+                clinicName: d.clinic_name,
+                clinicAddress: d.clinic_address,
+                licenseNo: d.license_no,
+                nmcNo: d.nmc_no,
+                rejectionReason: d.rejection_reason,
+                totalAppointments: d.total_appointments,
+                totalRevenue: d.total_revenue,
+                availableDays: d.available_days || [],
+                hoursFrom: d.hours_from || '09:00',
+                hoursTo: d.hours_to || '17:00',
+                additionalQualifications: d.additional_qualifications || '',
+                subSpecialization: d.sub_specialization || '',
+                passingYear: d.passing_year,
+                documents: d.metadata?.documents || {},
+            }))))
+            .catch(console.error)
+            .finally(() => setDataLoading(false));
+    }, []);
 
     const showToast = (msg, type = 'success') => {
         setToast({ msg, type });
         setTimeout(() => setToast(null), 3000);
     };
 
-    const updateStatus = (id, status, extra = {}) => {
-        setDoctors(prev => prev.map(d => d.id === id ? { ...d, status, ...extra } : d));
+    const updateStatus = async (id, status, extra = {}) => {
+        try {
+            await updateDoctorStatus(id, status, extra.rejectionReason || '');
+            setDoctors(prev => prev.map(d => d.id === id ? { ...d, status, ...extra } : d));
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
     };
 
     const filtered = useMemo(() => {
         return doctors.filter(d => {
             const matchStatus = activeStatus === 'All' || d.status === activeStatus;
-            const matchSearch = !search || d.fullName.toLowerCase().includes(search.toLowerCase())
-                || d.specialization.toLowerCase().includes(search.toLowerCase())
-                || d.email.toLowerCase().includes(search.toLowerCase());
+            const matchSearch = !search || (d.fullName || '').toLowerCase().includes(search.toLowerCase())
+                || (d.specialization || '').toLowerCase().includes(search.toLowerCase())
+                || (d.email || '').toLowerCase().includes(search.toLowerCase());
             return matchStatus && matchSearch;
         });
     }, [doctors, activeStatus, search]);
@@ -72,6 +115,49 @@ export default function DoctorManagement() {
         if (selectedDoc?.id === doc.id) setSelectedDoc(p => ({ ...p, status: newStatus }));
     };
 
+    const handleDeleteDoctor = async () => {
+        try {
+            await supabase.from('doctors').delete().eq('id', deleteTarget.id);
+            setDoctors(prev => prev.filter(d => d.id !== deleteTarget.id));
+            showToast(`${deleteTarget.fullName} deleted`, 'error');
+            if (selectedDoc?.id === deleteTarget.id) setSelectedDoc(null);
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+        setDeleteTarget(null);
+    };
+
+    const handleAddDoctor = async (e) => {
+        e.preventDefault();
+        try {
+            const { data, error } = await supabase.from('doctors').insert([{
+                full_name: addForm.fullName.trim(),
+                email: addForm.email.trim(),
+                phone: addForm.phone.trim(),
+                specialization: addForm.specialization,
+                city: addForm.city.trim(),
+                consultation_fee: Number(addForm.consultationFee),
+                experience: Number(addForm.experience),
+                status: 'Pending',
+                applied_at: new Date().toISOString(),
+            }]).select().single();
+            if (error) throw error;
+            setDoctors(prev => [{
+                ...data,
+                fullName: data.full_name,
+                appliedAt: data.applied_at,
+                consultationFee: data.consultation_fee,
+                availableDays: [], hoursFrom: '09:00', hoursTo: '17:00',
+                languages: [], documents: {},
+            }, ...prev]);
+            setShowAdd(false);
+            setAddForm(EMPTY_DOCTOR_FORM);
+            showToast(`${addForm.fullName} added ✓`);
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    };
+
     const statusCounts = STATUSES.reduce((acc, s) => {
         acc[s] = s === 'All' ? doctors.length : doctors.filter(d => d.status === s).length;
         return acc;
@@ -85,6 +171,12 @@ export default function DoctorManagement() {
                     <h1 className="text-xl font-bold text-slate-800">Doctor Management</h1>
                     <p className="text-sm text-slate-500 mt-0.5">{doctors.length} registered doctors</p>
                 </div>
+                {isSuperAdmin && (
+                    <button onClick={() => setShowAdd(true)}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-primary to-teal-500 text-white text-sm font-semibold shadow-md shadow-primary/25 hover:shadow-lg transition-all">
+                        <Plus size={16} /> Add Doctor
+                    </button>
+                )}
             </div>
 
             {/* Filter Tabs */}
@@ -119,7 +211,7 @@ export default function DoctorManagement() {
                     <table className="w-full text-sm">
                         <thead>
                             <tr className="border-b border-slate-100 bg-slate-50">
-                                {['Doctor', 'Specialization', 'Experience', 'Fee', 'Status', 'Applied', 'Actions'].map(h => (
+                                {['Doctor', 'Specialization', 'Experience', 'Fee', 'Status', 'Applied', 'Actions', ...(isSuperAdmin ? [''] : [])].map(h => (
                                     <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
                                 ))}
                             </tr>
@@ -181,6 +273,14 @@ export default function DoctorManagement() {
                                             )}
                                         </div>
                                     </td>
+                                    {isSuperAdmin && (
+                                        <td className="px-4 py-3">
+                                            <button onClick={() => setDeleteTarget(doc)}
+                                                className="h-8 w-8 flex items-center justify-center rounded-lg bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-all" title="Delete Doctor">
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </td>
+                                    )}
                                 </tr>
                             ))}
                             {paged.length === 0 && (
@@ -328,6 +428,70 @@ export default function DoctorManagement() {
                             )}
                         </motion.div>
                     </>
+                )}
+            </AnimatePresence>
+
+            {/* ── Add Doctor Modal ──────────────────────────────── */}
+            <AnimatePresence>
+                {showAdd && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+                            className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
+                            <div className="flex items-center justify-between p-5 border-b border-slate-100">
+                                <h3 className="font-bold text-slate-800 text-lg">Add New Doctor</h3>
+                                <button onClick={() => { setShowAdd(false); setAddForm(EMPTY_DOCTOR_FORM); }} className="h-8 w-8 rounded-lg text-slate-400 hover:bg-slate-100 flex items-center justify-center transition"><X size={16} /></button>
+                            </div>
+                            <form onSubmit={handleAddDoctor} className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+                                {[
+                                    { key: 'fullName', label: 'Full Name', placeholder: 'Dr. Priya Sharma', type: 'text' },
+                                    { key: 'email', label: 'Email', placeholder: 'doctor@clinic.com', type: 'email' },
+                                    { key: 'phone', label: 'Phone', placeholder: '9876543210', type: 'tel' },
+                                    { key: 'city', label: 'City', placeholder: 'Delhi', type: 'text' },
+                                    { key: 'consultationFee', label: 'Consultation Fee (₹)', placeholder: '500', type: 'number' },
+                                    { key: 'experience', label: 'Experience (years)', placeholder: '5', type: 'number' },
+                                ].map(({ key, label, placeholder, type }) => (
+                                    <div key={key}>
+                                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">{label}</label>
+                                        <input required type={type} value={addForm[key]} onChange={e => setAddForm(f => ({ ...f, [key]: e.target.value }))}
+                                            placeholder={placeholder}
+                                            className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition" />
+                                    </div>
+                                ))}
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-600 mb-1.5">Specialization</label>
+                                    <select value={addForm.specialization} onChange={e => setAddForm(f => ({ ...f, specialization: e.target.value }))}
+                                        className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25">
+                                        {SPECIALIZATIONS.map(s => <option key={s}>{s}</option>)}
+                                    </select>
+                                </div>
+                                <div className="flex gap-3 pt-1">
+                                    <button type="button" onClick={() => { setShowAdd(false); setAddForm(EMPTY_DOCTOR_FORM); }}
+                                        className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition">Cancel</button>
+                                    <button type="submit"
+                                        className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-primary to-teal-500 text-white text-sm font-semibold hover:opacity-90 transition">Add Doctor</button>
+                                </div>
+                            </form>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* ── Delete Confirm Modal ──────────────────────────────── */}
+            <AnimatePresence>
+                {deleteTarget && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+                        <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
+                            className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+                            <h3 className="font-bold text-slate-800 text-lg mb-1">Delete Doctor?</h3>
+                            <p className="text-sm text-slate-500 mb-5">{deleteTarget?.fullName}</p>
+                            <div className="flex gap-3">
+                                <button onClick={() => setDeleteTarget(null)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition">Cancel</button>
+                                <button onClick={handleDeleteDoctor} className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition">Yes, Delete</button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
                 )}
             </AnimatePresence>
 

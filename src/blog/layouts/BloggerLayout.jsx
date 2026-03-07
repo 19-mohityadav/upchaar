@@ -13,8 +13,15 @@ const NAV = [
 ];
 
 export default function BloggerLayout() {
-    const { blogger, logoutBlogger } = useBlog();
+    const { blogger, logoutBlogger, loading } = useBlog();
     const [collapsed, setCollapsed] = useState(false);
+
+    // Wait for Supabase session restore before deciding to redirect
+    if (loading) return (
+        <div className="flex h-screen items-center justify-center bg-[#f1f5f9]">
+            <div className="h-8 w-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+        </div>
+    );
 
     if (!blogger) return <Navigate to="/blogger/login" replace />;
 

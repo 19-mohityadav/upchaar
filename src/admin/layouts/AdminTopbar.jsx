@@ -1,17 +1,28 @@
 import { useAdmin } from '../context/AdminContext.jsx';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Search, LogOut, Shield, ChevronDown } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { MOCK_DOCTORS } from '../data/mock.js';
-
-const pendingCount = MOCK_DOCTORS.filter(d => d.status === 'Pending').length;
+import { fetchDoctors } from '@/lib/adminApi.js';
 
 export default function AdminTopbar() {
     const { admin, logout, isSuperAdmin } = useAdmin();
     const navigate = useNavigate();
+
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [searchVal, setSearchVal] = useState('');
+    const [pendingCount, setPendingCount] = useState(0);
+
+    // Initial load
+    useEffect(() => {
+        const getPending = async () => {
+            try {
+                const docs = await fetchDoctors();
+                setPendingCount(docs.filter(d => d.status === 'Pending').length);
+            } catch (err) { }
+        };
+        getPending();
+    }, []);
 
     const handleLogout = () => {
         logout();

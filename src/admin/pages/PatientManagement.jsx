@@ -1,45 +1,88 @@
-import { useState, useMemo } from 'react';
-import { MOCK_PATIENTS } from '../data/mock.js';
+import { useState, useMemo, useEffect } from 'react';
+import { fetchPatients, updatePatientStatus } from '@/lib/adminApi.js';
+import { useAdmin } from '../context/AdminContext.jsx';
 import {
-    Search, Ban, CheckCircle, ChevronLeft, ChevronRight, ChevronDown, ChevronUp
+    Search, Ban, CheckCircle, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Plus, Trash2, X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
+import { supabase } from '@/lib/supabase.js';
 
 const PAGE_SIZE = 9;
 const STATUS_STYLES = {
+    active: 'bg-emerald-50 text-emerald-600 border-emerald-200',
+    pending: 'bg-amber-50 text-amber-600 border-amber-200',
+    suspended: 'bg-red-50 text-red-500 border-red-200',
+    // Legacy label support
     Active: 'bg-emerald-50 text-emerald-600 border-emerald-200',
     Blocked: 'bg-red-50 text-red-500 border-red-200',
 };
-const APT_STATUS = {
-    Completed: 'bg-emerald-50 text-emerald-600',
-    Pending: 'bg-amber-50 text-amber-600',
-    Cancelled: 'bg-red-50 text-red-500',
-};
+
+const EMPTY_PAT_FORM = { name: '', email: '', phone: '', city: 'Delhi' };
 
 export default function PatientManagement() {
-    const [patients, setPatients] = useState(MOCK_PATIENTS);
+    const { isSuperAdmin } = useAdmin();
+    const [patients, setPatients] = useState([]);
+    const [dataLoading, setDataLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [filter, setFilter] = useState('All');
     const [page, setPage] = useState(1);
     const [expandedId, setExpandedId] = useState(null);
     const [confirmBlock, setConfirmBlock] = useState(null);
     const [toast, setToast] = useState(null);
+    const [deleteTarget, setDeleteTarget] = useState(null);
+    const [showAdd, setShowAdd] = useState(false);
+    const [addForm, setAddForm] = useState(EMPTY_PAT_FORM);
+
+    useEffect(() => {
+        fetchPatients()
+            .then(data => setPatients(data.map(p => ({
+                ...p,
+                name: p.full_name || p.name || p.email,
+                joinedAt: p.created_at,
+                totalAppointments: p.metadata?.totalAppointments || 0,
+                bookingHistory: p.metadata?.bookingHistory || [],
+                city: p.metadata?.city || '',
+            }))))
+            .catch(console.error)
+            .finally(() => setDataLoading(false));
+    }, []);
 
     const showToast = (msg, type = 'success') => {
         setToast({ msg, type });
         setTimeout(() => setToast(null), 3000);
     };
 
-    const toggleBlock = (id) => {
-        setPatients(prev => prev.map(p => {
-            if (p.id !== id) return p;
-            const newStatus = p.status === 'Blocked' ? 'Active' : 'Blocked';
-            showToast(`${p.name} ${newStatus === 'Blocked' ? 'blocked' : 'unblocked'}`, newStatus === 'Blocked' ? 'error' : 'success');
-            return { ...p, status: newStatus };
-        }));
+    const toggleBlock = async (id) => {
+        const patient = patients.find(p => p.id === id);
+        const newStatus = (patient.status === 'suspended' || patient.status === 'Blocked') ? 'active' : 'suspended';
+        try {
+            await updatePatientStatus(id, newStatus);
+            setPatients(prev => prev.map(p => p.id === id ? { ...p, status: newStatus } : p));
+            showToast(`${patient.name} ${newStatus === 'suspended' ? 'blocked' : 'unblocked'}`, newStatus === 'suspended' ? 'error' : 'success');
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
         setConfirmBlock(null);
+    };
+
+    const handleDeletePatient = async () => {
+        try {
+            await supabase.from('profiles').delete().eq('id', deleteTarget.id);
+            setPatients(prev => prev.filter(p => p.id !== deleteTarget.id));
+            showToast(`${deleteTarget.name} deleted`, 'error');
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+        setDeleteTarget(null);
+    };
+
+    const handleAddPatient = (e) => {
+        e.preventDefault();
+        // Patients self-register; admin can only view. Show info toast.
+        showToast('Patients register themselves via the registration page.', 'warn');
+        setShowAdd(false);
     };
 
     const filtered = useMemo(() => patients.filter(p => {
@@ -55,9 +98,17 @@ export default function PatientManagement() {
 
     return (
         <div className="space-y-5">
-            <div>
-                <h1 className="text-xl font-bold text-slate-800">Patient Management</h1>
-                <p className="text-sm text-slate-500 mt-0.5">{patients.length} registered patients</p>
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-xl font-bold text-slate-800">Patient Management</h1>
+                    <p className="text-sm text-slate-500 mt-0.5">{patients.length} registered patients</p>
+                </div>
+                {isSuperAdmin && (
+                    <button onClick={() => setShowAdd(true)}
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-primary to-teal-500 text-white text-sm font-semibold shadow-md shadow-primary/25 hover:shadow-lg transition-all">
+                        <Plus size={16} /> Add Patient
+                    </button>
+                )}
             </div>
 
             {/* Controls */}
@@ -125,6 +176,14 @@ export default function PatientManagement() {
                                             {pat.status === 'Blocked' ? <><CheckCircle size={12} /> Unblock</> : <><Ban size={12} /> Block</>}
                                         </button>
                                     </td>
+                                    {isSuperAdmin && (
+                                        <td className="px-4 py-3">
+                                            <button onClick={() => setDeleteTarget(pat)}
+                                                className="h-8 w-8 flex items-center justify-center rounded-lg bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-all" title="Delete">
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </td>
+                                    )}
                                     <td className="px-4 py-3">
                                         {pat.bookingHistory.length > 0 && (
                                             <button onClick={() => setExpandedId(expandedId === pat.id ? null : pat.id)}
@@ -189,6 +248,61 @@ export default function PatientManagement() {
                     </div>
                 )}
             </div>
+
+            {/* ── Add Patient Modal ─────────────────────────────── */}
+            <AnimatePresence>
+                {showAdd && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+                            className="bg-white rounded-2xl w-full max-w-md shadow-2xl">
+                            <div className="flex items-center justify-between p-5 border-b border-slate-100">
+                                <h3 className="font-bold text-slate-800 text-lg">Add New Patient</h3>
+                                <button onClick={() => { setShowAdd(false); setAddForm(EMPTY_PAT_FORM); }} className="h-8 w-8 rounded-lg text-slate-400 hover:bg-slate-100 flex items-center justify-center transition"><X size={16} /></button>
+                            </div>
+                            <form onSubmit={handleAddPatient} className="p-5 space-y-4">
+                                {[
+                                    { key: 'name', label: 'Full Name', placeholder: 'Aditya Kumar', type: 'text' },
+                                    { key: 'email', label: 'Email', placeholder: 'patient@gmail.com', type: 'email' },
+                                    { key: 'phone', label: 'Phone', placeholder: '9876543210', type: 'tel' },
+                                    { key: 'city', label: 'City', placeholder: 'Delhi', type: 'text' },
+                                ].map(({ key, label, placeholder, type }) => (
+                                    <div key={key}>
+                                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">{label}</label>
+                                        <input required type={type} value={addForm[key]} onChange={e => setAddForm(f => ({ ...f, [key]: e.target.value }))}
+                                            placeholder={placeholder}
+                                            className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition" />
+                                    </div>
+                                ))}
+                                <div className="flex gap-3 pt-1">
+                                    <button type="button" onClick={() => { setShowAdd(false); setAddForm(EMPTY_PAT_FORM); }}
+                                        className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition">Cancel</button>
+                                    <button type="submit"
+                                        className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-primary to-teal-500 text-white text-sm font-semibold hover:opacity-90 transition">Add Patient</button>
+                                </div>
+                            </form>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* ── Delete Confirm ──────────────────────────────────── */}
+            <AnimatePresence>
+                {deleteTarget && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+                        <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
+                            className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+                            <h3 className="font-bold text-slate-800 text-lg mb-1">Delete Patient?</h3>
+                            <p className="text-sm text-slate-500 mb-5">{deleteTarget?.name}</p>
+                            <div className="flex gap-3">
+                                <button onClick={() => setDeleteTarget(null)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition">Cancel</button>
+                                <button onClick={handleDeletePatient} className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition">Yes, Delete</button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Block Confirm Modal */}
             <AnimatePresence>

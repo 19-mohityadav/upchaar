@@ -12,6 +12,10 @@ COPY package.json package-lock.json ./
 # Install all dependencies (including devDeps needed for build)
 RUN npm ci
 
+# ── Supabase build-time secrets ──────────────────────────────────────────────
+# We now allow .env in the build context so Vite automatically picks up variables.
+# No explicit ARG/ENV mapping is required here.
+
 # Copy the rest of the source code
 COPY . .
 

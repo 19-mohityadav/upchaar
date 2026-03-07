@@ -1,20 +1,29 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
-    AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
-    XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
+    AreaChart, Area, PieChart, Pie, Cell,
+    XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import {
     Users, Stethoscope, CalendarCheck2, TrendingUp,
     TrendingDown, ArrowUpRight, Clock, CheckCircle, XCircle, AlertCircle
 } from 'lucide-react';
-import { MOCK_DOCTORS, MOCK_PATIENTS, MOCK_APPOINTMENTS, MONTHLY_STATS, SPECIALIZATION_STATS, STATUS_PIE } from '../data/mock.js';
 import { cn } from '@/lib/utils';
 import { useAdmin } from '../context/AdminContext.jsx';
+import { fetchDashboardStats, fetchDoctors, fetchAppointments } from '@/lib/adminApi.js';
 import { format } from 'date-fns';
 
-const totalRevenue = MOCK_APPOINTMENTS.reduce((s, a) => s + a.platformRevenue, 0);
-const pendingDoctors = MOCK_DOCTORS.filter(d => d.status === 'Pending');
-const recentAppointments = MOCK_APPOINTMENTS.slice(0, 6);
+const STATUS_PIE_COLORS = {
+    Completed: '#10b981',
+    Pending: '#f59e0b',
+    Cancelled: '#ef4444',
+    Confirmed: '#3b82f6',
+};
+
+const STATUS_CONFIG = {
+    Completed: { icon: CheckCircle, cls: 'bg-emerald-50 text-emerald-600' },
+    Pending: { icon: Clock, cls: 'bg-amber-50 text-amber-600' },
+    Cancelled: { icon: XCircle, cls: 'bg-red-50 text-red-500' },
+};
 
 function StatCard({ icon: Icon, label, value, sub, trend, color }) {
     const isPositive = trend >= 0;
@@ -36,15 +45,30 @@ function StatCard({ icon: Icon, label, value, sub, trend, color }) {
     );
 }
 
-const STATUS_CONFIG = {
-    Completed: { icon: CheckCircle, cls: 'bg-emerald-50 text-emerald-600' },
-    Pending: { icon: Clock, cls: 'bg-amber-50 text-amber-600' },
-    Cancelled: { icon: XCircle, cls: 'bg-red-50 text-red-500' },
-};
-
 export default function AdminDashboard() {
     const { admin } = useAdmin();
-    const [chartTab, setChartTab] = useState('appointments');
+    const [stats, setStats] = useState({ totalDoctors: 0, totalPatients: 0, totalAppointments: 0, platformRevenue: 0 });
+    const [pendingDoctors, setPendingDoctors] = useState([]);
+    const [recentAppointments, setRecentAppointments] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        Promise.all([fetchDashboardStats(), fetchDoctors(), fetchAppointments()])
+            .then(([s, doctors, appointments]) => {
+                setStats(s);
+                setPendingDoctors(doctors.filter(d => d.status === 'Pending').slice(0, 4));
+                setRecentAppointments(appointments.slice(0, 6));
+            })
+            .catch(console.error)
+            .finally(() => setLoading(false));
+    }, []);
+
+    // Build pie data from real appointments
+    const statusPie = useMemo(() => {
+        const counts = { Completed: 0, Pending: 0, Cancelled: 0 };
+        recentAppointments.forEach(a => { if (counts[a.status] !== undefined) counts[a.status]++; });
+        return Object.entries(counts).map(([name, value]) => ({ name, value, color: STATUS_PIE_COLORS[name] }));
+    }, [recentAppointments]);
 
     return (
         <div className="space-y-6">
@@ -59,93 +83,60 @@ export default function AdminDashboard() {
 
             {/* Stat Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard icon={Stethoscope} label="Total Doctors" value={MOCK_DOCTORS.length}
+                <StatCard icon={Stethoscope} label="Total Doctors" value={loading ? '…' : stats.totalDoctors}
                     sub={`${pendingDoctors.length} pending review`} trend={12} color="bg-gradient-to-br from-primary to-teal-400" />
-                <StatCard icon={Users} label="Total Patients" value={MOCK_PATIENTS.length}
+                <StatCard icon={Users} label="Total Patients" value={loading ? '…' : stats.totalPatients}
                     sub="Active users" trend={8} color="bg-gradient-to-br from-blue-500 to-blue-400" />
-                <StatCard icon={CalendarCheck2} label="Appointments" value={MOCK_APPOINTMENTS.length}
-                    sub="This month" trend={-3} color="bg-gradient-to-br from-violet-500 to-purple-400" />
-                <StatCard icon={TrendingUp} label="Platform Revenue" value={`₹${(totalRevenue / 1000).toFixed(1)}K`}
+                <StatCard icon={CalendarCheck2} label="Appointments" value={loading ? '…' : stats.totalAppointments}
+                    sub="All time" trend={-3} color="bg-gradient-to-br from-violet-500 to-purple-400" />
+                <StatCard icon={TrendingUp} label="Platform Revenue" value={loading ? '…' : `₹${((stats.platformRevenue || 0) / 1000).toFixed(1)}K`}
                     sub="10% commission" trend={15} color="bg-gradient-to-br from-amber-500 to-orange-400" />
             </div>
 
-            {/* Charts Row */}
+            {/* Pie Chart */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                {/* Area / Bar */}
                 <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                    <div className="flex items-center justify-between mb-4">
-                        <h2 className="font-semibold text-slate-800">Monthly Overview</h2>
-                        <div className="flex gap-1 p-1 bg-slate-100 rounded-lg">
-                            {['appointments', 'revenue'].map(tab => (
-                                <button key={tab}
-                                    onClick={() => setChartTab(tab)}
-                                    className={cn('px-3 py-1 rounded-md text-xs font-medium transition-all capitalize',
-                                        chartTab === tab ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                                    )}>
-                                    {tab}
-                                </button>
-                            ))}
+                    <h2 className="font-semibold text-slate-800 mb-4">Appointment Status Overview</h2>
+                    {loading ? (
+                        <div className="flex items-center justify-center h-32 text-slate-400 text-sm">Loading…</div>
+                    ) : (
+                        <div className="grid grid-cols-3 gap-4">
+                            {Object.entries({ Completed: '#10b981', Pending: '#f59e0b', Cancelled: '#ef4444' }).map(([label, color]) => {
+                                const count = recentAppointments.filter(a => a.status === label).length;
+                                return (
+                                    <div key={label} className="bg-slate-50 rounded-xl p-4 text-center">
+                                        <div className="h-3 w-3 rounded-full mx-auto mb-2" style={{ background: color }} />
+                                        <p className="text-2xl font-bold text-slate-800">{count}</p>
+                                        <p className="text-xs text-slate-500 mt-0.5">{label}</p>
+                                    </div>
+                                );
+                            })}
                         </div>
-                    </div>
-                    <ResponsiveContainer width="100%" height={220}>
-                        <AreaChart data={MONTHLY_STATS} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
-                            <defs>
-                                <linearGradient id="colorArea" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor="hsl(174 58% 39%)" stopOpacity={0.3} />
-                                    <stop offset="100%" stopColor="hsl(174 58% 39%)" stopOpacity={0} />
-                                </linearGradient>
-                            </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                            <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                            <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false}
-                                tickFormatter={v => chartTab === 'revenue' ? `₹${(v / 1000).toFixed(0)}K` : v} />
-                            <Tooltip
-                                contentStyle={{ borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: 12 }}
-                                formatter={v => chartTab === 'revenue' ? [`₹${v.toLocaleString()}`, 'Revenue'] : [v, 'Appointments']}
-                            />
-                            <Area type="monotone" dataKey={chartTab} stroke="hsl(174 58% 39%)" strokeWidth={2.5}
-                                fill="url(#colorArea)" dot={false} />
-                        </AreaChart>
-                    </ResponsiveContainer>
+                    )}
                 </div>
 
-                {/* Pie */}
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
                     <h2 className="font-semibold text-slate-800 mb-4">Appointment Status</h2>
                     <ResponsiveContainer width="100%" height={160}>
                         <PieChart>
-                            <Pie data={STATUS_PIE} innerRadius={48} outerRadius={72} paddingAngle={3} dataKey="value">
-                                {STATUS_PIE.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                            <Pie data={statusPie} innerRadius={48} outerRadius={72} paddingAngle={3} dataKey="value">
+                                {statusPie.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                             </Pie>
                             <Tooltip contentStyle={{ borderRadius: '10px', fontSize: 12 }} />
                         </PieChart>
                     </ResponsiveContainer>
                     <div className="space-y-2 mt-2">
-                        {STATUS_PIE.map(s => (
+                        {statusPie.map(s => (
                             <div key={s.name} className="flex items-center justify-between text-xs">
                                 <div className="flex items-center gap-1.5">
                                     <div className="h-2.5 w-2.5 rounded-full" style={{ background: s.color }} />
                                     <span className="text-slate-600">{s.name}</span>
                                 </div>
-                                <span className="font-semibold text-slate-700">{s.value}%</span>
+                                <span className="font-semibold text-slate-700">{s.value}</span>
                             </div>
                         ))}
                     </div>
                 </div>
-            </div>
-
-            {/* Bar Chart */}
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-                <h2 className="font-semibold text-slate-800 mb-4">Appointments by Specialization</h2>
-                <ResponsiveContainer width="100%" height={200}>
-                    <BarChart data={SPECIALIZATION_STATS} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                        <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                        <Tooltip contentStyle={{ borderRadius: '10px', border: '1px solid #e2e8f0', fontSize: 12 }} />
-                        <Bar dataKey="appointments" fill="hsl(174 58% 39%)" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                </ResponsiveContainer>
             </div>
 
             {/* Bottom Row */}
@@ -159,13 +150,17 @@ export default function AdminDashboard() {
                         </a>
                     </div>
                     <div className="space-y-3">
-                        {pendingDoctors.slice(0, 4).map(doc => (
+                        {loading ? (
+                            <p className="text-sm text-slate-400 text-center py-4">Loading…</p>
+                        ) : pendingDoctors.length === 0 ? (
+                            <p className="text-sm text-slate-400 text-center py-4">No pending applications</p>
+                        ) : pendingDoctors.map(doc => (
                             <div key={doc.id} className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors">
                                 <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-sm flex-shrink-0">
-                                    {doc.fullName.split(' ')[1]?.[0] || doc.fullName[0]}
+                                    {(doc.full_name || doc.fullName || '?').replace('Dr. ', '')[0]}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-slate-800 truncate">{doc.fullName}</p>
+                                    <p className="text-sm font-medium text-slate-800 truncate">{doc.full_name || doc.fullName}</p>
                                     <p className="text-xs text-slate-500">{doc.specialization}</p>
                                 </div>
                                 <span className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full bg-amber-50 text-amber-600">
@@ -173,7 +168,6 @@ export default function AdminDashboard() {
                                 </span>
                             </div>
                         ))}
-                        {pendingDoctors.length === 0 && <p className="text-sm text-slate-400 text-center py-4">No pending applications</p>}
                     </div>
                 </div>
 
@@ -186,7 +180,11 @@ export default function AdminDashboard() {
                         </a>
                     </div>
                     <div className="space-y-3">
-                        {recentAppointments.map(apt => {
+                        {loading ? (
+                            <p className="text-sm text-slate-400 text-center py-4">Loading…</p>
+                        ) : recentAppointments.length === 0 ? (
+                            <p className="text-sm text-slate-400 text-center py-4">No appointments yet</p>
+                        ) : recentAppointments.map(apt => {
                             const { icon: Icon, cls } = STATUS_CONFIG[apt.status] || STATUS_CONFIG.Pending;
                             return (
                                 <div key={apt.id} className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-50 transition-colors">
@@ -194,12 +192,12 @@ export default function AdminDashboard() {
                                         <Icon size={14} />
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-medium text-slate-800 truncate">{apt.patientName}</p>
-                                        <p className="text-xs text-slate-500">{apt.doctorName} · {apt.specialization}</p>
+                                        <p className="text-sm font-medium text-slate-800 truncate">{apt.patient_name || apt.patientName}</p>
+                                        <p className="text-xs text-slate-500">{apt.doctor_name || apt.doctorName} · {apt.specialization}</p>
                                     </div>
                                     <div className="text-right">
                                         <p className="text-xs font-semibold text-slate-700">₹{apt.fee}</p>
-                                        <p className="text-[10px] text-slate-400">{format(new Date(apt.date), 'dd MMM')}</p>
+                                        <p className="text-[10px] text-slate-400">{apt.date ? format(new Date(apt.date), 'dd MMM') : ''}</p>
                                     </div>
                                 </div>
                             );
