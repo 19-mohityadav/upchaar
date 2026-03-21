@@ -21,6 +21,7 @@ import AppLayout from '@/layouts/AppLayout';
 import LandingPage from '@/pages/Landing';
 import DashboardPage from '@/pages/Dashboard';
 import DoctorsPage from '@/pages/Doctors';
+import DoctorDetailPage from '@/pages/DoctorDetail.jsx';
 import DiagnosticsPage from '@/pages/Diagnostics';
 import HospitalsPage from '@/pages/Hospitals';
 import RecordsPage from '@/pages/Records';
@@ -44,6 +45,7 @@ export function PublicRoutes() {
             {/* Patient-facing feature pages */}
             <Route path="/dashboard" element={<AppLayout><DashboardPage /></AppLayout>} />
             <Route path="/doctors" element={<AppLayout><DoctorsPage /></AppLayout>} />
+            <Route path="/doctors/:id" element={<AppLayout><DoctorDetailPage /></AppLayout>} />
             <Route path="/diagnostics" element={<AppLayout><DiagnosticsPage /></AppLayout>} />
             <Route path="/hospitals" element={<AppLayout><HospitalsPage /></AppLayout>} />
             <Route path="/records" element={<AppLayout><RecordsPage /></AppLayout>} />

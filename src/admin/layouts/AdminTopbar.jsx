@@ -24,8 +24,8 @@ export default function AdminTopbar() {
         getPending();
     }, []);
 
-    const handleLogout = () => {
-        logout();
+    const handleLogout = async () => {
+        await logout();
         navigate('/admin/login');
     };
 

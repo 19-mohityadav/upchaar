@@ -28,6 +28,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Slider } from '@/components/ui/slider';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
+import { useNavigate } from 'react-router-dom';
 
 export default function DoctorsPage() {
     const [searchTerm, setSearchTerm] = useState('');
@@ -327,6 +328,7 @@ export default function DoctorsPage() {
 }
 
 function DoctorCard({ doctor }) {
+    const navigate = useNavigate();
     return (
         <Card className="overflow-hidden border-0 shadow-md hover:shadow-xl transition-all duration-300 group ring-1 ring-slate-100">
             <CardContent className="p-0">
@@ -384,10 +386,17 @@ function DoctorCard({ doctor }) {
                     </div>
 
                     <div className="flex items-center gap-2 mt-2">
-                        <Button className="flex-1 bg-primary hover:bg-teal-700 group-hover:shadow-lg transition-all">
+                        <Button 
+                            className="flex-1 bg-primary hover:bg-teal-700 group-hover:shadow-lg transition-all"
+                            onClick={() => navigate(`/doctors/${doctor.id}`)}
+                        >
                             Book Appointment
                         </Button>
-                        <Button variant="outline" className="px-3 border-primary/20 hover:bg-primary/5 text-primary">
+                        <Button 
+                            variant="outline" 
+                            className="px-3 border-primary/20 hover:bg-primary/5 text-primary"
+                            onClick={() => navigate(`/doctors/${doctor.id}`)}
+                        >
                             <ChevronRight className="h-5 w-5" />
                         </Button>
                     </div>

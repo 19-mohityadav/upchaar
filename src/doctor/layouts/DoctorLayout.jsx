@@ -22,6 +22,14 @@ export default function DoctorLayout() {
     const [collapsed, setCollapsed] = useState(false);
     const [isOnline, setIsOnline] = useState(true);
 
+    if (loading) {
+        return (
+            <div className="flex h-screen items-center justify-center bg-slate-50">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-primary" />
+            </div>
+        );
+    }
+
     if (!doctor) return <Navigate to="/doctor/login" replace />;
 
     const initials = doctor.fullName?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'DR';

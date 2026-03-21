@@ -33,11 +33,13 @@ import DashboardGate from '@/auth/DashboardGate.jsx';
 
 // ── Shared layout ─────────────────────────────────
 import AppLayout from '@/layouts/AppLayout';
+import ProtectedRoute from '@/components/ProtectedRoute.jsx';
 
 // ── PUBLIC pages ──────────────────────────────────
 import LandingPage from '@/pages/Landing';
 import DashboardPage from '@/pages/Dashboard';
 import DoctorsPage from '@/pages/Doctors';
+import DoctorDetailPage from '@/pages/DoctorDetail.jsx';
 import DiagnosticsPage from '@/pages/Diagnostics';
 import HospitalsPage from '@/pages/Hospitals';
 import RecordsPage from '@/pages/Records';
@@ -118,8 +120,9 @@ export function AppRoutes() {
             <Route path="/" element={<LandingPage />} />
 
             {/* Patient-facing feature pages */}
-            <Route path="/dashboard" element={<AppLayout><DashboardPage /></AppLayout>} />
-            <Route path="/doctors" element={<AppLayout><DoctorsPage /></AppLayout>} />
+            <Route path="/dashboard" element={<ProtectedRoute><AppLayout><DashboardPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/doctors" element={<ProtectedRoute><AppLayout><DoctorsPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/doctors/:id" element={<ProtectedRoute><AppLayout><DoctorDetailPage /></AppLayout></ProtectedRoute>} />
             <Route path="/diagnostics" element={<AppLayout><DiagnosticsPage /></AppLayout>} />
             <Route path="/hospitals" element={<AppLayout><HospitalsPage /></AppLayout>} />
             <Route path="/records" element={<AppLayout><RecordsPage /></AppLayout>} />

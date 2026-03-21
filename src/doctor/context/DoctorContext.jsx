@@ -29,9 +29,19 @@ export function DoctorProvider({ children }) {
         Promise.race([
             supabase.auth.getSession(),
             new Promise((_, rej) => setTimeout(() => rej(new Error('session fetch timeout')), 5000))
-        ]).then(({ data: { session } }) => {
+        ]).then(async ({ data: { session } }) => {
             if (!mounted) return;
-            setDoctor(session?.user ? formatUser(session.user) : null);
+            if (session?.user) {
+                // Verify this user is actually a doctor
+                const { data: profile } = await supabase.from('profiles').select('profile_type').eq('id', session.user.id).maybeSingle();
+                if (profile?.profile_type === 'doctor') {
+                    setDoctor(formatUser(session.user));
+                } else {
+                    setDoctor(null);
+                }
+            } else {
+                setDoctor(null);
+            }
             if (mounted) setLoading(false);
         }).catch(() => { if (mounted) setLoading(false); });
 
@@ -50,6 +60,13 @@ export function DoctorProvider({ children }) {
                     : error.message
             );
         }
+        
+        const { data: profile } = await supabase.from('profiles').select('profile_type').eq('id', data.user.id).maybeSingle();
+        if (profile?.profile_type !== 'doctor') {
+            await supabase.auth.signOut();
+            throw new Error('This account is not registered as a doctor.');
+        }
+
         if (data?.user?.user_metadata?.status === 'Suspended') {
             await supabase.auth.signOut();
             throw new Error('Your account has been suspended. Contact admin.');

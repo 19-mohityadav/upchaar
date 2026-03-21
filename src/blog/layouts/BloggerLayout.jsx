@@ -19,7 +19,7 @@ export default function BloggerLayout() {
     // Wait for Supabase session restore before deciding to redirect
     if (loading) return (
         <div className="flex h-screen items-center justify-center bg-[#f1f5f9]">
-            <div className="h-8 w-8 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+            <div className="h-8 w-8 rounded-full border-4 border-slate-200 border-t-primary animate-spin" />
         </div>
     );
 
