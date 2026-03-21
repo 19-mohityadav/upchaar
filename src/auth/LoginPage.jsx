@@ -108,11 +108,13 @@ export default function LoginPage() {
         }
     };
 
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
+
     /**
      * handleSignUp
      * 1. Validates form inputs
      * 2. Calls signUp() — creates Auth user + seeds DB + signs user out
-     * 3. Redirects to /login with a success message
+     * 3. Shows success modal, then switches to sign-in tab
      */
     const handleSignUp = async e => {
         e.preventDefault();
@@ -138,13 +140,19 @@ export default function LoginPage() {
                 profileType: signUpForm.profileType,
             });
 
-            // Redirect to /login with success banner
-            navigate('/login', {
-                replace: true,
-                state: {
-                    successMsg: `🎉 Account created! Please sign in${signUpForm.profileType === 'doctor' ? ' — your account will be activated after admin review.' : '.'}`,
-                },
-            });
+            // Show success modal
+            setShowSuccessModal(true);
+
+            // Redirect to sign in tab after 2 seconds
+            setTimeout(() => {
+                setShowSuccessModal(false);
+                setTab('signin');
+                setSuccess(`🎉 Account created! Please sign in${signUpForm.profileType === 'doctor' ? ' — your account will be activated after admin review.' : '.'}`);
+                setSignUpForm({
+                    fullName: '', email: '', phone: '', password: '', confirmPassword: '', profileType: 'patient'
+                });
+            }, 2000);
+
         } catch (err) {
             console.error('[LoginPage] Sign Up Error:', err);
             setError(err.message || String(err));
@@ -473,6 +481,40 @@ export default function LoginPage() {
                     <Link to="/" className="hover:text-slate-600 transition">← Back to Sanjiwani Health</Link>
                 </p>
             </motion.div>
+
+            {/* Success Modal Overlay */}
+            <AnimatePresence>
+                {showSuccessModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-teal-900/20 backdrop-blur-sm"
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0, y: 10 }}
+                            animate={{ scale: 1, opacity: 1, y: 0 }}
+                            exit={{ scale: 0.95, opacity: 0, y: 10 }}
+                            className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 text-center border border-emerald-100"
+                        >
+                            <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <CheckCircle2 size={32} className="text-emerald-500" />
+                            </div>
+                            <h2 className="text-xl font-bold text-slate-800 mb-2">Account Created!</h2>
+                            <p className="text-sm text-slate-500 mb-6">
+                                {signUpForm.profileType === 'doctor'
+                                    ? 'Your doctor account was created successfully and is pending admin approval.'
+                                    : 'Your account was created successfully.'}
+                            </p>
+                            <div className="flex items-center justify-center gap-2 text-teal-600 font-medium text-sm">
+                                <Loader2 size={16} className="animate-spin" />
+                                Redirecting to Sign In...
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
         </div>
     );
 }

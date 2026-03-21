@@ -29,8 +29,20 @@ const SUPER_ADMIN_NAV = [
 ];
 
 export default function AdminLayout() {
-    const { admin, isSuperAdmin } = useAdmin();
+    const { admin, isSuperAdmin, loading } = useAdmin();
     const [collapsed, setCollapsed] = useState(false);
+
+    // Wait for session restore before deciding to redirect
+    if (loading) {
+        return (
+            <div className="flex h-screen items-center justify-center bg-[#f1f5f9]">
+                <div className="flex flex-col items-center gap-3 text-slate-500">
+                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-primary" />
+                    <span className="text-sm font-medium">Loading admin portal…</span>
+                </div>
+            </div>
+        );
+    }
 
     if (!admin) return <Navigate to="/admin/login" replace />;
 

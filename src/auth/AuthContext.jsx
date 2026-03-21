@@ -1,29 +1,14 @@
 /**
  * AuthContext.jsx
  * ─────────────────────────────────────────────────
- * Unified authentication context for all profile-based
- * users: patient, doctor, clinic, medical, hospital.
+ * Single source of truth for Supabase auth session.
+ * Handles: patient, doctor, clinic, medical, hospital users.
  *
- * Uses Supabase Auth for authentication and reads the
- * `public.profiles` table to get the user's profile_type.
- *
- * After login, the user's profile_type determines which
- * dashboard they are redirected to:
- *
- *   patient   → /  (Landing page)
- *   doctor    → /doctor/dashboard
- *   clinic    → /clinic/dashboard  (future)
- *   medical   → /medical/dashboard (future)
- *   hospital  → /hospital/dashboard (future)
- *
- * Exposed via useAuth():
- *   user         → Supabase auth user object (or null)
- *   profile      → public.profiles row (null if not logged in)
- *   loading      → true while session is being restored
- *   signIn(email, password) → signs in + fetches profile
- *   signUp(data)            → creates auth user + profile row, then signs out
- *                             Returns { success: true } — caller redirects to /login
- *   signOut()               → clears session
+ * IMPORTANT: This is the ONLY place that subscribes to
+ * supabase.auth.onAuthStateChange(). All other contexts
+ * (Admin, Blog, Doctor) manage their own state via
+ * getSession() + direct login/logout — they do NOT
+ * subscribe to onAuthStateChange to avoid race conditions.
  * ─────────────────────────────────────────────────
  */
 
@@ -32,13 +17,8 @@ import { supabase } from '@/lib/supabase.js';
 
 const AuthContext = createContext(null);
 
-/**
- * PROFILE_TYPE_DASHBOARDS
- * Maps each profile_type to its dashboard route.
- * Add new types here as new portals are built.
- */
 export const PROFILE_TYPE_DASHBOARDS = {
-    patient: '/',                      // Patients land on the main Landing page
+    patient: '/',
     doctor: '/doctor/dashboard',
     clinic: '/clinic/dashboard',
     medical: '/medical/dashboard',
@@ -46,58 +26,50 @@ export const PROFILE_TYPE_DASHBOARDS = {
 };
 
 export function AuthProvider({ children }) {
-    const [user, setUser] = useState(null);       // Supabase auth user
-    const [profile, setProfile] = useState(null); // public.profiles row
+    const [user, setUser] = useState(null);
+    const [profile, setProfile] = useState(null);
     const [loading, setLoading] = useState(true);
-
-    // Ref to skip auth listener updates during manual signup flow
     const isRegistering = useRef(false);
 
     /**
-     * fetchProfile
-     * Looks up the user's row in public.profiles.
-     * Returns null if the row doesn't exist yet.
+     * fetchProfile — reads public.profiles with a 4s timeout.
+     * Returns null if the row doesn't exist or the query times out.
      */
     const fetchProfile = useCallback(async (userId) => {
-        console.log('[AuthContext] fetchProfile start for:', userId);
         if (!userId) return null;
-        const { data, error } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', userId)
-            .maybeSingle();
-        if (error) {
-            console.warn('[AuthContext] fetchProfile:', error.message);
+        try {
+            const { data, error } = await Promise.race([
+                supabase.from('profiles').select('*').eq('id', userId).maybeSingle(),
+                new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000)),
+            ]);
+            if (error) { console.warn('[Auth] fetchProfile error:', error.message); return null; }
+            return data ?? null;
+        } catch {
             return null;
         }
-        return data;
     }, []);
 
-    /**
-     * On mount: restore Supabase session and load profile.
-     * Subscribes to auth changes (login / logout in other tabs).
-     */
     useEffect(() => {
         let mounted = true;
 
         // ── Initial session restore ───────────────────────────────────
-        supabase.auth.getSession().then(async ({ data: { session } }) => {
+        supabase.auth.getSession().then(({ data: { session } }) => {
             if (!mounted) return;
-            setUser(session?.user ?? null);
-            if (session?.user) {
-                const p = await fetchProfile(session.user.id);
-                if (mounted) setProfile(p);
+            const u = session?.user ?? null;
+            setUser(u);
+            // ⚡ Unblock the app immediately — profile loads in background
+            if (mounted) setLoading(false);
+            if (u) {
+                fetchProfile(u.id).then(p => { if (mounted) setProfile(p); });
             }
-            if (mounted) setLoading(false);
-        }).catch(() => {
-            if (mounted) setLoading(false);
-        });
+        }).catch(() => { if (mounted) setLoading(false); });
 
-        // ── Auth state change ────────────────────────────────────────
+        // ── Auth state changes ─────────────────────────────────────────
+        // ONLY this context subscribes to onAuthStateChange.
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
-            async (event, session) => {
-                console.log('[AuthContext] onAuthStateChange event:', event);
+            (event, session) => {
                 if (!mounted) return;
+                console.log('[Auth] event:', event);
 
                 if (event === 'SIGNED_OUT') {
                     setUser(null);
@@ -106,99 +78,52 @@ export function AuthProvider({ children }) {
                     return;
                 }
 
-                if (event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'TOKEN_REFRESHED') {
-                    setUser(session?.user ?? null);
-                    if (session?.user) {
-                        // If we are in the middle of a signUp() insert, don't let the listener
-                        // fetch an incomplete profile and potentially trigger redirects.
-                        if (isRegistering.current) {
-                            console.log('[AuthContext] Listener: signup in progress, skipping profile fetch');
-                            return;
-                        }
-
-                        const p = await fetchProfile(session.user.id);
-                        console.log('[AuthContext] onAuthStateChange profile result:', !!p);
-                        if (mounted) { setProfile(p); setLoading(false); }
-                    } else {
-                        if (mounted) setLoading(false);
+                if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+                    const u = session?.user ?? null;
+                    setUser(u);
+                    // ⚡ Never block loading on profile fetch
+                    setLoading(false);
+                    if (u && !isRegistering.current) {
+                        // Fetch profile in background — doesn't block anything
+                        fetchProfile(u.id).then(p => { if (mounted) setProfile(p); });
                     }
                 }
             }
         );
 
-        return () => {
-            mounted = false;
-            subscription.unsubscribe();
-        };
+        return () => { mounted = false; subscription.unsubscribe(); };
     }, [fetchProfile]);
 
-    /**
-     * signIn
-     * Signs in with email + password via Supabase Auth.
-     * Checks that the user exists in public.profiles.
-     * Returns the { user, profile } so the caller can decide where to redirect.
-     *
-     * @param {string} email
-     * @param {string} password
-     * @returns {{ user, profile }} — auth user + profiles row
-     * @throws Error with user-friendly message
-     */
+    /** signIn — for patients/doctors/etc. via unified login */
     const signIn = useCallback(async (email, password) => {
         const { data, error } = await supabase.auth.signInWithPassword({
-            email: email.trim(),
-            password,
+            email: email.trim(), password,
         });
-
         if (error) {
-            if (error.message.toLowerCase().includes('invalid login credentials')) {
-                throw new Error('Incorrect email or password. Please try again.');
-            }
-            throw new Error(error.message);
+            throw new Error(
+                error.message.toLowerCase().includes('invalid login credentials')
+                    ? 'Incorrect email or password.'
+                    : error.message
+            );
         }
-
-        // ── DB check: user must exist in public.profiles ─────────────
         const p = await fetchProfile(data.user.id);
         if (!p) {
             await supabase.auth.signOut();
-            throw new Error('No profile found for this account. Please register first.');
+            throw new Error('No profile found. Please register first.');
         }
-
-        // ── Authorization: check account status ──────────────────────
         if (p.status === 'suspended') {
             await supabase.auth.signOut();
-            throw new Error('Your account has been suspended. Please contact support.');
+            throw new Error('Your account has been suspended. Contact support.');
         }
-
-        // ── Session is now active (stored in cookie) ─────────────────
         setUser(data.user);
         setProfile(p);
         return { user: data.user, profile: p };
     }, [fetchProfile]);
 
-    /**
-     * signUp
-     * Registers a new user. Steps:
-     *  1. Creates a Supabase Auth user (triggers the DB trigger `handle_new_auth_user`
-     *     which auto-inserts into public.profiles — no client-side INSERT needed)
-     *  2. Waits for the trigger-created profile to appear (up to 3 retries)
-     *  3. Seeds role-specific tables (doctors, controllers) if needed
-     *  4. Signs the user OUT — they must explicitly sign in
-     *
-     * Returns { success: true } so the caller can redirect to /login.
-     *
-     * @param {object} params
-     * @param {string} params.fullName
-     * @param {string} params.email
-     * @param {string} params.phone
-     * @param {string} params.password
-     * @param {string} params.profileType - 'patient' | 'doctor' | 'clinic' | 'medical' | 'hospital'
-     * @returns {{ success: true }}
-     */
+    /** signUp — creates auth user + profile via DB trigger */
     const signUp = useCallback(async ({ fullName, email, phone, password, profileType }) => {
-        console.log('[AuthContext] signUp start:', email, profileType);
         isRegistering.current = true;
         try {
-            // Step 1: create Supabase Auth user
             const { data, error } = await supabase.auth.signUp({
                 email: email.trim(),
                 password,
@@ -210,115 +135,68 @@ export function AuthProvider({ children }) {
                     },
                 },
             });
-
-            console.log('[AuthContext] auth.signUp result:', { hasUser: !!data.user, error: error?.message });
-
             if (error) {
-                if (error.message.toLowerCase().includes('already registered')) {
-                    throw new Error('An account with this email already exists. Please sign in.');
-                }
-                throw new Error(error.message);
+                throw new Error(
+                    error.message.toLowerCase().includes('already registered')
+                        ? 'An account with this email already exists.'
+                        : error.message
+                );
             }
-
             const userId = data.user?.id;
             if (!userId) throw new Error('Registration failed. Please try again.');
 
-            // Step 2: Wait for the DB trigger (handle_new_auth_user) to create the profile.
-            //         The trigger runs SECURITY DEFINER server-side, so no RLS issue.
-            //         We poll up to 3 times with a 800ms delay.
-            console.log('[AuthContext] Waiting for trigger to create profile for:', userId);
+            // Wait for DB trigger to create the profile (faster polling)
             let p = null;
-            for (let attempt = 1; attempt <= 3; attempt++) {
-                await new Promise(r => setTimeout(r, 800));
+            for (let i = 1; i <= 8; i++) {
                 p = await fetchProfile(userId);
                 if (p) break;
-                console.log(`[AuthContext] Profile not ready yet, attempt ${attempt}/3`);
+                await new Promise(r => setTimeout(r, 250));
             }
 
-            if (!p) {
-                console.error('[AuthContext] Profile not created by trigger after retries');
-                throw new Error('Account created but profile setup failed. Please try signing in — your profile may still be processing.');
-            }
-            console.log('[AuthContext] profile confirmed from trigger:', !!p);
-
-            // Step 3: controllers seeding for admin/blogger roles
-            //         (profiles + doctors are handled by the DB trigger `handle_new_auth_user`)
+            // Seed controllers table for admin roles
             if (['blogger', 'support_admin', 'super_admin'].includes(profileType)) {
-                const { error: controllerError } = await supabase
-                    .from('controllers')
-                    .insert({
-                        id: userId,
-                        name: fullName.trim(),
-                        email: email.trim(),
-                        role: profileType,
-                        status: 'active',
-                    });
-                if (controllerError) {
-                    console.error('[AuthContext] Controller insert error:', controllerError.message);
-                }
+                await supabase.from('controllers').insert({
+                    id: userId,
+                    name: fullName.trim(),
+                    email: email.trim(),
+                    role: profileType,
+                    status: 'active',
+                }).select().maybeSingle();
             }
 
-            // Step 4: Sign the user out so they must explicitly sign in.
-            //         This prevents an auto-login after registration.
+            // Sign out so user must log in manually
             await supabase.auth.signOut();
-
-            // Keep local state clean — the user is NOT logged in yet.
             setUser(null);
             setProfile(null);
             setLoading(false);
             isRegistering.current = false;
-
             return { success: true };
         } catch (err) {
             isRegistering.current = false;
             setLoading(false);
-            // Clean up any partial Supabase session
             await supabase.auth.signOut().catch(() => { });
             throw err;
         }
-    }, []);
+    }, [fetchProfile]);
 
-    /**
-     * signOut
-     * Signs the user out of Supabase and clears local state.
-     */
+    /** signOut */
     const signOut = useCallback(async () => {
         await supabase.auth.signOut();
         setUser(null);
         setProfile(null);
     }, []);
 
-    /**
-     * getDashboardPath
-     * Returns the correct dashboard path based on profile_type.
-     * Falls back to '/' if the type is unknown.
-     *
-     * @param {object} p - profile row
-     */
     const getDashboardPath = useCallback((p) => {
         return PROFILE_TYPE_DASHBOARDS[p?.profile_type] || '/';
     }, []);
 
     return (
-        <AuthContext.Provider value={{
-            user,
-            profile,
-            loading,
-            signIn,
-            signUp,
-            signOut,
-            getDashboardPath,
-        }}>
+        <AuthContext.Provider value={{ user, profile, loading, signIn, signUp, signOut, getDashboardPath }}>
             {children}
         </AuthContext.Provider>
     );
 }
 
-/**
- * useAuth
- * Hook to access the shared AuthContext.
- * Must be inside <AuthProvider>.
- */
 export function useAuth() {
     const ctx = useContext(AuthContext);
     if (!ctx) throw new Error('useAuth must be used inside <AuthProvider>');

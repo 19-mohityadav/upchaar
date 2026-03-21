@@ -1,8 +1,13 @@
 /**
  * BlogContext.jsx
  * ─────────────────────────────────────────────────
- * Blog portal state — auth (Supabase) and posts (Supabase `posts` table).
- * Blogger login uses the `controllers` table (role = 'blogger').
+ * Blog portal auth + posts state.
+ * Bloggers authenticate via Supabase Auth & controllers table.
+ *
+ * ⚠️  Does NOT subscribe to supabase.auth.onAuthStateChange.
+ *     Only AuthContext subscribes to that event.
+ *     Session is restored via getSession() on mount only.
+ * ─────────────────────────────────────────────────
  */
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase.js';
@@ -18,26 +23,24 @@ export function BlogProvider({ children }) {
     const [loading, setLoading] = useState(true);
     const [postsLoading, setPostsLoading] = useState(true);
 
-    // ── Fetch blogger profile from controllers table ──────────────────────────
+    // ── Fetch blogger row from controllers table ───────────────────────────────
     const fetchBloggerProfile = useCallback(async (userId) => {
         if (!userId) return null;
-        const { data, error } = await supabase
-            .from('controllers')
-            .select('*')
-            .eq('id', userId)
-            .eq('role', 'blogger')
-            .maybeSingle();
-        if (error) {
-            console.warn('[BlogContext] fetchBloggerProfile:', error.message);
+        try {
+            const { data, error } = await Promise.race([
+                supabase.from('controllers').select('*').eq('id', userId).eq('role', 'blogger').maybeSingle(),
+                new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000)),
+            ]);
+            if (error) { console.warn('[Blog] fetchBloggerProfile error:', error.message); return null; }
+            return data ?? null;
+        } catch {
             return null;
         }
-        return data;
     }, []);
 
-    // ── Session restore on mount ──────────────────────────────────────────────
+    // ── Restore session on mount (one-time, no listener) ─────────────────────
     useEffect(() => {
         let mounted = true;
-
         supabase.auth.getSession().then(async ({ data: { session } }) => {
             if (!mounted) return;
             if (session?.user) {
@@ -45,84 +48,50 @@ export function BlogProvider({ children }) {
                 if (mounted) setBlogger(profile ? { ...profile, email: session.user.email } : null);
             }
             if (mounted) setLoading(false);
-        }).catch(() => {
-            if (mounted) setLoading(false);
-        });
+        }).catch(() => { if (mounted) setLoading(false); });
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-            if (!mounted) return;
-            if (event === 'SIGNED_OUT') {
-                setBlogger(null);
-                setLoading(false);
-                return;
-            }
-            if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
-                if (session?.user) {
-                    const profile = await fetchBloggerProfile(session.user.id);
-                    if (mounted) setBlogger(profile ? { ...profile, email: session.user.email } : null);
-                }
-                if (mounted) setLoading(false);
-            }
-        });
-
-        return () => {
-            mounted = false;
-            subscription.unsubscribe();
-        };
+        return () => { mounted = false; };
     }, [fetchBloggerProfile]);
 
-    // ── Load all published posts on mount ─────────────────────────────────────
-    useEffect(() => {
-        loadPosts();
-    }, []);
+    // ── Load published posts on mount ─────────────────────────────────────────
+    useEffect(() => { loadPosts(); }, []);
 
     const loadPosts = async () => {
         setPostsLoading(true);
         const { data, error } = await supabase
             .from('posts')
-            .select(`
-                *,
-                controllers:author_id ( id, name, avatar_url, metadata )
-            `)
+            .select('*, controllers:author_id(id, name, avatar_url, metadata)')
             .order('published_at', { ascending: false });
         if (!error) {
-            // Flatten author info for compatibility with existing components
-            const normalized = (data || []).map(p => ({
+            setPosts((data || []).map(p => ({
                 ...p,
                 author: p.controllers
                     ? { name: p.controllers.name, avatarUrl: p.controllers.avatar_url, ...(p.controllers.metadata || {}) }
                     : { name: 'Unknown' },
-            }));
-            setPosts(normalized);
+            })));
         }
         setPostsLoading(false);
     };
 
-    // ── Blogger login ────────────────────────────────────────────────────────
+    // ── Blogger login ─────────────────────────────────────────────────────────
     const loginBlogger = useCallback(async (email, password) => {
-        const { data, error } = await supabase.auth.signInWithPassword({
-            email: email.trim(),
-            password,
-        });
-
+        const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
         if (error) {
-            if (error.message.toLowerCase().includes('invalid login credentials')) {
-                throw new Error('Invalid credentials. Please try again.');
-            }
-            throw new Error(error.message);
+            throw new Error(
+                error.message.toLowerCase().includes('invalid login credentials')
+                    ? 'Invalid credentials. Please try again.'
+                    : error.message
+            );
         }
-
         const profile = await fetchBloggerProfile(data.user.id);
         if (!profile) {
             await supabase.auth.signOut();
             throw new Error('This account is not registered as a blogger.');
         }
-
         if (profile.status === 'suspended') {
             await supabase.auth.signOut();
             throw new Error('Your blogger account has been suspended.');
         }
-
         const session = { ...profile, email: data.user.email };
         setBlogger(session);
         return session;
@@ -137,37 +106,27 @@ export function BlogProvider({ children }) {
     // ── Update blogger profile ────────────────────────────────────────────────
     const updateBlogger = useCallback(async (updates) => {
         if (!blogger) return;
-
-        // Separate avatar_url (DB column) from other metadata
         const { avatarUrl, avatar_url, name, ...meta } = updates;
         const dbUpdates = {};
         if (name) dbUpdates.name = name;
         if (avatarUrl || avatar_url) dbUpdates.avatar_url = avatarUrl || avatar_url;
         if (Object.keys(meta).length > 0) {
-            const currentMeta = blogger.metadata || {};
-            dbUpdates.metadata = { ...currentMeta, ...meta };
+            dbUpdates.metadata = { ...(blogger.metadata || {}), ...meta };
         }
         dbUpdates.updated_at = new Date().toISOString();
 
         const { data, error } = await supabase
-            .from('controllers')
-            .update(dbUpdates)
-            .eq('id', blogger.id)
-            .select()
-            .single();
-
+            .from('controllers').update(dbUpdates).eq('id', blogger.id).select().single();
         if (error) throw new Error(error.message);
         setBlogger(prev => ({ ...prev, ...data, email: prev.email }));
     }, [blogger]);
 
-    // ── Post helpers ─────────────────────────────────────────────────────────
-
+    // ── Post helpers ──────────────────────────────────────────────────────────
     const makeSlug = (title) =>
         title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
     const ensureUniqueSlug = async (baseSlug, excludeId = null) => {
-        let slug = baseSlug;
-        let counter = 1;
+        let slug = baseSlug; let counter = 1;
         while (true) {
             let query = supabase.from('posts').select('id').eq('slug', slug);
             if (excludeId) query = query.neq('id', excludeId);
@@ -180,63 +139,42 @@ export function BlogProvider({ children }) {
 
     const publishPost = useCallback(async (postData) => {
         if (!blogger) throw new Error('Not logged in as blogger.');
-        const baseSlug = makeSlug(postData.title);
-        const slug = await ensureUniqueSlug(baseSlug);
+        const slug = await ensureUniqueSlug(makeSlug(postData.title));
         const now = new Date().toISOString();
-
         const row = {
-            author_id: blogger.id,
-            title: postData.title,
-            slug,
-            excerpt: postData.excerpt || '',
-            content: postData.content || '',
+            author_id: blogger.id, title: postData.title, slug,
+            excerpt: postData.excerpt || '', content: postData.content || '',
             cover_gradient: postData.coverGradient || COVER_GRADIENTS[0],
             image_url: postData.imageUrl || postData.image_url || null,
-            category: postData.category || '',
-            tags: postData.tags || [],
-            status: 'published',
-            read_time: postData.readTime || 5,
-            published_at: now,
-            created_at: now,
-            updated_at: now,
+            category: postData.category || '', tags: postData.tags || [],
+            status: 'published', read_time: postData.readTime || 5,
+            published_at: now, created_at: now, updated_at: now,
         };
-
         const { data, error } = await supabase.from('posts').insert([row]).select().single();
         if (error) throw new Error(error.message);
-        await loadPosts();
-        return data;
+        await loadPosts(); return data;
     }, [blogger]);
 
     const saveDraft = useCallback(async (postData) => {
         if (!blogger) throw new Error('Not logged in as blogger.');
-        const baseSlug = makeSlug(postData.title || 'untitled');
-        const slug = await ensureUniqueSlug(baseSlug);
-
+        const slug = await ensureUniqueSlug(makeSlug(postData.title || 'untitled'));
         const row = {
-            author_id: blogger.id,
-            title: postData.title || 'Untitled',
-            slug,
-            excerpt: postData.excerpt || '',
-            content: postData.content || '',
+            author_id: blogger.id, title: postData.title || 'Untitled', slug,
+            excerpt: postData.excerpt || '', content: postData.content || '',
             cover_gradient: postData.coverGradient || COVER_GRADIENTS[0],
             image_url: postData.imageUrl || postData.image_url || null,
-            category: postData.category || '',
-            tags: postData.tags || [],
-            status: 'draft',
-            read_time: postData.readTime || 5,
+            category: postData.category || '', tags: postData.tags || [],
+            status: 'draft', read_time: postData.readTime || 5,
             updated_at: new Date().toISOString(),
         };
-
         const { data, error } = await supabase.from('posts').insert([row]).select().single();
         if (error) throw new Error(error.message);
-        await loadPosts();
-        return data;
+        await loadPosts(); return data;
     }, [blogger]);
 
     const updatePost = useCallback(async (postId, updates) => {
         const baseSlug = updates.title ? makeSlug(updates.title) : null;
         const slug = baseSlug ? await ensureUniqueSlug(baseSlug, postId) : undefined;
-
         const row = {
             ...(updates.title && { title: updates.title }),
             ...(slug && { slug }),
@@ -252,16 +190,9 @@ export function BlogProvider({ children }) {
             updated_at: new Date().toISOString(),
         };
         if (updates.status === 'published') row.published_at = new Date().toISOString();
-
-        const { data, error } = await supabase
-            .from('posts')
-            .update(row)
-            .eq('id', postId)
-            .select()
-            .single();
+        const { data, error } = await supabase.from('posts').update(row).eq('id', postId).select().single();
         if (error) throw new Error(error.message);
-        await loadPosts();
-        return data;
+        await loadPosts(); return data;
     }, []);
 
     const deletePost = useCallback(async (postId) => {
@@ -270,31 +201,18 @@ export function BlogProvider({ children }) {
         setPosts(prev => prev.filter(p => p.id !== postId));
     }, []);
 
-    const getMyPosts = useCallback(() => {
-        if (!blogger) return [];
-        return posts.filter(p => p.author_id === blogger.id);
-    }, [posts, blogger]);
+    const getMyPosts = useCallback(() =>
+        blogger ? posts.filter(p => p.author_id === blogger.id) : [], [posts, blogger]);
 
-    const getPublishedPosts = useCallback(() => {
-        return posts.filter(p => p.status === 'published');
-    }, [posts]);
+    const getPublishedPosts = useCallback(() =>
+        posts.filter(p => p.status === 'published'), [posts]);
 
     return (
         <BlogContext.Provider value={{
-            posts,
-            postsLoading,
-            blogger,
-            loading,
-            loginBlogger,
-            logoutBlogger,
-            updateBlogger,
-            publishPost,
-            saveDraft,
-            updatePost,
-            deletePost,
-            getMyPosts,
-            getPublishedPosts,
-            refreshPosts: loadPosts,
+            posts, postsLoading, blogger, loading,
+            loginBlogger, logoutBlogger, updateBlogger,
+            publishPost, saveDraft, updatePost, deletePost,
+            getMyPosts, getPublishedPosts, refreshPosts: loadPosts,
         }}>
             {children}
         </BlogContext.Provider>
@@ -303,6 +221,6 @@ export function BlogProvider({ children }) {
 
 export function useBlog() {
     const ctx = useContext(BlogContext);
-    if (!ctx) throw new Error('useBlog must be used inside BlogProvider');
+    if (!ctx) throw new Error('useBlog must be used inside <BlogProvider>');
     return ctx;
 }
