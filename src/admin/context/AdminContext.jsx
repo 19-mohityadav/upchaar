@@ -47,7 +47,11 @@ export function AdminProvider({ children }) {
     // ── Restore session on mount (one-time, no listener) ─────────────────────
     useEffect(() => {
         let mounted = true;
-        supabase.auth.getSession().then(async ({ data: { session } }) => {
+
+        Promise.race([
+            supabase.auth.getSession(),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('session fetch timeout')), 5000))
+        ]).then(async ({ data: { session } }) => {
             if (!mounted) return;
             if (session?.user) {
                 // Use 3s timeout for session restore (faster than login's 5s)

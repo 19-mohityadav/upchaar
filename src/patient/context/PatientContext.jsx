@@ -64,7 +64,10 @@ export function PatientProvider({ children }) {
         let mounted = true;
 
         // ── Initial session restore ────────────────────────────────
-        supabase.auth.getSession().then(async ({ data: { session } }) => {
+        Promise.race([
+            supabase.auth.getSession(),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('session fetch timeout')), 5000))
+        ]).then(async ({ data: { session } }) => {
             if (!mounted) return;
             if (session?.user) {
                 const profile = await fetchProfile(session.user.id);

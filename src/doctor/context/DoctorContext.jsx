@@ -26,7 +26,10 @@ export function DoctorProvider({ children }) {
     // ── Restore session on mount (one-time, no listener) ─────────────────────
     useEffect(() => {
         let mounted = true;
-        supabase.auth.getSession().then(({ data: { session } }) => {
+        Promise.race([
+            supabase.auth.getSession(),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('session fetch timeout')), 5000))
+        ]).then(({ data: { session } }) => {
             if (!mounted) return;
             setDoctor(session?.user ? formatUser(session.user) : null);
             if (mounted) setLoading(false);

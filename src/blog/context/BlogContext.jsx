@@ -41,7 +41,10 @@ export function BlogProvider({ children }) {
     // ── Restore session on mount (one-time, no listener) ─────────────────────
     useEffect(() => {
         let mounted = true;
-        supabase.auth.getSession().then(async ({ data: { session } }) => {
+        Promise.race([
+            supabase.auth.getSession(),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('session fetch timeout')), 5000))
+        ]).then(async ({ data: { session } }) => {
             if (!mounted) return;
             if (session?.user) {
                 const profile = await fetchBloggerProfile(session.user.id);

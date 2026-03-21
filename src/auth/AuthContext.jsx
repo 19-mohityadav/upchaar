@@ -53,7 +53,10 @@ export function AuthProvider({ children }) {
         let mounted = true;
 
         // ── Initial session restore ───────────────────────────────────
-        supabase.auth.getSession().then(({ data: { session } }) => {
+        Promise.race([
+            supabase.auth.getSession(),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('session fetch timeout')), 5000))
+        ]).then(({ data: { session } }) => {
             if (!mounted) return;
             const u = session?.user ?? null;
             setUser(u);
@@ -136,11 +139,13 @@ export function AuthProvider({ children }) {
                 },
             });
             if (error) {
-                throw new Error(
-                    error.message.toLowerCase().includes('already registered')
-                        ? 'An account with this email already exists.'
-                        : error.message
-                );
+                let msg = error.message;
+                if (msg.toLowerCase().includes('already registered')) {
+                    msg = 'An account with this email already exists.';
+                } else if (msg.toLowerCase().includes('password should contain')) {
+                    msg = 'Password is too weak. Please use a mix of uppercase, lowercase, numbers, and special characters.';
+                }
+                throw new Error(msg);
             }
             const userId = data.user?.id;
             if (!userId) throw new Error('Registration failed. Please try again.');
