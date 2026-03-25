@@ -14,10 +14,12 @@ import { motion } from 'framer-motion';
 import {
     Heart, User, Calendar, FileText, Pill,
     MapPin, LogOut, ChevronRight, Activity, Shield, Camera, Loader2,
-    Hash, Clock, CalendarCheck2, Stethoscope, ChevronLeft, ChevronRight as ChevronRightIcon
+    Hash, Clock, CalendarCheck2, Stethoscope, ChevronLeft, ChevronRight as ChevronRightIcon,
+    KeyRound,
 } from 'lucide-react';
 import { uploadAvatar } from '@/lib/uploadImage.js';
 import { supabase } from '@/lib/supabase.js';
+import ChangePasswordModal from '@/components/ChangePasswordModal.jsx';
 
 // ── Quick action cards shown on the dashboard ─────
 const QUICK_ACTIONS = [
@@ -203,6 +205,7 @@ export default function PatientDashboard() {
     const fileInputRef = useRef(null);
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
     const [avatarError, setAvatarError] = useState('');
+    const [changePwOpen, setChangePwOpen] = useState(false);
 
     const handleSignOut = async () => {
         await signOut();
@@ -290,6 +293,12 @@ export default function PatientDashboard() {
                             {patient.full_name || patient.email}
                         </span>
                         <button
+                                onClick={() => setChangePwOpen(true)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700 text-xs font-medium transition"
+                            >
+                                <KeyRound size={14} /> Password
+                            </button>
+                            <button
                             onClick={handleSignOut}
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-500 hover:bg-red-50 hover:text-red-500 text-xs font-medium transition"
                         >
@@ -439,6 +448,8 @@ export default function PatientDashboard() {
                     </div>
                 </motion.div>
             </main>
+
+            <ChangePasswordModal isOpen={changePwOpen} onClose={() => setChangePwOpen(false)} />
         </div>
     );
 }

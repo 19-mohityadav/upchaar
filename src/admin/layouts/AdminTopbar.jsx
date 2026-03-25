@@ -1,16 +1,18 @@
 import { useAdmin } from '../context/AdminContext.jsx';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Search, LogOut, Shield, ChevronDown, X, MessageSquare } from 'lucide-react';
+import { Bell, Search, LogOut, Shield, ChevronDown, X, MessageSquare, KeyRound } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase.js';
 import { format } from 'date-fns';
+import ChangePasswordModal from '@/components/ChangePasswordModal.jsx';
 
 export default function AdminTopbar() {
     const { admin, logout, isSuperAdmin } = useAdmin();
     const navigate = useNavigate();
 
     const [dropdownOpen, setDropdownOpen] = useState(false);
+    const [changePwOpen, setChangePwOpen] = useState(false);
     const [searchVal, setSearchVal] = useState('');
     const [bellOpen, setBellOpen] = useState(false);
     const [notifications, setNotifications] = useState([]);
@@ -57,6 +59,7 @@ export default function AdminTopbar() {
     const initials = admin?.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'AD';
 
     return (
+        <>
         <header className="h-16 bg-white border-b border-slate-200 flex items-center gap-4 px-6 flex-shrink-0 z-10">
             {/* Search */}
             <div className="relative flex-1 max-w-xs">
@@ -176,6 +179,12 @@ export default function AdminTopbar() {
                                 </span>
                             </div>
                             <button
+                                onClick={() => { setDropdownOpen(false); setChangePwOpen(true); }}
+                                className="flex items-center gap-2 w-full px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors border-t border-slate-100"
+                            >
+                                <KeyRound size={15} className="text-slate-400" /> Change Password
+                            </button>
+                            <button
                                 onClick={handleLogout}
                                 className="flex items-center gap-2 w-full px-4 py-3 text-sm text-red-500 hover:bg-red-50 transition-colors"
                             >
@@ -186,5 +195,8 @@ export default function AdminTopbar() {
                 )}
             </div>
         </header>
+
+        <ChangePasswordModal isOpen={changePwOpen} onClose={() => setChangePwOpen(false)} />
+        </>
     );
 }

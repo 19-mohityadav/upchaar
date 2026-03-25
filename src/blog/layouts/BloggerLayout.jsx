@@ -2,12 +2,13 @@ import { NavLink, Outlet, Navigate, useNavigate } from 'react-router-dom';
 import { useBlog } from '../context/BlogContext.jsx';
 import {
     PenLine, LayoutDashboard, FileText, User, LogOut,
-    ExternalLink, X, Menu, ChevronLeft, ChevronRight,
+    ExternalLink, X, Menu, ChevronLeft, ChevronRight, KeyRound,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState } from 'react';
 import BloggerSuspended from '../pages/BloggerSuspended.jsx';
+import ChangePasswordModal from '@/components/ChangePasswordModal.jsx';
 
 const NAV = [
     { to: '/blogger/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -22,6 +23,7 @@ export default function BloggerLayout() {
     const [collapsed, setCollapsed] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
     const [avatarOpen, setAvatarOpen] = useState(false);
+    const [changePwOpen, setChangePwOpen] = useState(false);
 
     const handleLogout = async () => {
         await logoutBlogger();
@@ -104,6 +106,15 @@ export default function BloggerLayout() {
                         )}
                     </AnimatePresence>
                 </a>
+                <button onClick={() => { onClose?.(); setChangePwOpen(true); }}
+                    className="flex items-center gap-3 px-3 py-2 rounded-lg text-xs text-slate-500 hover:bg-slate-100 hover:text-slate-700 w-full transition">
+                    <KeyRound size={14} className="flex-shrink-0" />
+                    <AnimatePresence>
+                        {(!collapsed || onClose) && (
+                            <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>Change Password</motion.span>
+                        )}
+                    </AnimatePresence>
+                </button>
                 <button onClick={handleLogout}
                     className="flex items-center gap-3 px-3 py-2 rounded-lg text-xs text-red-400 hover:bg-red-50 hover:text-red-500 w-full transition">
                     <LogOut size={14} className="flex-shrink-0" />
@@ -118,6 +129,7 @@ export default function BloggerLayout() {
     );
 
     return (
+        <>
         <div className="flex h-screen bg-[#f1f5f9] overflow-hidden">
 
             {/* ── Mobile drawer ─────────────────────────────────────── */}
@@ -189,6 +201,10 @@ export default function BloggerLayout() {
                                         <p className="text-xs font-semibold text-slate-700 truncate">{blogger.name}</p>
                                         <p className="text-[10px] text-slate-400 truncate">{blogger.email}</p>
                                     </div>
+                                    <button onClick={() => { setAvatarOpen(false); setChangePwOpen(true); }}
+                                        className="flex items-center gap-2 w-full px-3 py-2.5 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
+                                        <KeyRound size={14} /> Change Password
+                                    </button>
                                     <button onClick={handleLogout}
                                         className="flex items-center gap-2 w-full px-3 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors">
                                         <LogOut size={14} /> Sign Out
@@ -204,5 +220,8 @@ export default function BloggerLayout() {
                 </main>
             </div>
         </div>
+
+        <ChangePasswordModal isOpen={changePwOpen} onClose={() => setChangePwOpen(false)} />
+        </>
     );
 }

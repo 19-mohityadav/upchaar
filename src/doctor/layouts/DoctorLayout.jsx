@@ -4,11 +4,12 @@ import DoctorPendingPage from '../pages/DoctorPendingPage.jsx';
 import {
     LayoutDashboard, Calendar, Users, ClipboardList,
     UserCircle, LogOut, ChevronLeft, ChevronRight, Stethoscope,
-    Video, Bell, Search, MessageSquare, Menu, X,
+    Video, Bell, Search, MessageSquare, Menu, X, KeyRound,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import ChangePasswordModal from '@/components/ChangePasswordModal.jsx';
 
 const NAV = [
     { to: '/doctor/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -23,6 +24,7 @@ export default function DoctorLayout() {
     const [collapsed, setCollapsed] = useState(false);
     const [isOnline, setIsOnline] = useState(true);
     const [mobileOpen, setMobileOpen] = useState(false);
+    const [changePwOpen, setChangePwOpen] = useState(false);
 
     if (loading) {
         return (
@@ -46,6 +48,7 @@ export default function DoctorLayout() {
     };
 
     return (
+        <>
         <div className="flex h-screen bg-slate-50 font-sans overflow-hidden">
             {/* Ambient Background */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
@@ -109,6 +112,10 @@ export default function DoctorLayout() {
                                 ))}
                             </nav>
                             <div className="p-4">
+                                <button onClick={() => { setMobileOpen(false); setChangePwOpen(true); }}
+                                    className="flex items-center gap-3 px-3 py-3 rounded-2xl text-sm font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-all w-full mb-1">
+                                    <KeyRound size={20} /> Change Password
+                                </button>
                                 <button onClick={handleLogout}
                                     className="flex items-center gap-3 px-3 py-3 rounded-2xl text-sm font-medium text-slate-500 hover:bg-red-50 hover:text-red-600 transition-all w-full">
                                     <LogOut size={20} /> Sign Out
@@ -199,6 +206,19 @@ export default function DoctorLayout() {
 
                 {/* Logout */}
                 <div className="p-4 mt-auto">
+                    <button onClick={() => setChangePwOpen(true)}
+                        className={cn('flex items-center gap-3 px-3 py-3 rounded-2xl text-sm font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-all w-full group mb-1', collapsed && 'justify-center')}>
+                        <div className={cn("flex items-center justify-center shrink-0 w-8", collapsed && "w-10")}>
+                            <KeyRound size={20} />
+                        </div>
+                        <AnimatePresence>
+                            {!collapsed && (
+                                <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="whitespace-nowrap">
+                                    Change Password
+                                </motion.span>
+                            )}
+                        </AnimatePresence>
+                    </button>
                     <button onClick={handleLogout}
                         className={cn('flex items-center gap-3 px-3 py-3 rounded-2xl text-sm font-medium text-slate-500 hover:bg-red-50 hover:text-red-600 transition-all w-full group', collapsed && 'justify-center')}>
                         <div className={cn("flex items-center justify-center shrink-0 w-8", collapsed && "w-10")}>
@@ -301,5 +321,8 @@ export default function DoctorLayout() {
                 </button>
             </div>
         </div>
+
+        <ChangePasswordModal isOpen={changePwOpen} onClose={() => setChangePwOpen(false)} />
+        </>
     );
 }
