@@ -25,64 +25,79 @@
  * ─────────────────────────────────────────────────
  */
 
+import { lazy, Suspense } from 'react';
 import { Routes, Route } from 'react-router-dom';
 
-// ── Auth: unified login page + dashboard gate ─────
-import LoginPage from '@/auth/LoginPage.jsx';
-import DashboardGate from '@/auth/DashboardGate.jsx';
-
-// ── Shared layout ─────────────────────────────────
+// ── Shared layout & guards (always needed, not lazy) ──
 import AppLayout from '@/layouts/AppLayout';
 import ProtectedRoute from '@/components/ProtectedRoute.jsx';
+import RequireAuth from '@/components/RequireAuth.jsx';
 
-// ── PUBLIC pages ──────────────────────────────────
-import LandingPage from '@/pages/Landing';
-import DashboardPage from '@/pages/Dashboard';
-import DoctorsPage from '@/pages/Doctors';
-import DoctorDetailPage from '@/pages/DoctorDetail.jsx';
-import DiagnosticsPage from '@/pages/Diagnostics';
-import HospitalsPage from '@/pages/Hospitals';
-import RecordsPage from '@/pages/Records';
-import EmergencyPage from '@/pages/Emergency';
-import BlogsPage from '@/pages/Blogs.jsx';
-import BlogPostPage from '@/pages/BlogPost.jsx';
+// ── Auth ──────────────────────────────────────────────
+const LoginPage      = lazy(() => import('@/auth/LoginPage.jsx'));
+const DashboardGate  = lazy(() => import('@/auth/DashboardGate.jsx'));
 
-// ── PATIENT pages ─────────────────────────────────
-import PatientLogin from '@/patient/pages/PatientLogin.jsx';
-import PatientRegister from '@/patient/pages/PatientRegister.jsx';
-import PatientDashboard from '@/patient/pages/PatientDashboard.jsx';
+// ── PUBLIC pages ──────────────────────────────────────
+const LandingPage     = lazy(() => import('@/pages/Landing'));
+const DashboardPage   = lazy(() => import('@/pages/Dashboard'));
+const DoctorsPage     = lazy(() => import('@/pages/Doctors'));
+const DoctorDetailPage = lazy(() => import('@/pages/DoctorDetail.jsx'));
+const DiagnosticsPage = lazy(() => import('@/pages/Diagnostics'));
+const HospitalsPage   = lazy(() => import('@/pages/Hospitals'));
+const RecordsPage     = lazy(() => import('@/pages/Records'));
+const EmergencyPage   = lazy(() => import('@/pages/Emergency'));
+const BlogsPage       = lazy(() => import('@/pages/Blogs.jsx'));
+const BlogPostPage    = lazy(() => import('@/pages/BlogPost.jsx'));
 
-// ── ADMIN pages ───────────────────────────────────
-import AdminLogin from '@/admin/pages/AdminLogin.jsx';
-import AdminLayout from '@/admin/layouts/AdminLayout.jsx';
-import AdminDashboard from '@/admin/pages/AdminDashboard.jsx';
-import DoctorManagement from '@/admin/pages/DoctorManagement.jsx';
-import PatientManagement from '@/admin/pages/PatientManagement.jsx';
-import AppointmentManagement from '@/admin/pages/AppointmentManagement.jsx';
-import NotificationCenter from '@/admin/pages/NotificationCenter.jsx';
-import ActivityLogs from '@/admin/pages/ActivityLogs.jsx';
-import Settings from '@/admin/pages/Settings.jsx';
-import FacilitiesManagement from '@/admin/pages/FacilitiesManagement.jsx';
-import SupportAdminManagement from '@/admin/pages/SupportAdminManagement.jsx';
-import BloggerManagement from '@/admin/pages/BloggerManagement.jsx';
+// ── PATIENT pages ─────────────────────────────────────
+const PatientLogin     = lazy(() => import('@/patient/pages/PatientLogin.jsx'));
+const PatientRegister  = lazy(() => import('@/patient/pages/PatientRegister.jsx'));
+const PatientDashboard = lazy(() => import('@/patient/pages/PatientDashboard.jsx'));
 
-// ── DOCTOR pages ──────────────────────────────────
-import DoctorLayout from '@/doctor/layouts/DoctorLayout.jsx';
-import DoctorLogin from '@/doctor/pages/DoctorLogin.jsx';
-import DoctorRegister from '@/doctor/pages/DoctorRegister.jsx';
-import DoctorDashboard from '@/doctor/pages/DoctorDashboard.jsx';
-import DoctorAppointments from '@/doctor/pages/DoctorAppointments.jsx';
-import DoctorPatients from '@/doctor/pages/DoctorPatients.jsx';
-import DoctorPrescriptions from '@/doctor/pages/DoctorPrescriptions.jsx';
-import DoctorProfile from '@/doctor/pages/DoctorProfile.jsx';
+// ── ADMIN pages ───────────────────────────────────────
+const AdminLogin              = lazy(() => import('@/admin/pages/AdminLogin.jsx'));
+const AdminLayout             = lazy(() => import('@/admin/layouts/AdminLayout.jsx'));
+const AdminDashboard          = lazy(() => import('@/admin/pages/AdminDashboard.jsx'));
+const DoctorManagement        = lazy(() => import('@/admin/pages/DoctorManagement.jsx'));
+const PatientManagement       = lazy(() => import('@/admin/pages/PatientManagement.jsx'));
+const AppointmentManagement   = lazy(() => import('@/admin/pages/AppointmentManagement.jsx'));
+const NotificationCenter      = lazy(() => import('@/admin/pages/NotificationCenter.jsx'));
+const ActivityLogs            = lazy(() => import('@/admin/pages/ActivityLogs.jsx'));
+const Settings                = lazy(() => import('@/admin/pages/Settings.jsx'));
+const FacilitiesManagement    = lazy(() => import('@/admin/pages/FacilitiesManagement.jsx'));
+const SupportAdminManagement  = lazy(() => import('@/admin/pages/SupportAdminManagement.jsx'));
+const BloggerManagement       = lazy(() => import('@/admin/pages/BloggerManagement.jsx'));
 
-// ── BLOGGER pages ─────────────────────────────────
-import BloggerLayout from '@/blog/layouts/BloggerLayout.jsx';
-import BloggerLogin from '@/blog/pages/BloggerLogin.jsx';
-import BloggerDashboard from '@/blog/pages/BloggerDashboard.jsx';
-import PostEditor from '@/blog/pages/PostEditor.jsx';
-import MyPosts from '@/blog/pages/MyPosts.jsx';
-import BloggerProfile from '@/blog/pages/BloggerProfile.jsx';
+// ── DOCTOR pages ──────────────────────────────────────
+const DoctorLayout       = lazy(() => import('@/doctor/layouts/DoctorLayout.jsx'));
+const DoctorLogin        = lazy(() => import('@/doctor/pages/DoctorLogin.jsx'));
+const DoctorRegister     = lazy(() => import('@/doctor/pages/DoctorRegister.jsx'));
+const DoctorDashboard    = lazy(() => import('@/doctor/pages/DoctorDashboard.jsx'));
+const DoctorAppointments = lazy(() => import('@/doctor/pages/DoctorAppointments.jsx'));
+const DoctorPatients     = lazy(() => import('@/doctor/pages/DoctorPatients.jsx'));
+const DoctorPrescriptions = lazy(() => import('@/doctor/pages/DoctorPrescriptions.jsx'));
+const DoctorProfile      = lazy(() => import('@/doctor/pages/DoctorProfile.jsx'));
+
+// ── BLOGGER pages ─────────────────────────────────────
+const BloggerLayout   = lazy(() => import('@/blog/layouts/BloggerLayout.jsx'));
+const BloggerLogin    = lazy(() => import('@/blog/pages/BloggerLogin.jsx'));
+const BloggerDashboard = lazy(() => import('@/blog/pages/BloggerDashboard.jsx'));
+const PostEditor      = lazy(() => import('@/blog/pages/PostEditor.jsx'));
+const MyPosts         = lazy(() => import('@/blog/pages/MyPosts.jsx'));
+const BloggerProfile  = lazy(() => import('@/blog/pages/BloggerProfile.jsx'));
+
+// ── Minimal loading fallback ───────────────────────────
+const PageLoader = () => (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+        <div style={{
+            width: 40, height: 40, borderRadius: '50%',
+            border: '3px solid #e2e8f0',
+            borderTopColor: '#14b8a6',
+            animation: 'spin 0.7s linear infinite'
+        }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+);
 
 /**
  * AppRoutes
@@ -96,6 +111,7 @@ import BloggerProfile from '@/blog/pages/BloggerProfile.jsx';
  */
 export function AppRoutes() {
     return (
+        <Suspense fallback={<PageLoader />}>
         <Routes>
 
             {/* ═══════════════════════════════════════
@@ -128,9 +144,9 @@ export function AppRoutes() {
             <Route path="/records" element={<AppLayout><RecordsPage /></AppLayout>} />
             <Route path="/emergency" element={<AppLayout><EmergencyPage /></AppLayout>} />
 
-            {/* Blog — public listing + post detail */}
-            <Route path="/blogs" element={<AppLayout><BlogsPage /></AppLayout>} />
-            <Route path="/blogs/:slug" element={<AppLayout><BlogPostPage /></AppLayout>} />
+            {/* Blog: public, no nav/sidebar */}
+            <Route path="/blogs" element={<BlogsPage />} />
+            <Route path="/blogs/:slug" element={<BlogPostPage />} />
 
 
             {/* ═══════════════════════════════════════
@@ -141,7 +157,7 @@ export function AppRoutes() {
                 ═══════════════════════════════════════ */}
             <Route path="/patient/login" element={<PatientLogin />} />
             <Route path="/patient/register" element={<PatientRegister />} />
-            <Route path="/patient/dashboard" element={<PatientDashboard />} />
+            <Route path="/patient/dashboard" element={<RequireAuth><PatientDashboard /></RequireAuth>} />
 
 
             {/* ═══════════════════════════════════════
@@ -204,5 +220,6 @@ export function AppRoutes() {
             </Route>
 
         </Routes>
+        </Suspense>
     );
 }

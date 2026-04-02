@@ -41,12 +41,13 @@ const STEPS = [
 const initialData = {
     // Step 1
     fullName: '', email: '', phone: '', dob: '', gender: '', photo: null,
+    password: '', confirmPassword: '',
     // Step 2
     licenseNo: '', nmcNo: '', specialization: '', subSpecialization: '',
     degree: '', passingYear: '', institution: '', additionalQualifications: '',
     // Step 3
-    experience: '', consultationFee: '', clinicName: '', clinicAddress: '',
-    city: '', state: '', languages: [], availableDays: [], hoursFrom: '', hoursTo: '',
+    experience: '', consultationFee: '', languages: [],
+    clinics: [{ name: '', address: '', city: '', state: '', availableDays: [], hoursFrom: '', hoursTo: '' }],
     // Step 4
     govtId: null, licenseDoc: null, degreeCert: null,
     acceptTerms: false, declaration: false,
@@ -60,6 +61,24 @@ function validate(step, data) {
         if (!data.phone.match(/^[6-9]\d{9}$/)) errors.phone = 'Valid 10-digit mobile number required';
         if (!data.dob) errors.dob = 'Date of birth is required';
         if (!data.gender) errors.gender = 'Gender is required';
+        if (!data.photo) errors.photo = 'Profile photo is required';
+        // Password validation
+        if (!data.password) {
+            errors.password = 'Password is required';
+        } else if (data.password.length < 8) {
+            errors.password = 'Password must be at least 8 characters';
+        } else if (!/[A-Z]/.test(data.password)) {
+            errors.password = 'Must contain at least one uppercase letter';
+        } else if (!/[0-9]/.test(data.password)) {
+            errors.password = 'Must contain at least one number';
+        } else if (!/[^A-Za-z0-9]/.test(data.password)) {
+            errors.password = 'Must contain at least one special character';
+        }
+        if (!data.confirmPassword) {
+            errors.confirmPassword = 'Please confirm your password';
+        } else if (data.password !== data.confirmPassword) {
+            errors.confirmPassword = 'Passwords do not match';
+        }
     }
     if (step === 2) {
         if (!data.licenseNo.trim()) errors.licenseNo = 'License number is required';
@@ -73,14 +92,16 @@ function validate(step, data) {
     if (step === 3) {
         if (!data.experience || data.experience < 0) errors.experience = 'Years of experience is required';
         if (!data.consultationFee || data.consultationFee < 0) errors.consultationFee = 'Consultation fee is required';
-        if (!data.clinicName.trim()) errors.clinicName = 'Clinic/Hospital name is required';
-        if (!data.clinicAddress.trim()) errors.clinicAddress = 'Address is required';
-        if (!data.city.trim()) errors.city = 'City is required';
-        if (!data.state) errors.state = 'State is required';
         if (data.languages.length === 0) errors.languages = 'Select at least one language';
-        if (data.availableDays.length === 0) errors.availableDays = 'Select at least one available day';
-        if (!data.hoursFrom) errors.hoursFrom = 'Start time is required';
-        if (!data.hoursTo) errors.hoursTo = 'End time is required';
+        data.clinics.forEach((clinic, index) => {
+            if (!clinic.name.trim()) errors[`clinicName_${index}`] = 'Clinic/Hospital name is required';
+            if (!clinic.address.trim()) errors[`clinicAddress_${index}`] = 'Address is required';
+            if (!clinic.city.trim()) errors[`clinicCity_${index}`] = 'City is required';
+            if (!clinic.state) errors[`clinicState_${index}`] = 'State is required';
+            if (clinic.availableDays.length === 0) errors[`clinicDays_${index}`] = 'Select at least one available day';
+            if (!clinic.hoursFrom) errors[`clinicHoursFrom_${index}`] = 'Start time is required';
+            if (!clinic.hoursTo) errors[`clinicHoursTo_${index}`] = 'End time is required';
+        });
     }
     if (step === 4) {
         if (!data.govtId) errors.govtId = 'Government ID is required';
@@ -175,16 +196,44 @@ function Step1({ data, onChange, errors }) {
                 <FieldError msg={errors.gender} />
             </div>
             <div className="sm:col-span-2">
-                <FormLabel>Profile Photo</FormLabel>
+                <FormLabel required>Profile Photo</FormLabel>
                 <label className={`flex flex-col items-center justify-center gap-2 w-full h-24 rounded-xl border-2 border-dashed cursor-pointer transition-colors
                     ${data.photo ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50 bg-muted/40'}`}>
                     <input type="file" accept="image/*" className="hidden" onChange={e => onChange('photo', e.target.files[0] || null)} />
                     {data.photo ? (
                         <><CheckCircle2 className="h-5 w-5 text-primary" /><span className="text-xs text-primary font-medium">{data.photo.name}</span></>
                     ) : (
-                        <><Upload className="h-5 w-5 text-muted-foreground" /><span className="text-xs text-muted-foreground">Upload profile photo (optional)</span></>
+                        <><Upload className="h-5 w-5 text-muted-foreground" /><span className="text-xs text-muted-foreground">Upload profile photo</span></>
                     )}
                 </label>
+                <FieldError msg={errors.photo} />
+            </div>
+
+            {/* ─── Password Section ─────────────────────── */}
+            <div className="sm:col-span-2">
+                <div className="bg-muted/40 border border-border rounded-xl p-4 space-y-3">
+                    <p className="text-sm font-semibold text-foreground/80 flex items-center gap-2">
+                        <span className="inline-block h-5 w-5 rounded-full bg-primary text-white text-xs flex items-center justify-center font-bold">🔒</span>
+                        Create Your Login Password
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <FormLabel required>Password</FormLabel>
+                            <Input id="password" type="password" placeholder="Min 8 chars, A-Z, 0-9, symbol"
+                                value={data.password} onChange={e => onChange('password', e.target.value)}
+                                className={errors.password ? 'border-red-400' : ''} />
+                            <FieldError msg={errors.password} />
+                        </div>
+                        <div>
+                            <FormLabel required>Confirm Password</FormLabel>
+                            <Input id="confirmPassword" type="password" placeholder="Re-enter password"
+                                value={data.confirmPassword} onChange={e => onChange('confirmPassword', e.target.value)}
+                                className={errors.confirmPassword ? 'border-red-400' : ''} />
+                            <FieldError msg={errors.confirmPassword} />
+                        </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">You will use this password to log in after your application is approved.</p>
+                </div>
             </div>
         </div>
     );
@@ -253,97 +302,142 @@ function Step3({ data, onChange, errors }) {
         onChange(field, arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val]);
     };
 
+    const addClinic = () => {
+        onChange('clinics', [...data.clinics, { name: '', address: '', city: '', state: '', availableDays: [], hoursFrom: '', hoursTo: '' }]);
+    };
+
+    const removeClinic = (index) => {
+        const newClinics = data.clinics.filter((_, i) => i !== index);
+        onChange('clinics', newClinics);
+    };
+
+    const updateClinic = (index, field, val) => {
+        const newClinics = [...data.clinics];
+        newClinics[index] = { ...newClinics[index], [field]: val };
+        onChange('clinics', newClinics);
+    };
+
+    const toggleClinicDay = (index, day) => {
+        const arr = data.clinics[index].availableDays;
+        const newDays = arr.includes(day) ? arr.filter(x => x !== day) : [...arr, day];
+        updateClinic(index, 'availableDays', newDays);
+    };
+
     return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-                <FormLabel required>Years of Experience</FormLabel>
-                <Input id="experience" type="number" placeholder="5" min="0" max="60" value={data.experience}
-                    onChange={e => onChange('experience', e.target.value)} className={errors.experience ? 'border-red-400' : ''} />
-                <FieldError msg={errors.experience} />
-            </div>
-            <div>
-                <FormLabel required>Consultation Fee (₹)</FormLabel>
-                <Input id="consultationFee" type="number" placeholder="500" min="0" value={data.consultationFee}
-                    onChange={e => onChange('consultationFee', e.target.value)} className={errors.consultationFee ? 'border-red-400' : ''} />
-                <FieldError msg={errors.consultationFee} />
-            </div>
-            <div className="sm:col-span-2">
-                <FormLabel required>Clinic / Hospital Name</FormLabel>
-                <Input id="clinicName" placeholder="Apollo Clinic" value={data.clinicName}
-                    onChange={e => onChange('clinicName', e.target.value)} className={errors.clinicName ? 'border-red-400' : ''} />
-                <FieldError msg={errors.clinicName} />
-            </div>
-            <div className="sm:col-span-2">
-                <FormLabel required>Clinic Address</FormLabel>
-                <Input id="clinicAddress" placeholder="Street, Area, Locality" value={data.clinicAddress}
-                    onChange={e => onChange('clinicAddress', e.target.value)} className={errors.clinicAddress ? 'border-red-400' : ''} />
-                <FieldError msg={errors.clinicAddress} />
-            </div>
-            <div>
-                <FormLabel required>City</FormLabel>
-                <Input id="city" placeholder="Mumbai" value={data.city}
-                    onChange={e => onChange('city', e.target.value)} className={errors.city ? 'border-red-400' : ''} />
-                <FieldError msg={errors.city} />
-            </div>
-            <div>
-                <FormLabel required>State</FormLabel>
-                <select id="state" value={data.state} onChange={e => onChange('state', e.target.value)}
-                    className={`w-full h-10 rounded-md border px-3 text-sm bg-background text-foreground focus:ring-2 focus:ring-ring focus:outline-none
-                        ${errors.state ? 'border-red-400' : 'border-input'}`}>
-                    <option value="">Select state</option>
-                    {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-                <FieldError msg={errors.state} />
-            </div>
-
-            {/* Languages */}
-            <div className="sm:col-span-2">
-                <FormLabel required>Languages Spoken</FormLabel>
-                <div className="flex flex-wrap gap-2 mt-1">
-                    {LANGUAGES.map(lang => (
-                        <button key={lang} type="button"
-                            onClick={() => toggleMulti('languages', lang)}
-                            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-200
-                                ${data.languages.includes(lang)
-                                    ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                                    : 'bg-card border-border text-foreground/70 hover:border-primary/50'}`}>
-                            {lang}
-                        </button>
-                    ))}
+        <div className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <FormLabel required>Years of Experience</FormLabel>
+                    <Input id="experience" type="number" placeholder="5" min="0" max="60" value={data.experience}
+                        onChange={e => onChange('experience', e.target.value)} className={errors.experience ? 'border-red-400' : ''} />
+                    <FieldError msg={errors.experience} />
                 </div>
-                <FieldError msg={errors.languages} />
-            </div>
-
-            {/* Available Days */}
-            <div className="sm:col-span-2">
-                <FormLabel required>Available Days</FormLabel>
-                <div className="flex flex-wrap gap-2 mt-1">
-                    {DAYS.map(day => (
-                        <button key={day} type="button"
-                            onClick={() => toggleMulti('availableDays', day)}
-                            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-200
-                                ${data.availableDays.includes(day)
-                                    ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                                    : 'bg-card border-border text-foreground/70 hover:border-primary/50'}`}>
-                            {day.slice(0, 3)}
-                        </button>
-                    ))}
+                <div>
+                    <FormLabel required>Consultation Fee (₹)</FormLabel>
+                    <Input id="consultationFee" type="number" placeholder="500" min="0" value={data.consultationFee}
+                        onChange={e => onChange('consultationFee', e.target.value)} className={errors.consultationFee ? 'border-red-400' : ''} />
+                    <FieldError msg={errors.consultationFee} />
                 </div>
-                <FieldError msg={errors.availableDays} />
+
+                {/* Languages */}
+                <div className="sm:col-span-2">
+                    <FormLabel required>Languages Spoken</FormLabel>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                        {LANGUAGES.map(lang => (
+                            <button key={lang} type="button"
+                                onClick={() => toggleMulti('languages', lang)}
+                                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-200
+                                    ${data.languages.includes(lang)
+                                        ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                                        : 'bg-card border-border text-foreground/70 hover:border-primary/50'}`}>
+                                {lang}
+                            </button>
+                        ))}
+                    </div>
+                    <FieldError msg={errors.languages} />
+                </div>
             </div>
 
-            {/* Consultation Hours */}
-            <div>
-                <FormLabel required>Consultation From</FormLabel>
-                <Input id="hoursFrom" type="time" value={data.hoursFrom}
-                    onChange={e => onChange('hoursFrom', e.target.value)} className={errors.hoursFrom ? 'border-red-400' : ''} />
-                <FieldError msg={errors.hoursFrom} />
-            </div>
-            <div>
-                <FormLabel required>Consultation To</FormLabel>
-                <Input id="hoursTo" type="time" value={data.hoursTo}
-                    onChange={e => onChange('hoursTo', e.target.value)} className={errors.hoursTo ? 'border-red-400' : ''} />
-                <FieldError msg={errors.hoursTo} />
+            <div className="space-y-4">
+                <div className="flex items-center justify-between border-b pb-2">
+                    <h3 className="font-semibold text-foreground/90">Clinic/Medical Details</h3>
+                    <Button type="button" onClick={addClinic} variant="outline" size="sm" className="h-8">
+                        + Add More
+                    </Button>
+                </div>
+
+                {data.clinics.map((clinic, index) => (
+                    <div key={index} className="p-4 bg-muted/40 border rounded-xl space-y-4 relative">
+                        {data.clinics.length > 1 && (
+                            <button type="button" onClick={() => removeClinic(index)}
+                                className="absolute right-3 top-3 h-6 w-6 rounded-full bg-red-100 text-red-600 flex items-center justify-center hover:bg-red-200 transition">
+                                <X size={12} />
+                            </button>
+                        )}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="sm:col-span-2">
+                                <FormLabel required>Clinic / Hospital Name</FormLabel>
+                                <Input placeholder="Apollo Clinic" value={clinic.name}
+                                    onChange={e => updateClinic(index, 'name', e.target.value)} className={errors[`clinicName_${index}`] ? 'border-red-400' : ''} />
+                                <FieldError msg={errors[`clinicName_${index}`]} />
+                            </div>
+                            <div className="sm:col-span-2">
+                                <FormLabel required>Clinic Address</FormLabel>
+                                <Input placeholder="Street, Area, Locality" value={clinic.address}
+                                    onChange={e => updateClinic(index, 'address', e.target.value)} className={errors[`clinicAddress_${index}`] ? 'border-red-400' : ''} />
+                                <FieldError msg={errors[`clinicAddress_${index}`]} />
+                            </div>
+                            <div>
+                                <FormLabel required>City</FormLabel>
+                                <Input placeholder="Mumbai" value={clinic.city}
+                                    onChange={e => updateClinic(index, 'city', e.target.value)} className={errors[`clinicCity_${index}`] ? 'border-red-400' : ''} />
+                                <FieldError msg={errors[`clinicCity_${index}`]} />
+                            </div>
+                            <div>
+                                <FormLabel required>State</FormLabel>
+                                <select value={clinic.state} onChange={e => updateClinic(index, 'state', e.target.value)}
+                                    className={`w-full h-10 rounded-md border px-3 text-sm bg-background text-foreground focus:ring-2 focus:ring-ring focus:outline-none
+                                        ${errors[`clinicState_${index}`] ? 'border-red-400' : 'border-input'}`}>
+                                    <option value="">Select state</option>
+                                    {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                                </select>
+                                <FieldError msg={errors[`clinicState_${index}`]} />
+                            </div>
+
+                            {/* Available Days */}
+                            <div className="sm:col-span-2">
+                                <FormLabel required>Available Days</FormLabel>
+                                <div className="flex flex-wrap gap-2 mt-1">
+                                    {DAYS.map(day => (
+                                        <button key={day} type="button"
+                                            onClick={() => toggleClinicDay(index, day)}
+                                            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-200
+                                                ${clinic.availableDays.includes(day)
+                                                    ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                                                    : 'bg-card border-border text-foreground/70 hover:border-primary/50'}`}>
+                                            {day.slice(0, 3)}
+                                        </button>
+                                    ))}
+                                </div>
+                                <FieldError msg={errors[`clinicDays_${index}`]} />
+                            </div>
+
+                            {/* Consultation Hours */}
+                            <div>
+                                <FormLabel required>Consultation From</FormLabel>
+                                <Input type="time" value={clinic.hoursFrom}
+                                    onChange={e => updateClinic(index, 'hoursFrom', e.target.value)} className={errors[`clinicHoursFrom_${index}`] ? 'border-red-400' : ''} />
+                                <FieldError msg={errors[`clinicHoursFrom_${index}`]} />
+                            </div>
+                            <div>
+                                <FormLabel required>Consultation To</FormLabel>
+                                <Input type="time" value={clinic.hoursTo}
+                                    onChange={e => updateClinic(index, 'hoursTo', e.target.value)} className={errors[`clinicHoursTo_${index}`] ? 'border-red-400' : ''} />
+                                <FieldError msg={errors[`clinicHoursTo_${index}`]} />
+                            </div>
+                        </div>
+                    </div>
+                ))}
             </div>
         </div>
     );
@@ -453,55 +547,66 @@ export function DoctorOnboardingModal({ isOpen, onClose }) {
         setSubmitting(true);
         setSubmitError('');
         try {
-            const now = new Date().toISOString();
             const emailSlug = data.email.trim().replace(/[^a-z0-9]/gi, '_');
             const folder = `${emailSlug}_${Date.now()}`;
 
-            // Upload documents to Supabase Storage
+            // 1. Upload documents to Supabase Storage anonymously (bucket must allow anon uploads,
+            //    or we use a signed URL). Paths are passed to the Edge Function.
             const [govtIdPath, licenseDocPath, degreeCertPath] = await Promise.all([
                 uploadFile(data.govtId, folder, 'govt_id'),
                 uploadFile(data.licenseDoc, folder, 'license_doc'),
                 uploadFile(data.degreeCert, folder, 'degree_cert'),
             ]);
 
-            const row = {
-                full_name: data.fullName.trim(),
-                email: data.email.trim(),
-                phone: data.phone.trim(),
-                dob: data.dob || null,
-                gender: data.gender || null,
-                license_no: data.licenseNo.trim(),
-                nmc_no: data.nmcNo.trim(),
-                specialization: data.specialization,
-                sub_specialization: data.subSpecialization || null,
-                degree: data.degree.trim(),
-                passing_year: data.passingYear ? Number(data.passingYear) : null,
-                institution: data.institution.trim(),
-                additional_qualifications: data.additionalQualifications || null,
-                experience: data.experience ? Number(data.experience) : 0,
-                consultation_fee: data.consultationFee ? Number(data.consultationFee) : 0,
-                clinic_name: data.clinicName.trim(),
-                clinic_address: data.clinicAddress.trim(),
-                city: data.city.trim(),
-                state: data.state,
-                languages: data.languages,
-                available_days: data.availableDays,
-                hours_from: data.hoursFrom,
-                hours_to: data.hoursTo,
-                status: 'Pending',
-                applied_at: now,
-                updated_at: now,
-                metadata: {
-                    documents: {
-                        govtId: govtIdPath,
-                        licenseDoc: licenseDocPath,
-                        degreeCert: degreeCertPath,
+            // 2. Call the register-doctor Edge Function (service-role, bypasses RLS)
+            //    — creates auth user, profile, and pending_doctors row server-side
+            const res = await fetch(
+                `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/register-doctor`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
                     },
-                    storageFolder: folder,
-                },
-            };
-            const { error } = await supabase.from('doctors').insert([row]);
-            if (error) throw new Error(error.message);
+                    body: JSON.stringify({
+                        // Auth
+                        email: data.email.trim(),
+                        password: data.password,
+                        // Personal
+                        fullName: data.fullName.trim(),
+                        phone: data.phone.trim(),
+                        dob: data.dob || null,
+                        gender: data.gender || null,
+                        // Credentials
+                        licenseNo: data.licenseNo.trim(),
+                        nmcNo: data.nmcNo.trim(),
+                        specialization: data.specialization,
+                        subSpecialization: data.subSpecialization || null,
+                        degree: data.degree.trim(),
+                        passingYear: data.passingYear || null,
+                        institution: data.institution.trim(),
+                        additionalQualifications: data.additionalQualifications || null,
+                        // Practice
+                        experience: data.experience || 0,
+                        consultationFee: data.consultationFee || 500,
+                        languages: data.languages,
+                        clinics: data.clinics,
+                        // Document paths (uploaded in step 1)
+                        metadata: {
+                            documents: {
+                                govtId: govtIdPath,
+                                licenseDoc: licenseDocPath,
+                                degreeCert: degreeCertPath,
+                            },
+                            storageFolder: folder,
+                        },
+                    }),
+                }
+            );
+
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.error || 'Registration failed. Please try again.');
+
             setSubmitted(true);
         } catch (err) {
             setSubmitError(err.message || 'Something went wrong. Please try again.');
