@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useAdmin } from '../context/AdminContext.jsx';
 import { supabase } from '@/lib/supabase.js';
-import { Search, Plus, Trash2, UserCog, Mail, Phone, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Plus, Trash2, UserCog, Mail, Phone, X, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -67,9 +67,13 @@ export default function SupportAdminManagement() {
         setDeleteTarget(null);
     };
 
+    const [isCreating, setIsCreating] = useState(false);
     const handleAdd = async (e) => {
         e.preventDefault();
+        if (isCreating) return;
+        
         try {
+            setIsCreating(true);
             // Get the current admin's JWT to pass as Authorization header
             const { data: { session } } = await supabase.auth.getSession();
             if (!session) throw new Error('Admin session not found. Please log in again.');
@@ -86,9 +90,26 @@ export default function SupportAdminManagement() {
                 },
             });
 
-            if (res.error) throw new Error(res.error.message || 'Failed to create support admin');
-            const { supportAdmin, error: bodyError } = res.data ?? {};
-            if (bodyError) throw new Error(bodyError);
+            // Handle potential errors from the function
+            if (res.error) {
+                // Try to get JSON error from function body if it exists
+                let errorMsg = 'Failed to create support admin';
+                if (res.error instanceof Error) {
+                    errorMsg = res.error.message;
+                }
+                
+                // If the function returned a body with an error field, use that
+                if (res.data?.error) {
+                    errorMsg = res.data.error;
+                } else if (typeof res.error === 'object' && res.error?.context?.message) {
+                  errorMsg = res.error.context.message;
+                }
+
+                throw new Error(errorMsg);
+            }
+
+            const { supportAdmin } = res.data ?? {};
+            if (!supportAdmin) throw new Error('No admin data returned from server');
 
             setAdmins(prev => [supportAdmin, ...prev]);
             setShowAdd(false);
@@ -96,7 +117,10 @@ export default function SupportAdminManagement() {
             setPage(1);
             showToast(`${supportAdmin.name} added as Support Admin ✓`);
         } catch (err) {
+            console.error('[SupportAdmin] add error:', err);
             showToast(err.message, 'error');
+        } finally {
+            setIsCreating(false);
         }
     };
 
@@ -216,8 +240,17 @@ export default function SupportAdminManagement() {
                                 <div className="flex gap-3 pt-1">
                                     <button type="button" onClick={() => { setShowAdd(false); setForm(EMPTY_FORM); }}
                                         className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition">Cancel</button>
-                                    <button type="submit"
-                                        className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-primary to-teal-500 text-white text-sm font-semibold hover:opacity-90 transition">Add Admin</button>
+                                    <button type="submit" disabled={isCreating}
+                                        className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-primary to-teal-500 text-white text-sm font-semibold hover:opacity-90 transition disabled:opacity-60 flex items-center justify-center gap-2">
+                                        {isCreating ? (
+                                            <>
+                                                <Loader2 size={16} className="animate-spin" />
+                                                Adding…
+                                            </>
+                                        ) : (
+                                            'Add Admin'
+                                        )}
+                                    </button>
                                 </div>
                             </form>
                         </motion.div>

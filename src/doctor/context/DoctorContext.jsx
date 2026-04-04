@@ -171,17 +171,28 @@ export function DoctorProvider({ children }) {
         }
         const userId = data.user?.id;
         if (userId) {
-            await supabase.from('profiles').insert({
+            const { error: profileError } = await supabase.from('profiles').insert({
                 id: userId, email: email.trim(),
                 full_name: fullName.trim(), phone: phone.trim(),
                 profile_type: 'doctor', status: 'pending',
             });
-            await supabase.from('doctors').insert({
+            if (profileError) {
+                console.error('[DoctorContext] profile insert error:', profileError);
+                throw new Error('Failed to create user profile: ' + profileError.message);
+            }
+
+            const { error: doctorError } = await supabase.from('doctors').insert({
                 profile_id: userId, full_name: fullName.trim(),
                 email: email.trim(), phone: phone.trim(),
                 specialization: specialization || 'General Physician',
                 city: city || '', status: 'Pending',
             });
+            if (doctorError) {
+                console.error('[DoctorContext] doctor insert error:', doctorError);
+                 // We don't necessarily want to fail the whole thing if profile was created, 
+                 // but for doctors it's critical. 
+                throw new Error('Failed to create doctor record: ' + doctorError.message);
+            }
         }
         return formatUser(data.user);
     }, []);
