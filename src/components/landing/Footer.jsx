@@ -19,13 +19,13 @@ export const Footer = () => {
             { title: "Read health articles", href: "#" },
         ],
         "For doctors": [
-            { title: "Sanjiwani for doctors", href: "#" },
-            { title: "Sanjiwani Profile", href: "#" },
+            { title: "Upchaar for doctors", href: "#" },
+            { title: "Upchaar Profile", href: "#" },
             { title: "Join as a doctor", href: "#" },
         ],
         "For hospitals": [
-            { title: "Sanjiwani Profile", href: "#" },
-            { title: "Sanjiwani Reach", href: "#" },
+            { title: "Upchaar Profile", href: "#" },
+            { title: "Upchaar Reach", href: "#" },
         ],
         "For Corporates": [{ title: "Wellness program", href: "#" }],
         "More": [
@@ -90,11 +90,11 @@ export const Footer = () => {
                 {/* ── Copyright ─────────────────────────────────────── */}
                 <div className="mt-6 border-t border-slate-800 pt-6 flex flex-col items-center gap-4">
                     <div className="flex items-center space-x-2">
-                        <img src="/logo.png" alt="Sanjiwani Health Logo" width={32} height={32} />
-                        <span className="font-bold text-lg">Sanjiwani Health</span>
+                        <img src="/logo.png" alt="Upchaar Health Logo" width={32} height={32} />
+                        <span className="font-bold text-lg">Upchaar Health</span>
                     </div>
                     <p className="text-sm text-gray-400">
-                        {currentYear && <>© {currentYear} Sanjiwani Health. All rights reserved.</>}
+                        {currentYear && <>© {currentYear} Upchaar Health. All rights reserved.</>}
                     </p>
                 </div>
             </div>

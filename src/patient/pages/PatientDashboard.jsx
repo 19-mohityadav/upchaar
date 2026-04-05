@@ -10,12 +10,12 @@
 import { useRef, useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { usePatient } from '../context/PatientContext.jsx';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
     Heart, User, Calendar, FileText, Pill,
-    MapPin, LogOut, ChevronRight, Activity, Shield, Camera, Loader2,
+    MapPin, LogOut, ChevronRight, Activity, Camera, Loader2,
     Hash, Clock, CalendarCheck2, Stethoscope, ChevronLeft, ChevronRight as ChevronRightIcon,
-    KeyRound,
+    KeyRound, Settings,
 } from 'lucide-react';
 import { uploadAvatar } from '@/lib/uploadImage.js';
 import { supabase } from '@/lib/supabase.js';
@@ -203,11 +203,25 @@ export default function PatientDashboard() {
     const { patient, loading, signOut, updateProfile } = usePatient();
     const navigate = useNavigate();
     const fileInputRef = useRef(null);
+    const profileRef = useRef(null);
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
     const [avatarError, setAvatarError] = useState('');
     const [changePwOpen, setChangePwOpen] = useState(false);
+    const [isProfileOpen, setIsProfileOpen] = useState(false);
+
+    // Close profile dropdown on outside click
+    useEffect(() => {
+        function handleClickOutside(e) {
+            if (profileRef.current && !profileRef.current.contains(e.target)) {
+                setIsProfileOpen(false);
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     const handleSignOut = async () => {
+        setIsProfileOpen(false);
         await signOut();
         navigate('/', { replace: true });
     };
@@ -245,21 +259,8 @@ export default function PatientDashboard() {
 
     // Redirect unauthenticated users to login
     if (!patient) {
-        return (
-            <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-                <div className="text-center">
-                    <Shield size={48} className="mx-auto text-slate-300 mb-4" />
-                    <h2 className="text-xl font-bold text-slate-700 mb-2">Access Restricted</h2>
-                    <p className="text-slate-500 mb-6">Please sign in to view your dashboard.</p>
-                    <Link
-                        to="/patient/login"
-                        className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-500 text-white font-semibold text-sm hover:bg-emerald-600 transition"
-                    >
-                        Go to Patient Login
-                    </Link>
-                </div>
-            </div>
-        );
+        navigate('/patient/login', { replace: true });
+        return null;
     }
 
     // Get initials for avatar fallback
@@ -277,33 +278,77 @@ export default function PatientDashboard() {
                     {/* Brand */}
                     <div className="flex items-center gap-2">
                         <Heart size={20} className="text-emerald-500" />
-                        <span className="font-bold text-slate-800 text-sm">Sanjiwani Health</span>
+                        <span className="font-bold text-slate-800 text-sm">Upchaar Health</span>
                     </div>
 
-                    {/* Patient name + sign out */}
-                    <div className="flex items-center gap-3">
-                        {/* Nav avatar */}
-                        <div className="h-8 w-8 rounded-full overflow-hidden bg-gradient-to-br from-emerald-500 to-teal-400 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                            {patient.avatar_url
-                                ? <img src={patient.avatar_url} alt="avatar" className="w-full h-full object-cover" />
-                                : initials
-                            }
-                        </div>
-                        <span className="text-sm font-medium text-slate-700 hidden sm:block">
-                            {patient.full_name || patient.email}
-                        </span>
+                    {/* Right corner: Profile Dropdown */}
+                    <div className="relative" ref={profileRef}>
                         <button
-                                onClick={() => setChangePwOpen(true)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700 text-xs font-medium transition"
-                            >
-                                <KeyRound size={14} /> Password
-                            </button>
-                            <button
-                            onClick={handleSignOut}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-500 hover:bg-red-50 hover:text-red-500 text-xs font-medium transition"
+                            onClick={() => setIsProfileOpen(s => !s)}
+                            className="flex items-center gap-2 rounded-full border border-slate-200 bg-white/50 p-1 pr-3 hover:bg-slate-50 transition focus:outline-none"
                         >
-                            <LogOut size={14} /> Sign Out
+                            {/* Nav avatar */}
+                            <div className="h-8 w-8 rounded-full overflow-hidden bg-gradient-to-br from-emerald-500 to-teal-400 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                                {patient.avatar_url
+                                    ? <img src={patient.avatar_url} alt="avatar" className="w-full h-full object-cover" />
+                                    : initials
+                                }
+                            </div>
+                            <span className="text-xs font-semibold text-slate-700 hidden sm:block">
+                                {patient.full_name?.split(' ')[0] || 'My Account'}
+                            </span>
                         </button>
+
+                        {/* Dropdown Menu */}
+                        <AnimatePresence>
+                            {isProfileOpen && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-xl shadow-slate-200 border border-slate-100 z-50 overflow-hidden"
+                                >
+                                    <div className="px-4 py-3 border-b border-slate-50 bg-slate-50/50">
+                                        <p className="text-xs font-bold text-slate-800 truncate">{patient.full_name || patient.email}</p>
+                                        <p className="text-[10px] text-emerald-600 font-medium mt-0.5 uppercase tracking-wider">Patient Portal</p>
+                                    </div>
+
+                                    <div className="py-1">
+                                        <button
+                                            onClick={() => {
+                                                setIsProfileOpen(false);
+                                                setChangePwOpen(true);
+                                            }}
+                                            className="w-full flex items-center gap-3 px-4 py-2.5 text-xs text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 transition text-left"
+                                        >
+                                            <KeyRound size={14} className="text-slate-400" />
+                                            Change Password
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setIsProfileOpen(false);
+                                                // navigate('/patient/settings'); // Placeholder if you have a settings page
+                                            }}
+                                            className="w-full flex items-center gap-3 px-4 py-2.5 text-xs text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 transition text-left"
+                                        >
+                                            <Settings size={14} className="text-slate-400" />
+                                            Account Settings
+                                        </button>
+                                    </div>
+
+                                    <div className="p-1 border-t border-slate-50">
+                                        <button
+                                            onClick={handleSignOut}
+                                            className="w-full flex items-center gap-3 px-3 py-2 text-xs text-red-500 hover:bg-red-50 transition rounded-lg text-left"
+                                        >
+                                            <LogOut size={14} className="text-red-400" />
+                                            Sign Out
+                                        </button>
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </div>
                 </div>
             </nav>

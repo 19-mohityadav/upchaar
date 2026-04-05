@@ -78,7 +78,7 @@ export default function AdminDashboard() {
                     Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'},{' '}
                     {admin?.name?.split(' ')[0]} 👋
                 </h1>
-                <p className="text-sm text-slate-500 mt-1">Here's what's happening on Sanjiwani Health today.</p>
+                <p className="text-sm text-slate-500 mt-1">Here's what's happening on Upchaar Health today.</p>
             </div>
 
             {/* Stat Cards */}

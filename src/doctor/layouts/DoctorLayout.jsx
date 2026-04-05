@@ -73,7 +73,7 @@ export default function DoctorLayout() {
                                     <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-teal-500 to-teal-400 shadow-lg shadow-teal-500/20 flex items-center justify-center">
                                         <Stethoscope size={20} className="text-white" />
                                     </div>
-                                    <span className="font-bold text-base text-slate-800">Sanjiwani<span className="text-teal-500">.</span>Doctor</span>
+                                    <span className="font-bold text-base text-slate-800">Upchaar<span className="text-teal-500">.</span>Doctor</span>
                                 </div>
                                 <button onClick={() => setMobileOpen(false)}
                                     className="h-8 w-8 rounded-xl flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors">
@@ -141,7 +141,7 @@ export default function DoctorLayout() {
                         {!collapsed && (
                             <motion.span initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.15 }}
                                 className="font-bold text-base text-slate-800 whitespace-nowrap tracking-tight">
-                                Sanjiwani<span className="text-teal-500">.</span> Doctor
+                                Upchaar<span className="text-teal-500">.</span> Doctor
                             </motion.span>
                         )}
                     </AnimatePresence>

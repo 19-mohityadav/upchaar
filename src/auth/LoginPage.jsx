@@ -97,7 +97,7 @@ export default function LoginPage() {
             const from = location.state?.from;
 
             const redirectMap = {
-                patient: '/',
+                patient: '/patient/dashboard',
                 doctor: '/doctor/dashboard',
             };
 
@@ -194,7 +194,7 @@ export default function LoginPage() {
                                 <Heart size={22} className="text-white" />
                             </div>
                             <div>
-                                <p className="text-white/70 text-xs uppercase tracking-widest font-medium">Sanjiwani Health</p>
+                                <p className="text-white/70 text-xs uppercase tracking-widest font-medium">Upchaar Health</p>
                                 <h1 className="text-white font-bold text-xl">
                                     {tab === 'signin' ? 'Welcome Back' : 'Create Account'}
                                 </h1>
@@ -203,7 +203,7 @@ export default function LoginPage() {
                         <p className="text-white/75 text-sm">
                             {tab === 'signin'
                                 ? 'Sign in to access your health dashboard.'
-                                : 'Join Sanjiwani Health — choose your account type.'}
+                                : 'Join Upchaar Health — choose your account type.'}
                         </p>
                     </div>
 
@@ -479,7 +479,7 @@ export default function LoginPage() {
 
                 {/* Back link */}
                 <p className="mt-4 text-center text-xs text-slate-400">
-                    <Link to="/" className="hover:text-slate-600 transition">← Back to Sanjiwani Health</Link>
+                    <Link to="/" className="hover:text-slate-600 transition">← Back to Upchaar Health</Link>
                 </p>
             </motion.div>
 

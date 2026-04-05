@@ -109,11 +109,11 @@ export default function PatientRegister() {
                                 <Heart size={24} className="text-white" />
                             </div>
                             <div>
-                                <p className="text-white/70 text-xs font-medium uppercase tracking-widest">Sanjiwani Health</p>
+                                <p className="text-white/70 text-xs font-medium uppercase tracking-widest">Upchaar Health</p>
                                 <h1 className="text-white font-bold text-xl">Create Patient Account</h1>
                             </div>
                         </motion.div>
-                        <p className="text-white/80 text-sm">Join Sanjiwani Health and take control of your wellness.</p>
+                        <p className="text-white/80 text-sm">Join Upchaar Health and take control of your wellness.</p>
                     </div>
 
                     {/* Form body */}
@@ -256,7 +256,7 @@ export default function PatientRegister() {
 
                 {/* Back link */}
                 <p className="mt-4 text-center text-xs text-slate-400">
-                    <Link to="/" className="hover:text-slate-600 transition">← Back to Sanjiwani Health</Link>
+                    <Link to="/" className="hover:text-slate-600 transition">← Back to Upchaar Health</Link>
                 </p>
             </motion.div>
         </div>

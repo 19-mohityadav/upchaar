@@ -1,7 +1,7 @@
 /**
  * routes/index.jsx
  * ─────────────────────────────────────────────────
- * Master routes file for Sanjiwani Health.
+ * Master routes file for Upchaar Health.
  *
  * React Router v6 requires that only <Route> elements
  * (or React.Fragments containing Routes) appear as

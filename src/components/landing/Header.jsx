@@ -104,20 +104,30 @@ export const Header = () => {
     const searchTransition = { duration: 0.4, ease: 'easeInOut' };
 
     // ── Profile dropdown (desktop) ─────────────────────────
-    const ProfileDropdown = () => (
+    const ProfileDropdown = ({ isMobileView = false }) => (
         <div className="relative" ref={profileRef}>
             <button
                 onClick={() => setIsProfileOpen(s => !s)}
-                className="flex items-center gap-2 rounded-full border border-primary/30 bg-card/60 px-3 py-1.5 hover:bg-primary/10 transition focus:outline-none"
+                className={cn(
+                    "flex items-center rounded-full border border-primary/30 bg-card/60 transition focus:outline-none",
+                    isMobileView ? "p-1" : "gap-2 px-3 py-1.5 hover:bg-primary/10"
+                )}
             >
                 {/* Avatar circle with initials */}
-                <div className="h-7 w-7 rounded-full bg-gradient-to-br from-teal-500 to-emerald-400 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                <div className={cn(
+                    "rounded-full bg-gradient-to-br from-teal-500 to-emerald-400 flex items-center justify-center text-white font-bold flex-shrink-0",
+                    isMobileView ? "h-8 w-8 text-[10px]" : "h-7 w-7 text-xs"
+                )}>
                     {getInitials(activeProfile?.full_name)}
                 </div>
-                <span className="text-sm font-semibold text-foreground max-w-[110px] truncate hidden lg:block">
-                    {activeProfile?.full_name?.split(' ')[0] ?? 'Account'}
-                </span>
-                <ChevronDown size={13} className={`text-primary/70 transition-transform ${isProfileOpen ? 'rotate-180' : ''}`} />
+                {!isMobileView && (
+                    <>
+                        <span className="text-sm font-semibold text-foreground max-w-[110px] truncate hidden sm:block">
+                            {activeProfile?.full_name?.split(' ')[0] ?? 'Account'}
+                        </span>
+                        <ChevronDown size={13} className={`text-primary/70 transition-transform ${isProfileOpen ? 'rotate-180' : ''}`} />
+                    </>
+                )}
             </button>
 
             <AnimatePresence>
@@ -165,17 +175,19 @@ export const Header = () => {
     );
 
     return (
-        <header className="relative z-[90] w-full">
-            <div className="relative z-[90] container mx-auto flex h-20 items-center justify-between rounded-full bg-card/80 backdrop-blur-sm px-6 shadow-md">
+        <header className="relative z-[90] w-full px-4 pt-4">
+            <div className="relative z-[90] container mx-auto flex h-16 sm:h-20 items-center justify-between rounded-full bg-white/90 backdrop-blur-md px-3 sm:px-6 shadow-[0_8px_30px_rgb(0,0,0,0.08)] border border-slate-200/50 transition-all duration-300">
                 {/* Left Section - Logo */}
-                <Link to="#footer" className="flex items-center gap-2">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full border border-primary/50 bg-card">
-                        <img src="/logo.png" alt="Sanjiwani Health Logo" width={24} height={24} />
+                <Link to="/" className="flex items-center gap-2 flex-shrink-0 overflow-hidden">
+                    <div className="flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full border border-teal-200 bg-white shadow-sm ring-4 ring-teal-50/50">
+                        <img src="/logo.png" alt="Upchaar Logo" className="w-6 h-6 sm:w-8 sm:h-8" />
                     </div>
-                    <span className="font-bold text-xl text-primary hidden sm:inline-block text-red-500">
-                        Sanjiwani
-                    </span>
-                    <span className='font-bold text-xl text-primary hidden sm:inline-block'>Health</span>
+                    <div className="flex flex-col sm:flex-row sm:gap-1 tracking-tight">
+                        <span className="font-extrabold text-base sm:text-xl text-teal-600">
+                            Upchaar
+                        </span>
+                        <span className='font-bold text-xs sm:text-xl text-slate-400 sm:text-red-600'>Health</span>
+                    </div>
                 </Link>
 
                 {/* Center/Right Section Logic */}
@@ -239,14 +251,16 @@ export const Header = () => {
                         </AnimatePresence>
                     </div>
 
-                    {/* --- Mobile Icons --- */}
+                    {/* --- Mobile Controls & Direct Links --- */}
                     <div className="flex md:hidden items-center gap-2">
-                        <Button onClick={() => setIsSearchOpen(true)} variant="ghost" size="icon" className="rounded-full text-primary hover:bg-primary/10">
-                            <Search className="h-6 w-6" />
-                        </Button>
-                        <Button onClick={() => setIsMenuOpen(!isMenuOpen)} variant="ghost" size="icon" className="rounded-full text-primary hover:bg-primary/10">
-                            {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-                        </Button>
+                        <Link to="/blogs" className="text-[11px] font-bold text-slate-500 uppercase hover:text-teal-600 transition px-3">Blog</Link>
+                        
+                        <button
+                            onClick={() => setIsMenuOpen(!isMenuOpen)}
+                            className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-50 text-slate-600 hover:bg-slate-100 transition shadow-sm border border-slate-100 active:scale-95"
+                        >
+                            {isMenuOpen ? <X size={20} /> : <Menu size={20} />}
+                        </button>
                     </div>
                 </div>
 

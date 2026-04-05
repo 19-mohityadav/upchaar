@@ -57,12 +57,12 @@ export default function DoctorPendingPage() {
 
                 {/* Brand */}
                 <p className="text-xs font-bold tracking-[0.25em] uppercase text-teal-600 mb-2">
-                    Sanjiwani Health
+                    Upchaar Health
                 </p>
 
                 {/* Heading */}
                 <h1 className="text-2xl font-bold text-slate-800 leading-snug mb-4">
-                    Welcome to Sanjiwani Health!
+                    Welcome to Upchaar Health!
                 </h1>
 
                 {isRejected ? (

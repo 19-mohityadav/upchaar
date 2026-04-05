@@ -271,7 +271,7 @@ export default function DoctorsPage() {
             <section className="bg-white py-20 border-t">
                 <div className="container mx-auto px-4">
                     <div className="text-center max-w-2xl mx-auto mb-16">
-                        <h2 className="text-3xl font-bold font-headline mb-4">Why Patients Trust Sanjiwani</h2>
+                        <h2 className="text-3xl font-bold font-headline mb-4">Why Patients Trust Upchaar</h2>
                         <p className="text-muted-foreground">We prioritize your health and convenience. Our rigorous verification process ensures you only see the best.</p>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-10">

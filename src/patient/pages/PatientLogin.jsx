@@ -12,15 +12,22 @@
  * ─────────────────────────────────────────────────
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { usePatient } from '../context/PatientContext.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Heart, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react';
 
 export default function PatientLogin() {
-    const { signIn } = usePatient();
+    const { patient, loading: sessionLoading, signIn } = usePatient();
     const navigate = useNavigate();
+
+    // ── Redirect already-authenticated patients to dashboard ──
+    useEffect(() => {
+        if (!sessionLoading && patient) {
+            navigate('/patient/dashboard', { replace: true });
+        }
+    }, [patient, sessionLoading, navigate]);
 
     // ── Form state ────────────────────────────────
     const [form, setForm] = useState({ email: '', password: '' });
@@ -48,6 +55,15 @@ export default function PatientLogin() {
             setLoading(false);
         }
     };
+
+    // Show spinner while checking session (avoids flashing the login form)
+    if (sessionLoading) {
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-teal-50 flex items-center justify-center">
+                <Loader2 size={32} className="animate-spin text-emerald-500" />
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-teal-50 flex items-center justify-center p-4">
@@ -81,7 +97,7 @@ export default function PatientLogin() {
                                 <Heart size={24} className="text-white" />
                             </div>
                             <div>
-                                <p className="text-white/70 text-xs font-medium uppercase tracking-widest">Sanjiwani Health</p>
+                                <p className="text-white/70 text-xs font-medium uppercase tracking-widest">Upchaar Health</p>
                                 <h1 className="text-white font-bold text-xl">Patient Portal</h1>
                             </div>
                         </motion.div>
@@ -178,7 +194,7 @@ export default function PatientLogin() {
 
                 {/* Back link */}
                 <p className="mt-4 text-center text-xs text-slate-400">
-                    <Link to="/" className="hover:text-slate-600 transition">← Back to Sanjiwani Health</Link>
+                    <Link to="/" className="hover:text-slate-600 transition">← Back to Upchaar Health</Link>
                 </p>
             </motion.div>
         </div>
