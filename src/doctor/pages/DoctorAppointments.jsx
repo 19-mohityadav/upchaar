@@ -19,6 +19,7 @@ export default function DoctorAppointments() {
     const [search, setSearch] = useState('');
     const [appointments, setAppointments] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [updatingId, setUpdatingId] = useState(null);
 
     useEffect(() => {
         if (!doctorRecord?.id) {
@@ -50,6 +51,26 @@ export default function DoctorAppointments() {
         fetchAppointments();
     }, [doctorRecord?.id]);
 
+    const updateAppointmentStatus = async (appointmentId, nextStatus) => {
+        setUpdatingId(appointmentId);
+        try {
+            const { error } = await supabase
+                .from('appointments')
+                .update({ status: nextStatus })
+                .eq('id', appointmentId);
+
+            if (error) throw error;
+
+            setAppointments(prev => prev.map(apt => (
+                apt.id === appointmentId ? { ...apt, status: nextStatus } : apt
+            )));
+        } catch (error) {
+            console.error(`Failed to update appointment status to ${nextStatus}:`, error.message);
+        } finally {
+            setUpdatingId(null);
+        }
+    };
+
     const filtered = useMemo(() => appointments.filter(a => {
         const patientName = a.patient_name || a.patientName || a.patient || '';
         const matchFilter = filter === 'All' || a.status === filter;
@@ -78,13 +99,23 @@ export default function DoctorAppointments() {
             <div className="flex flex-wrap gap-3">
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                    <input placeholder="Search patient…" value={search} onChange={e => setSearch(e.target.value)}
-                        className="pl-9 pr-4 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/25 w-56" />
+                    <input
+                        placeholder="Search patient..."
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        className="pl-9 pr-4 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/25 w-56"
+                    />
                 </div>
                 <div className="flex gap-2">
-                    {['All', 'Confirmed', 'Scheduled', 'Completed', 'Cancelled'].map(f => (
-                        <button key={f} onClick={() => setFilter(f)}
-                            className={cn('px-4 py-2 rounded-xl text-sm font-medium border transition', filter === f ? 'bg-primary text-white border-primary' : 'bg-white text-slate-500 border-slate-200 hover:border-primary/30')}>
+                    {['All', 'Pending', 'Confirmed', 'Scheduled', 'Completed', 'Cancelled'].map(f => (
+                        <button
+                            key={f}
+                            onClick={() => setFilter(f)}
+                            className={cn(
+                                'px-4 py-2 rounded-xl text-sm font-medium border transition',
+                                filter === f ? 'bg-primary text-white border-primary' : 'bg-white text-slate-500 border-slate-200 hover:border-primary/30'
+                            )}
+                        >
                             {f}
                         </button>
                     ))}
@@ -117,8 +148,13 @@ export default function DoctorAppointments() {
                                 </td>
                             </tr>
                         ) : filtered.map((apt, i) => (
-                            <motion.tr key={apt.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.04 }}
-                                className="hover:bg-slate-50/70 transition-colors">
+                            <motion.tr
+                                key={apt.id}
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                transition={{ delay: i * 0.04 }}
+                                className="hover:bg-slate-50/70 transition-colors"
+                            >
                                 <td className="px-4 py-3">
                                     <div>
                                         <p className="font-medium text-slate-800">{apt.patient_name || apt.patientName || apt.patient || 'Patient'}</p>
@@ -135,9 +171,25 @@ export default function DoctorAppointments() {
                                     <span className={cn('px-2.5 py-1 rounded-full text-xs font-semibold border', STATUS_STYLE[apt.status] || STATUS_STYLE.Scheduled)}>{apt.status}</span>
                                 </td>
                                 <td className="px-4 py-3">
-                                    <div className="flex gap-1.5 opacity-60">
-                                        <button type="button" className="h-8 w-8 flex items-center justify-center rounded-lg bg-emerald-50 text-emerald-600"><CheckCircle size={14} /></button>
-                                        <button type="button" className="h-8 w-8 flex items-center justify-center rounded-lg bg-red-50 text-red-500"><XCircle size={14} /></button>
+                                    <div className="flex gap-1.5">
+                                        <button
+                                            type="button"
+                                            disabled={updatingId === apt.id || apt.status === 'Confirmed' || apt.status === 'Completed'}
+                                            onClick={() => updateAppointmentStatus(apt.id, 'Confirmed')}
+                                            className="h-8 w-8 flex items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                            title="Confirm appointment"
+                                        >
+                                            {updatingId === apt.id ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={updatingId === apt.id || apt.status === 'Cancelled' || apt.status === 'Completed'}
+                                            onClick={() => updateAppointmentStatus(apt.id, 'Cancelled')}
+                                            className="h-8 w-8 flex items-center justify-center rounded-lg bg-red-50 text-red-500 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                            title="Cancel appointment"
+                                        >
+                                            {updatingId === apt.id ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />}
+                                        </button>
                                     </div>
                                 </td>
                             </motion.tr>

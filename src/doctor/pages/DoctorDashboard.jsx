@@ -1,16 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useDoctor } from '../context/DoctorContext.jsx';
 import { supabase } from '@/lib/supabase.js';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
-    Calendar, Users, TrendingUp, Clock, FileText, CheckCircle,
-    MoreVertical, Video, MapPin, ChevronRight, Star, AlertCircle
+    Users, TrendingUp, Clock, FileText,
+    Video, MapPin, ChevronRight, Star, AlertCircle
 } from 'lucide-react';
 import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts';
 import { cn } from '@/lib/utils';
 import Patient360Drawer from '../components/Patient360Drawer.jsx';
-
-
 
 const REVENUE_DATA = [
     { name: 'Mon', total: 4000 }, { name: 'Tue', total: 3000 },
@@ -26,9 +24,9 @@ const REVIEWS = [
 ];
 
 const STATUS_CONFIG = {
-    'In-Progress': { color: 'text-indigo-600', bg: 'bg-indigo-50', border: 'border-indigo-200', dot: 'bg-indigo-500 animate-pulse' },
-    'Checked-in': { color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', dot: 'bg-emerald-500' },
-    'Upcoming': { color: 'text-slate-600', bg: 'bg-slate-50', border: 'border-slate-200', dot: 'bg-slate-400' },
+    'In-Progress': { color: 'text-indigo-600', bg: 'bg-indigo-50', dot: 'bg-indigo-500 animate-pulse' },
+    'Checked-in': { color: 'text-emerald-700', bg: 'bg-emerald-50', dot: 'bg-emerald-500' },
+    Upcoming: { color: 'text-slate-600', bg: 'bg-slate-50', dot: 'bg-slate-400' },
 };
 
 export default function DoctorDashboard() {
@@ -46,33 +44,40 @@ export default function DoctorDashboard() {
 
         const fetchApts = async () => {
             try {
-                const { data } = await supabase
+                const { data, error } = await supabase
                     .from('appointments')
                     .select('*')
                     .eq('doctor_id', doctorRecord.id)
                     .order('date', { ascending: true })
                     .order('time_slot', { ascending: true });
+
+                if (error) throw error;
                 setAppointments(data || []);
             } catch (err) {
-                console.error('Failed to load doctor appointments');
+                console.error('Failed to load doctor appointments:', err.message);
+                setAppointments([]);
             } finally {
                 setLoading(false);
             }
         };
+
         fetchApts();
     }, [doctorRecord?.id]);
 
-    // Stats calculations
-    const completedCount = appointments.filter(a => a.status === 'Completed').length;
-    const totalToday = appointments.length;
+    const today = new Date().toISOString().slice(0, 10);
+    const todayAppointments = appointments.filter(a => String(a.date || '').slice(0, 10) === today);
+    const completedCount = todayAppointments.filter(a => a.status === 'Completed').length;
+    const totalToday = todayAppointments.length;
     const progressPercent = totalToday === 0 ? 0 : Math.round((completedCount / totalToday) * 100);
 
     return (
         <div className="space-y-6 max-w-7xl mx-auto pb-8">
-            {/* Pending approval banner */}
             {doctorRecord?.status === 'Pending' && (
-                <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
-                    className="flex items-center gap-3 p-4 rounded-3xl bg-amber-50 border border-amber-200 shadow-sm">
+                <motion.div
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex items-center gap-3 p-4 rounded-3xl bg-amber-50 border border-amber-200 shadow-sm"
+                >
                     <AlertCircle size={20} className="text-amber-500 flex-shrink-0" />
                     <div>
                         <p className="font-bold text-amber-800 text-sm tracking-tight">Account pending approval</p>
@@ -81,9 +86,7 @@ export default function DoctorDashboard() {
                 </motion.div>
             )}
 
-            {/* Top Row: Quick Stats & Progress */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Schedule Progress */}
                 <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02)] flex flex-col justify-between">
                     <div>
                         <div className="flex items-center gap-2 mb-1">
@@ -108,7 +111,6 @@ export default function DoctorDashboard() {
                     </div>
                 </div>
 
-                {/* Earnings Tracker */}
                 <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02)] flex flex-col justify-between">
                     <div className="flex items-start justify-between">
                         <div>
@@ -117,7 +119,7 @@ export default function DoctorDashboard() {
                                 <h3 className="font-bold text-slate-800 text-sm tracking-tight">Earnings Tracker</h3>
                             </div>
                             <p className="text-2xl font-black text-slate-800 tracking-tight mt-2">
-                                ₹{(doctor.totalRevenue || 45200).toLocaleString()}
+                                Rs. {(doctorRecord?.total_revenue || doctor?.totalRevenue || 45200).toLocaleString()}
                             </p>
                             <p className="text-xs text-emerald-500 font-bold mt-1 bg-emerald-50 inline-block px-2 py-0.5 rounded-md">+14% vs last week</p>
                         </div>
@@ -138,7 +140,6 @@ export default function DoctorDashboard() {
                     </div>
                 </div>
 
-                {/* Patient Feedback */}
                 <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-3xl p-6 border border-indigo-100/50 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02)] flex flex-col relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-32 h-32 bg-white/40 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2" />
 
@@ -168,15 +169,12 @@ export default function DoctorDashboard() {
                 </div>
             </div>
 
-            {/* Main Content Area */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-                {/* Left: Interactive Timeline (Takes 2 columns) */}
                 <div className="lg:col-span-2 bg-white rounded-3xl border border-slate-100 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02)] overflow-hidden flex flex-col">
                     <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-white/50 backdrop-blur-md sticky top-0 z-10">
                         <div>
                             <h2 className="font-bold text-slate-800 tracking-tight">Appointment Timeline</h2>
-                            <p className="text-xs text-slate-500 font-medium mt-0.5">Drag to reschedule or click for details</p>
+                            <p className="text-xs text-slate-500 font-medium mt-0.5">Click any appointment to open patient details</p>
                         </div>
                         <button className="text-xs font-bold text-teal-600 bg-teal-50 px-3 py-1.5 rounded-lg hover:bg-teal-100 transition-colors">
                             Block Time
@@ -190,7 +188,9 @@ export default function DoctorDashboard() {
                             ) : appointments.length === 0 ? (
                                 <p className="text-sm text-slate-500 py-10 text-center">No appointments found.</p>
                             ) : appointments.map((apt, i) => {
-                                const cfg = STATUS_CONFIG[apt.status] || STATUS_CONFIG['Upcoming'];
+                                const cfg = STATUS_CONFIG[apt.status] || STATUS_CONFIG.Upcoming;
+                                const consultationType = apt.type || apt.consultation_type || 'Online';
+                                const patientName = apt.patient_name || apt.patientName || apt.patient || 'Patient';
                                 return (
                                     <motion.div
                                         key={apt.id}
@@ -199,18 +199,15 @@ export default function DoctorDashboard() {
                                         transition={{ delay: i * 0.1 }}
                                         className="relative pl-6 sm:pl-8 group"
                                     >
-                                        {/* Timeline Dot */}
                                         <div className="absolute left-[-5px] top-6 w-2.5 h-2.5 rounded-full ring-4 ring-white bg-slate-300">
-                                            <div className={cn("absolute inset-0 rounded-full", cfg.dot)} />
+                                            <div className={cn('absolute inset-0 rounded-full', cfg.dot)} />
                                         </div>
 
-                                        {/* Time Label */}
                                         <div className="absolute left-[-60px] top-5 w-12 text-right hidden sm:block">
                                             <span className="text-xs font-bold text-slate-500">{apt.time_slot ? apt.time_slot.split(' ')[0] : '10:00'}</span>
                                             <span className="text-[10px] font-semibold text-slate-400 block">{apt.time_slot ? apt.time_slot.split(' ')[1] : 'AM'}</span>
                                         </div>
 
-                                        {/* Appointment Card */}
                                         <button
                                             onClick={() => setSelectedApt(apt)}
                                             className="w-full text-left bg-white border border-slate-100 rounded-2xl p-4 shadow-sm hover:shadow-md hover:border-slate-200 transition-all group-hover:-translate-y-0.5"
@@ -221,12 +218,16 @@ export default function DoctorDashboard() {
                                                         {apt.status === 'Scheduled' ? 'Upcoming' : apt.status}
                                                     </span>
                                                     <span className="flex items-center gap-1 text-[11px] font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded-lg">
-                                                        {apt.type || apt.consultation_type === 'Online' ? <Video size={10} className="text-blue-500" /> : <MapPin size={10} className="text-emerald-500" />}
-                                                        {apt.type || apt.consultation_type || 'Online'}
+                                                        {consultationType === 'Online' || consultationType === 'Virtual'
+                                                            ? <Video size={10} className="text-blue-500" />
+                                                            : <MapPin size={10} className="text-emerald-500" />}
+                                                        {consultationType}
                                                     </span>
-                                                    <span className="text-[11px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-lg hidden sm:inline-flex">
-                                                        <Clock size={10} /> {apt.duration}
-                                                    </span>
+                                                    {apt.duration && (
+                                                        <span className="text-[11px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-lg hidden sm:inline-flex">
+                                                            <Clock size={10} /> {apt.duration}
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 <div className="sm:hidden text-xs font-bold text-slate-500">
                                                     {apt.time_slot || apt.time || '10:00 AM'}
@@ -235,7 +236,7 @@ export default function DoctorDashboard() {
 
                                             <div className="flex items-center justify-between">
                                                 <div>
-                                                    <h4 className="font-bold text-slate-800 text-base tracking-tight">{apt.patientName || apt.patient_name || apt.patient}</h4>
+                                                    <h4 className="font-bold text-slate-800 text-base tracking-tight">{patientName}</h4>
                                                     <p className="text-xs font-medium text-slate-500 mt-1">{apt.issue || 'Consultation'}</p>
                                                 </div>
                                                 <div className="h-8 w-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-teal-50 group-hover:text-teal-600 transition-colors shrink-0">
@@ -250,9 +251,7 @@ export default function DoctorDashboard() {
                     </div>
                 </div>
 
-                {/* Right: Quick Actions & Prescription Tool */}
                 <div className="space-y-6">
-                    {/* Digital Prescription Tool Launch */}
                     <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-3xl p-6 text-white shadow-xl shadow-slate-900/10 relative overflow-hidden group hover:shadow-2xl hover:shadow-teal-900/20 transition-all cursor-pointer">
                         <div className="absolute -top-10 -right-10 w-32 h-32 bg-teal-500/20 rounded-full blur-2xl group-hover:bg-teal-500/30 transition-colors" />
                         <FileText size={24} className="text-teal-400 mb-4" />
@@ -263,7 +262,6 @@ export default function DoctorDashboard() {
                         </button>
                     </div>
 
-                    {/* Patient Queue Summary */}
                     <div className="bg-white rounded-3xl border border-slate-100 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.02)] p-6">
                         <h3 className="font-bold text-slate-800 tracking-tight flex items-center gap-2 mb-4">
                             <Users size={16} className="text-slate-400" /> Walk-in Queue
@@ -288,7 +286,6 @@ export default function DoctorDashboard() {
                 </div>
             </div>
 
-            {/* Patient 360 Drawer */}
             <Patient360Drawer
                 isOpen={!!selectedApt}
                 onClose={() => setSelectedApt(null)}
