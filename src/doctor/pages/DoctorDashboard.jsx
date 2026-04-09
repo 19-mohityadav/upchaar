@@ -69,7 +69,7 @@ export default function DoctorDashboard() {
     }, [doctorRecord?.id]);
 
     const clinics = useMemo(() => parseClinics(doctorRecord?.clinic_name || doctor?.clinicName), [doctorRecord?.clinic_name, doctor?.clinicName]);
-    const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+    const today = new Date().toISOString().slice(0, 10);
     const todayAppointments = useMemo(() => appointments.filter(item => String(item.date || '').slice(0, 10) === today), [appointments, today]);
 
     const statCards = useMemo(() => [

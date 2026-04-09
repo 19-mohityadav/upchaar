@@ -30,7 +30,7 @@ export default function AppLayout({ children }) {
 
     const initials = useMemo(() =>
         user?.user_metadata?.full_name
-            ?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'PA'
+            ?.trim().split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'PA'
     , [user?.user_metadata?.full_name]);
 
     const location = useLocation();

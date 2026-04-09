@@ -100,9 +100,7 @@ export default function ClinicDashboard() {
   }, []);
 
   const displayName = useMemo(() => profile?.full_name || 'Clinic Admin', [profile?.full_name]);
-  const today = useMemo(() =>
-    new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).toUpperCase()
-  , []);
+  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).toUpperCase();
 
   const STAT_CARDS = useMemo(() => [
     { color: 'teal', icon: 'apartment', label: 'Clinic Branches', value: stats.branches },

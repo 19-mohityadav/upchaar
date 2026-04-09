@@ -83,9 +83,7 @@ export default function MedicalDashboard() {
   }, []);
 
   const displayName = useMemo(() => profile?.full_name || 'Medical Center', [profile?.full_name]);
-  const today = useMemo(() =>
-    new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).toUpperCase()
-  , []);
+  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).toUpperCase();
 
   const STAT_CARDS = useMemo(() => [
     { color: 'teal', icon: 'groups', label: 'Total Doctors', value: stats.totalDoctors },

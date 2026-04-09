@@ -26,6 +26,16 @@ export default function DoctorLayout() {
     const [mobileOpen, setMobileOpen] = useState(false);
     const [changePwOpen, setChangePwOpen] = useState(false);
 
+    const initials = useMemo(() =>
+        doctor?.fullName?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'DR'
+    , [doctor?.fullName]);
+
+    const handleLogout = useCallback(() => { logout(); }, [logout]);
+
+    const dateString = useMemo(() =>
+        new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+    , []);
+
     if (loading) {
         return (
             <div className="flex h-screen items-center justify-center bg-slate-50">
@@ -41,15 +51,7 @@ export default function DoctorLayout() {
         return <DoctorPendingPage />;
     }
 
-    const initials = useMemo(() =>
-        doctor.fullName?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'DR'
-    , [doctor.fullName]);
 
-    const handleLogout = useCallback(() => { logout(); }, [logout]);
-
-    const dateString = useMemo(() =>
-        new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
-    , []);
 
     return (
         <>

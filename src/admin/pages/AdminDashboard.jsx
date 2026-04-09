@@ -71,12 +71,10 @@ export default function AdminDashboard() {
         return Object.entries(counts).map(([name, value]) => ({ name, value, color: STATUS_PIE_COLORS[name] }));
     }, [recentAppointments]);
 
-    // Memoize greeting to avoid recomputing on every render
-    const greeting = useMemo(() => {
-        const h = new Date().getHours();
-        const timeOfDay = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
-        return `Good ${timeOfDay}, ${admin?.name?.split(' ')[0]} 👋`;
-    }, [admin?.name]);
+    // Compute greeting directly so it always reflects current time, since useMemo could make it stale
+    const h = new Date().getHours();
+    const timeOfDay = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
+    const greeting = `Good ${timeOfDay}, ${admin?.name?.split(' ')[0]} 👋`;
 
     return (
         <div className="space-y-6">
