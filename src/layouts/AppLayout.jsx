@@ -1,13 +1,21 @@
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
     LayoutDashboard, Stethoscope, FlaskConical, Hospital,
-    FileText, LogOut, X, Menu, ChevronLeft, ChevronRight, HeartPulse,
+    FileText, LogOut, X, Menu, ChevronLeft, ChevronRight, HeartPulse, User
 } from 'lucide-react';
 import { useState, useMemo, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/auth/AuthContext.jsx';
 import { Search, Bell } from 'lucide-react';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import EditProfileModal from "@/components/EditProfileModal.jsx";
 
 const NAV = [
     { to: '/dashboard',   icon: LayoutDashboard, label: 'Dashboard' },
@@ -18,10 +26,11 @@ const NAV = [
 ];
 
 export default function AppLayout({ children }) {
-    const { signOut, user } = useAuth();
+    const { signOut, user, profile } = useAuth();
     const navigate = useNavigate();
     const [collapsed, setCollapsed] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
+    const [editProfileOpen, setEditProfileOpen] = useState(false);
 
     const handleSignOut = useCallback(async () => {
         await signOut();
@@ -100,18 +109,6 @@ export default function AppLayout({ children }) {
                 })}
             </nav>
 
-            {/* Bottom */}
-            <div className="p-3 border-t border-slate-100">
-                <button onClick={handleSignOut}
-                    className="flex items-center gap-3 px-3 py-2 rounded-lg text-xs text-red-400 hover:bg-red-50 hover:text-red-500 w-full transition">
-                    <LogOut size={14} className="flex-shrink-0" />
-                    <AnimatePresence>
-                        {(!collapsed || onClose) && (
-                            <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>Sign Out</motion.span>
-                        )}
-                    </AnimatePresence>
-                </button>
-            </div>
         </div>
     );
 
@@ -175,16 +172,37 @@ export default function AppLayout({ children }) {
                         <Bell size={18} />
                     </button>
 
-                    {/* Avatar */}
-                    <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-teal-400 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                        {initials}
-                    </div>
+                    {/* Avatar Dropdown */}
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <button className="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-teal-400 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 outline-none hover:opacity-90 transition">
+                                {initials}
+                            </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuItem onClick={() => setEditProfileOpen(true)} className="cursor-pointer">
+                                <User className="mr-2 h-4 w-4" />
+                                <span>Edit Profile</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer text-red-500 focus:text-red-500 focus:bg-red-50">
+                                <LogOut className="mr-2 h-4 w-4" />
+                                <span>Sign Out</span>
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </header>
 
                 <main className="flex-1 overflow-y-auto p-4 sm:p-6">
                     {children}
                 </main>
             </div>
+
+            <EditProfileModal 
+                isOpen={editProfileOpen} 
+                onClose={() => setEditProfileOpen(false)} 
+                profile={profile} 
+            />
         </div>
     );
 }
