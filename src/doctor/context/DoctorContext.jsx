@@ -10,7 +10,7 @@ const DEFAULT_HOURS_TO = '20:00';
 const formatUser = (user) => {
     if (!user) return null;
     const meta = user.user_metadata || {};
-    return { id: user.id, email: user.email, phone: user.phone || meta.phone, ...meta };
+    return { id: user.id, email: user.email, phone: user.phone || meta.phone, whatsappNumber: meta.whatsappNumber, ...meta };
 };
 
 const mapDoctorRecord = (record) => {
@@ -21,6 +21,7 @@ const mapDoctorRecord = (record) => {
         fullName: record.full_name || '',
         email: record.email || '',
         phone: record.phone || '',
+        whatsappNumber: record.whatsapp_number || '',
         city: record.city || '',
         specialization: record.specialization || 'General Physician',
         clinicName: record.clinic_name || '',
@@ -176,6 +177,7 @@ export function DoctorProvider({ children }) {
         fullName,
         email,
         phone,
+        whatsappNumber,
         password,
         specialization,
         city,
@@ -202,8 +204,9 @@ export function DoctorProvider({ children }) {
             password,
             options: {
                 data: {
-                    fullName: fullName.trim(),
+                    full_name: fullName.trim(),
                     phone: phone.trim(),
+                    whatsapp_number: (whatsappNumber || '').trim(),
                     specialization: specialization || 'General Physician',
                     city: city || '',
                     medicalLicense: medicalLicense || '',
@@ -245,6 +248,7 @@ export function DoctorProvider({ children }) {
                 email: email.trim(),
                 full_name: fullName.trim(),
                 phone: phone.trim(),
+                whatsapp_number: (whatsappNumber || '').trim(),
                 profile_type: 'doctor',
                 status: 'pending',
             });
@@ -260,6 +264,7 @@ export function DoctorProvider({ children }) {
                 full_name: fullName.trim(),
                 email: email.trim(),
                 phone: phone.trim(),
+                whatsapp_number: (whatsappNumber || '').trim(),
                 medical_license: medicalLicense.trim(),
                 nmc_registration: nmcRegistration.trim(),
                 dob: dob,

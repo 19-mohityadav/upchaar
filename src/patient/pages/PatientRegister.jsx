@@ -14,13 +14,17 @@
  * ─────────────────────────────────────────────────
  */
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { usePatient } from '../context/PatientContext.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Heart, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle, User, Phone } from 'lucide-react';
+import { Heart, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle, User, Phone, ShieldCheck, CheckCircle2, RefreshCw } from 'lucide-react';
 import { isStrongPassword, PASSWORD_RULE_MESSAGE } from '@/lib/auth.js';
 import { supabase } from '@/lib/supabase.js';
+import { sendOtp, verifyOtp } from '@/lib/otpService.js';
+
+const OTP_LENGTH = 6;
+const RESEND_COOLDOWN = 30;
 
 export default function PatientRegister() {
     const { signUp } = usePatient();
@@ -31,6 +35,7 @@ export default function PatientRegister() {
         fullName: '',
         email: '',
         phone: '',
+        whatsappNumber: '',
         password: '',
         confirmPassword: '',
     });
@@ -39,50 +44,92 @@ export default function PatientRegister() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
+    // ── OTP step: 'form' | 'otp' ──────────────────
+    const [step, setStep]             = useState('form');
+    const [otp, setOtp]               = useState(['','','','','','']);
+    const [otpPhone, setOtpPhone]     = useState('');
+    const [otpError, setOtpError]     = useState('');
+    const [otpLoading, setOtpLoading] = useState(false);
+    const [resendCooldown, setResendCooldown] = useState(0);
+    const otpRefs = useRef([]);
+
+    useEffect(() => {
+        if (resendCooldown <= 0) return;
+        const id = setTimeout(() => setResendCooldown(s => s - 1), 1000);
+        return () => clearTimeout(id);
+    }, [resendCooldown]);
+
     const handleChange = e => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
 
-    /**
-     * handleSubmit
-     * Validates passwords match, then calls signUp from PatientContext.
-     * Redirects to dashboard on success.
-     */
+    const handleOtpChange = (idx, val) => {
+        if (!/^\d?$/.test(val)) return;
+        const next = [...otp]; next[idx] = val; setOtp(next);
+        if (val && idx < OTP_LENGTH - 1) otpRefs.current[idx + 1]?.focus();
+    };
+    const handleOtpKeyDown = (idx, e) => {
+        if (e.key === 'Backspace' && !otp[idx] && idx > 0) otpRefs.current[idx - 1]?.focus();
+    };
+    const handleOtpPaste = e => {
+        const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, OTP_LENGTH);
+        if (pasted.length === OTP_LENGTH) { setOtp(pasted.split('')); otpRefs.current[OTP_LENGTH - 1]?.focus(); }
+        e.preventDefault();
+    };
+
+    // Step 1: Validate form & send OTP
     const handleSubmit = async e => {
         e.preventDefault();
         setError('');
-
-        // Client-side validation: passwords must match
-        if (form.password !== form.confirmPassword) {
-            setError('Passwords do not match. Please try again.');
-            return;
-        }
-        if (form.password.length < 6) {
-            setError('Password must be at least 6 characters.');
-            return;
-        }
-        if (!isStrongPassword(form.password)) {
-            setError(PASSWORD_RULE_MESSAGE);
-            return;
-        }
+        if (form.password !== form.confirmPassword) { setError('Passwords do not match.'); return; }
+        if (form.password.length < 6)               { setError('Password must be at least 6 characters.'); return; }
+        if (!isStrongPassword(form.password))        { setError(PASSWORD_RULE_MESSAGE); return; }
+        if (!form.phone.trim())                      { setError('Phone number is required.'); return; }
 
         setLoading(true);
         try {
-            // Check uniqueness of phone (only if provided)
-            if (form.phone.trim()) {
-                const { data: phoneCheck } = await supabase.from('profiles').select('id').eq('phone', form.phone.trim()).maybeSingle();
-                if (phoneCheck) throw new Error('This phone number is already registered.');
+            // Uniqueness checks via RPC (bypasses RLS for anon users)
+            const { data: phoneTaken } = await supabase.rpc('is_phone_taken', { p_phone: form.phone.trim() });
+            if (phoneTaken) throw new Error('This phone number is already registered.');
+            if (form.whatsappNumber.trim()) {
+                const { data: waTaken } = await supabase.rpc('is_whatsapp_taken', { p_wa: form.whatsappNumber.trim() });
+                if (waTaken) throw new Error('This WhatsApp number is already registered.');
             }
-
-            await signUp({
-                fullName: form.fullName,
-                email: form.email,
-                phone: form.phone,
-                password: form.password,
-            });
-            navigate('/patient/dashboard', { replace: true });
+            const e164 = await sendOtp(form.phone);
+            setOtpPhone(e164);
+            setOtp(['','','','','','']);
+            setOtpError('');
+            setResendCooldown(RESEND_COOLDOWN);
+            setStep('otp');
         } catch (err) {
             setError(err.message);
         } finally {
             setLoading(false);
+        }
+    };
+
+    // Resend OTP
+    const handleResend = async () => {
+        if (resendCooldown > 0) return;
+        setOtpError(''); setOtpLoading(true);
+        try { await sendOtp(form.phone); setOtp(['','','','','','']); setResendCooldown(RESEND_COOLDOWN); }
+        catch (err) { setOtpError(err.message); }
+        finally { setOtpLoading(false); }
+    };
+
+    // Step 2: Verify OTP & create account
+    const handleVerifyOtp = async e => {
+        e.preventDefault();
+        const token = otp.join('');
+        if (token.length < OTP_LENGTH) { setOtpError('Please enter the complete 6-digit code.'); return; }
+        setOtpLoading(true); setOtpError('');
+        try {
+            await verifyOtp(otpPhone, token);
+            await supabase.auth.signOut(); // clear temp OTP session
+            await signUp({ fullName: form.fullName, email: form.email, phone: form.phone, whatsappNumber: form.whatsappNumber, password: form.password });
+            navigate('/patient/dashboard', { replace: true });
+        } catch (err) {
+            setOtpError(err.message);
+        } finally {
+            setOtpLoading(false);
         }
     };
 
@@ -117,10 +164,16 @@ export default function PatientRegister() {
                             </div>
                             <div>
                                 <p className="text-white/70 text-xs font-medium uppercase tracking-widest">Upchaar Health</p>
-                                <h1 className="text-white font-bold text-xl">Create Patient Account</h1>
+                                <h1 className="text-white font-bold text-xl">
+                                    {step === 'otp' ? 'Verify Mobile Number' : 'Create Patient Account'}
+                                </h1>
                             </div>
                         </motion.div>
-                        <p className="text-white/80 text-sm">Join Upchaar Health and take control of your wellness.</p>
+                        <p className="text-white/80 text-sm">
+                            {step === 'otp'
+                                ? `6-digit code sent to ${form.phone}`
+                                : 'Join Upchaar Health and take control of your wellness.'}
+                        </p>
                     </div>
 
                     {/* Form body */}
@@ -141,6 +194,7 @@ export default function PatientRegister() {
                             )}
                         </AnimatePresence>
 
+                        {step === 'form' && (
                         <form onSubmit={handleSubmit} className="space-y-4">
 
                             {/* Full Name */}
@@ -149,11 +203,8 @@ export default function PatientRegister() {
                                 <div className="relative">
                                     <User size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                                     <input
-                                        name="fullName"
-                                        type="text"
-                                        required
-                                        value={form.fullName}
-                                        onChange={handleChange}
+                                        name="fullName" type="text" required
+                                        value={form.fullName} onChange={handleChange}
                                         placeholder="Dr. / Mr. / Ms. Your Name"
                                         className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/30 focus:border-emerald-400 transition placeholder:text-slate-400"
                                     />
@@ -166,32 +217,39 @@ export default function PatientRegister() {
                                 <div className="relative">
                                     <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                                     <input
-                                        name="email"
-                                        type="email"
-                                        required
-                                        value={form.email}
-                                        onChange={handleChange}
+                                        name="email" type="email" required
+                                        value={form.email} onChange={handleChange}
                                         placeholder="you@example.com"
                                         className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/30 focus:border-emerald-400 transition placeholder:text-slate-400"
                                     />
                                 </div>
                             </div>
 
-                            {/* Phone */}
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-600 mb-2">
-                                    Phone Number <span className="text-slate-400 font-normal">(optional)</span>
-                                </label>
-                                <div className="relative">
-                                    <Phone size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                                    <input
-                                        name="phone"
-                                        type="tel"
-                                        value={form.phone}
-                                        onChange={handleChange}
-                                        placeholder="+91 98765 43210"
-                                        className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/30 focus:border-emerald-400 transition placeholder:text-slate-400"
-                                    />
+                            {/* Phone & WhatsApp */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-600 mb-2">
+                                        Phone <span className="text-red-500">*</span> <span className="text-slate-400 font-normal text-[10px]">(OTP sent here)</span>
+                                    </label>
+                                    <div className="relative">
+                                        <Phone size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                        <input name="phone" type="tel" required value={form.phone} onChange={handleChange}
+                                            placeholder="98765 43210"
+                                            className="w-full pl-9 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/30 focus:border-emerald-400 transition placeholder:text-slate-400"
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-600 mb-2">
+                                        WhatsApp <span className="text-slate-400 font-normal">(optional)</span>
+                                    </label>
+                                    <div className="relative">
+                                        <Phone size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                        <input name="whatsappNumber" type="tel" value={form.whatsappNumber} onChange={handleChange}
+                                            placeholder="Optional"
+                                            className="w-full pl-9 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/30 focus:border-emerald-400 transition placeholder:text-slate-400"
+                                        />
+                                    </div>
                                 </div>
                             </div>
 
@@ -200,14 +258,8 @@ export default function PatientRegister() {
                                 <label className="block text-xs font-semibold text-slate-600 mb-2">Password</label>
                                 <div className="relative">
                                     <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                                    <input
-                                        name="password"
-                                        type={showPass ? 'text' : 'password'}
-                                        required
-                                        minLength={6}
-                                        value={form.password}
-                                        onChange={handleChange}
-                                        placeholder="Minimum 6 characters"
+                                    <input name="password" type={showPass ? 'text' : 'password'} required minLength={6}
+                                        value={form.password} onChange={handleChange} placeholder="Minimum 6 characters"
                                         className="w-full pl-10 pr-11 py-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/30 focus:border-emerald-400 transition placeholder:text-slate-400"
                                     />
                                     <button type="button" onClick={() => setShowPass(s => !s)}
@@ -222,13 +274,8 @@ export default function PatientRegister() {
                                 <label className="block text-xs font-semibold text-slate-600 mb-2">Confirm Password</label>
                                 <div className="relative">
                                     <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                                    <input
-                                        name="confirmPassword"
-                                        type={showConfirm ? 'text' : 'password'}
-                                        required
-                                        value={form.confirmPassword}
-                                        onChange={handleChange}
-                                        placeholder="Re-enter your password"
+                                    <input name="confirmPassword" type={showConfirm ? 'text' : 'password'} required
+                                        value={form.confirmPassword} onChange={handleChange} placeholder="Re-enter your password"
                                         className="w-full pl-10 pr-11 py-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/30 focus:border-emerald-400 transition placeholder:text-slate-400"
                                     />
                                     <button type="button" onClick={() => setShowConfirm(s => !s)}
@@ -239,17 +286,72 @@ export default function PatientRegister() {
                             </div>
 
                             {/* Submit */}
-                            <button
-                                type="submit"
-                                disabled={loading}
-                                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 text-white font-semibold text-sm hover:shadow-lg hover:shadow-emerald-400/25 hover:opacity-90 transition-all disabled:opacity-60 flex items-center justify-center gap-2 mt-2"
-                            >
+                            <button type="submit" disabled={loading}
+                                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 text-white font-semibold text-sm hover:shadow-lg hover:shadow-emerald-400/25 hover:opacity-90 transition-all disabled:opacity-60 flex items-center justify-center gap-2 mt-2">
                                 {loading
-                                    ? <><Loader2 size={16} className="animate-spin" /> Creating account…</>
-                                    : 'Create Account'
-                                }
+                                    ? <><Loader2 size={16} className="animate-spin" />Sending OTP…</>
+                                    : <><ShieldCheck size={16} />Send OTP & Continue</>}
                             </button>
                         </form>
+                        )}
+
+                        {/* ── OTP Step ── */}
+                        {step === 'otp' && (
+                        <form onSubmit={handleVerifyOtp} className="space-y-6">
+                            <div className="flex flex-col items-center text-center gap-2 py-2">
+                                <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center mb-1">
+                                    <ShieldCheck size={28} className="text-emerald-500" />
+                                </div>
+                                <p className="text-sm text-slate-600">Enter the <span className="font-semibold text-slate-800">6-digit code</span> sent to</p>
+                                <p className="text-base font-bold text-emerald-700 tracking-wide">{form.phone}</p>
+                            </div>
+
+                            {/* OTP boxes */}
+                            <div className="flex gap-2.5 justify-center" onPaste={handleOtpPaste}>
+                                {otp.map((digit, idx) => (
+                                    <input key={idx} ref={el => otpRefs.current[idx] = el}
+                                        type="text" inputMode="numeric" maxLength={1}
+                                        value={digit}
+                                        onChange={e => handleOtpChange(idx, e.target.value)}
+                                        onKeyDown={e => handleOtpKeyDown(idx, e)}
+                                        autoFocus={idx === 0}
+                                        style={{ height: '52px' }}
+                                        className={`w-11 text-center text-xl font-bold rounded-xl border-2 transition-all outline-none
+                                            ${digit ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-800'}
+                                            focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/25`}
+                                    />
+                                ))}
+                            </div>
+
+                            <AnimatePresence>
+                                {otpError && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                                        className="flex items-center gap-2 text-red-600 text-sm bg-red-50 border border-red-100 rounded-xl px-3.5 py-2.5">
+                                        <AlertCircle size={15} className="flex-shrink-0" />{otpError}
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+
+                            <button type="submit" disabled={otpLoading || otp.join('').length < OTP_LENGTH}
+                                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 text-white font-semibold text-sm hover:shadow-lg hover:shadow-emerald-400/25 hover:opacity-90 transition-all disabled:opacity-60 flex items-center justify-center gap-2">
+                                {otpLoading
+                                    ? <><Loader2 size={16} className="animate-spin" />Verifying…</>
+                                    : <><CheckCircle2 size={16} />Verify & Create Account</>}
+                            </button>
+
+                            <div className="flex items-center justify-between text-sm">
+                                <button type="button" onClick={() => { setStep('form'); setError(''); setOtpError(''); }}
+                                    className="text-slate-500 hover:text-slate-700 transition">← Edit details</button>
+                                <button type="button" onClick={handleResend}
+                                    disabled={resendCooldown > 0 || otpLoading}
+                                    className="flex items-center gap-1.5 text-emerald-600 hover:text-emerald-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed transition">
+                                    <RefreshCw size={13} />
+                                    {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend OTP'}
+                                </button>
+                            </div>
+                        </form>
+                        )}
 
                         {/* Login link */}
                         <p className="mt-6 text-center text-sm text-slate-500">

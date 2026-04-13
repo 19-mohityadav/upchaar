@@ -167,7 +167,7 @@ export function PatientProvider({ children }) {
      * @param {object} params - { fullName, email, phone, password }
      * @returns {object} The newly created profile row
      */
-    const signUp = useCallback(async ({ fullName, email, phone, password }) => {
+    const signUp = useCallback(async ({ fullName, email, phone, whatsappNumber, password }) => {
         if (!isStrongPassword(password)) {
             throw new Error(PASSWORD_RULE_MESSAGE);
         }
@@ -180,6 +180,7 @@ export function PatientProvider({ children }) {
                 data: {
                     full_name: fullName.trim(),
                     phone: phone?.trim() || '',
+                    whatsapp_number: whatsappNumber?.trim() || '',
                     profile_type: 'patient',
                 },
             },
@@ -203,6 +204,7 @@ export function PatientProvider({ children }) {
                 email: email.trim(),
                 full_name: fullName.trim(),
                 phone: phone?.trim() || '',
+                whatsapp_number: whatsappNumber?.trim() || '',
                 profile_type: 'patient',
                 status: 'active',
                 metadata: {}, // Extend later with allergies, blood group, etc.

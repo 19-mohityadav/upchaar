@@ -7,6 +7,7 @@ import { InnovationAwardSection } from '@/components/landing/innovation-award-se
 import { Features } from '@/components/landing/features';
 import { HowItWorks } from '@/components/landing/how-it-works';
 import { QuoteSection } from '@/components/landing/quote-section';
+import { FaqSection } from '@/components/landing/faq-section';
 import { NewsletterSignUp } from '@/components/landing/newsletter-signup';
 import { FeedbackForm } from '@/components/landing/feedback-form';
 import { Footer } from '@/components/landing/Footer';
@@ -40,6 +41,7 @@ const LandingPage = React.memo(function LandingPage() {
                     <Features />
                     <HowItWorks />
                     <QuoteSection />
+                    <FaqSection />
                     <FeedbackForm />
                     <NewsletterSignUp />
                 </main>

@@ -29,10 +29,10 @@ export const Footer = () => {
         ],
         "For Corporates": [{ title: "Wellness program", href: "#" }],
         "More": [
-            { title: "Help", href: "#" },
+            { title: "Help & Support", href: "/terms" },
             { title: "Developers", href: "#" },
             { title: "Privacy Policy", href: "#" },
-            { title: "Terms and Conditions", href: "#" },
+            { title: "Terms and Conditions", href: "/terms" },
         ],
         "Social": [
             { title: "Facebook", href: "#" },
@@ -87,12 +87,21 @@ export const Footer = () => {
                     </div>
                 </div>
 
-                {/* ── Copyright ─────────────────────────────────────── */}
-                <div className="mt-6 border-t border-slate-800 pt-6 flex flex-col items-center gap-4">
+                {/* ── Support & Copyright ─────────────────────────────────────── */}
+                <div className="mt-6 border-t border-slate-800 pt-6 flex flex-col md:flex-row items-center justify-between gap-6">
+                    <div className="flex flex-col md:flex-row items-center gap-4 text-xs text-slate-400">
+                        <div className="flex items-center gap-1.5"><ShieldCheck size={14}/> <span>Support Phone: 7029823013</span></div>
+                        <span className="hidden md:block">|</span>
+                        <div className="flex items-center gap-1.5"><ShieldCheck size={14}/> <span>Support WhatsApp: 9434655390</span></div>
+                        <span className="hidden md:block">|</span>
+                        <div className="flex items-center gap-1.5"><ShieldCheck size={14}/> <span>Email: mainupchaarhealth@gmail.com</span></div>
+                    </div>
+
                     <div className="flex items-center space-x-2">
                         <img src="/logo.png" alt="Upchaar Health Logo" width={32} height={32} />
                         <span className="font-bold text-lg">Upchaar Health</span>
                     </div>
+
                     <p className="text-sm text-gray-400">
                         {currentYear && <>© {currentYear} Upchaar Health. All rights reserved.</>}
                     </p>

@@ -15,6 +15,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/lib/supabase.js';
 import { isStrongPassword, PASSWORD_RULE_MESSAGE, withAuthTimeout } from '@/lib/auth.js';
+import { normalisePhone } from '@/lib/otpService.js';
 
 const AuthContext = createContext(null);
 
@@ -124,17 +125,40 @@ export function AuthProvider({ children }) {
 
     /** signIn — for patients/doctors/etc. via unified login */
     const signIn = useCallback(async (loginId, password) => {
-        const identifier = loginId.trim().toLowerCase();
-        const isEmail = identifier.includes('@');
-        const loginData = isEmail ? { email: identifier } : { phone: identifier };
+        const raw = loginId.trim();
+        const isEmail = raw.includes('@');
 
-        const { data, error } = await withAuthTimeout(supabase.auth.signInWithPassword({
-            ...loginData, password,
-        }), 'Sign in is taking too long. Please check your connection and try again.');
+        let emailToUse;
+
+        if (isEmail) {
+            emailToUse = raw.toLowerCase();
+        } else {
+            // Users always register with email+password (OTP only verifies ownership).
+            // Look up the email associated with this phone number from profiles.
+            const normPhone = normalisePhone(raw);
+
+            // Try normalised E.164 first, then raw number as fallback
+            let { data: foundEmail } = await supabase.rpc('get_email_by_phone', { p_phone: normPhone });
+            if (!foundEmail) {
+                const { data: foundEmail2 } = await supabase.rpc('get_email_by_phone', { p_phone: raw });
+                foundEmail = foundEmail2;
+            }
+            if (!foundEmail) {
+                throw new Error('No account found with this phone number. Please use your email to sign in.');
+            }
+            emailToUse = foundEmail;
+        }
+
+        const { data, error } = await withAuthTimeout(
+            supabase.auth.signInWithPassword({ email: emailToUse, password }),
+            'Sign in is taking too long. Please check your connection and try again.'
+        );
         if (error) {
             throw new Error(
                 error.message.toLowerCase().includes('invalid login credentials')
-                    ? 'Incorrect email or password.'
+                    ? isEmail
+                        ? 'Incorrect email or password.'
+                        : 'Incorrect phone number or password.'
                     : error.message
             );
         }
@@ -153,7 +177,7 @@ export function AuthProvider({ children }) {
     }, [fetchProfile, safeSignOut]);
 
     /** signUp — creates auth user + profile via DB trigger */
-    const signUp = useCallback(async ({ fullName, email, phone, password, profileType }) => {
+    const signUp = useCallback(async ({ fullName, email, phone, whatsappNumber, password, profileType }) => {
         isRegistering.current = true;
         try {
             if (!isStrongPassword(password)) {
@@ -167,6 +191,7 @@ export function AuthProvider({ children }) {
                     data: {
                         full_name: fullName.trim(),
                         phone: phone?.trim() || '',
+                        whatsapp_number: whatsappNumber?.trim() || '',
                         profile_type: profileType,
                     },
                 },
@@ -209,6 +234,7 @@ export function AuthProvider({ children }) {
                     name: fullName.trim(),
                     email: email.trim(),
                     phone: phone?.trim() || '',
+                    whatsapp_number: whatsappNumber?.trim() || '',
                     status: 'Pending',
                 });
             } else if (profileType === 'clinic') {
@@ -217,6 +243,7 @@ export function AuthProvider({ children }) {
                     name: fullName.trim(),
                     email: email.trim(),
                     phone: phone?.trim() || '',
+                    whatsapp_number: whatsappNumber?.trim() || '',
                     status: 'Pending',
                 });
             }

@@ -87,6 +87,7 @@ export async function approvePendingDoctor(pendingDoc) {
         approved_at: now,
         applied_at:  pendingDoc.appliedAt || pendingDoc.applied_at || now,
         updated_at:  now,
+        secret_key:  pendingDoc.secret_key || pendingDoc.secretKey || `UPC-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
     };
 
     // 1. Insert into doctors

@@ -214,6 +214,7 @@ export default function DoctorManagement() {
                 experience: Number(addForm.experience),
                 status: 'Pending',
                 applied_at: new Date().toISOString(),
+                secret_key: `UPC-${Math.random().toString(36).substring(2, 8).toUpperCase()}`
             }]).select().single();
             if (error) throw error;
             setApprovedDoctors(prev => [{

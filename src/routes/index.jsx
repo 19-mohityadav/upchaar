@@ -45,9 +45,11 @@ const DoctorDetailPage = lazy(() => import('@/pages/DoctorDetail.jsx'));
 const DiagnosticsPage = lazy(() => import('@/pages/Diagnostics'));
 const HospitalsPage   = lazy(() => import('@/pages/Hospitals'));
 const RecordsPage     = lazy(() => import('@/pages/Records'));
-const EmergencyPage   = lazy(() => import('@/pages/Emergency'));
+import EmergencyPage   from '@/pages/Emergency';
+// const EmergencyPage   = lazy(() => import('@/pages/Emergency'));
 const BlogsPage       = lazy(() => import('@/pages/Blogs.jsx'));
 const BlogPostPage    = lazy(() => import('@/pages/BlogPost.jsx'));
+const TermsPage       = lazy(() => import('@/pages/Terms.jsx'));
 
 // ── PATIENT pages ─────────────────────────────────────
 const PatientLogin     = lazy(() => import('@/patient/pages/PatientLogin.jsx'));
@@ -147,11 +149,12 @@ export function AppRoutes() {
             <Route path="/diagnostics" element={<AppLayout><DiagnosticsPage /></AppLayout>} />
             <Route path="/hospitals" element={<AppLayout><HospitalsPage /></AppLayout>} />
             <Route path="/records" element={<AppLayout><RecordsPage /></AppLayout>} />
-            <Route path="/emergency" element={<AppLayout><EmergencyPage /></AppLayout>} />
+            <Route path="/emergency" element={<EmergencyPage />} />
 
             {/* Blog: public, no nav/sidebar */}
             <Route path="/blogs" element={<BlogsPage />} />
             <Route path="/blogs/:slug" element={<BlogPostPage />} />
+            <Route path="/terms" element={<TermsPage />} />
 
 
             {/* ═══════════════════════════════════════

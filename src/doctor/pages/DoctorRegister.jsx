@@ -1,10 +1,14 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useDoctor } from '../context/DoctorContext.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase.js';
-import { Stethoscope, Eye, EyeOff, Loader2, AlertCircle, Phone, Lock, User, MapPin, ChevronDown, Building2, Clock3 } from 'lucide-react';
+import { Stethoscope, Eye, EyeOff, Loader2, AlertCircle, Phone, Lock, User, MapPin, ChevronDown, Building2, Clock3, ShieldCheck, CheckCircle2, RefreshCw } from 'lucide-react';
 import { isStrongPassword, PASSWORD_RULE_MESSAGE } from '@/lib/auth.js';
+import { sendOtp, verifyOtp } from '@/lib/otpService.js';
+
+const OTP_LENGTH = 6;
+const RESEND_COOLDOWN = 30;
 
 const SPECIALIZATIONS = [
     'General Physician', 'Cardiologist', 'Dermatologist', 'Endocrinologist',
@@ -19,6 +23,7 @@ const EMPTY = {
     fullName: '',
     email: '',
     phone: '',
+    whatsappNumber: '',
     password: '',
     confirmPassword: '',
     specialization: '',
@@ -44,6 +49,35 @@ export default function DoctorRegister() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
+    // ── OTP step ───────────────────
+    const [step, setStep]             = useState('form'); // 'form' | 'otp'
+    const [otp, setOtp]               = useState(['','','','','','']);
+    const [otpPhone, setOtpPhone]     = useState('');
+    const [otpError, setOtpError]     = useState('');
+    const [otpLoading, setOtpLoading] = useState(false);
+    const [resendCooldown, setResendCooldown] = useState(0);
+    const otpRefs = useRef([]);
+
+    useEffect(() => {
+        if (resendCooldown <= 0) return;
+        const id = setTimeout(() => setResendCooldown(s => s - 1), 1000);
+        return () => clearTimeout(id);
+    }, [resendCooldown]);
+
+    const handleOtpChange = (idx, val) => {
+        if (!/^\d?$/.test(val)) return;
+        const next = [...otp]; next[idx] = val; setOtp(next);
+        if (val && idx < OTP_LENGTH - 1) otpRefs.current[idx + 1]?.focus();
+    };
+    const handleOtpKeyDown = (idx, e) => {
+        if (e.key === 'Backspace' && !otp[idx] && idx > 0) otpRefs.current[idx - 1]?.focus();
+    };
+    const handleOtpPaste = e => {
+        const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, OTP_LENGTH);
+        if (pasted.length === OTP_LENGTH) { setOtp(pasted.split('')); otpRefs.current[OTP_LENGTH - 1]?.focus(); }
+        e.preventDefault();
+    };
+
     const handleChange = (e) => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
 
     const toggleDay = (day) => setForm(f => ({
@@ -56,6 +90,7 @@ export default function DoctorRegister() {
     const validate = () => {
         if (!form.fullName.trim()) return 'Full name is required.';
         if (!form.phone.trim() || !/^\d{10}$/.test(form.phone.trim())) return 'Enter a valid 10-digit phone number.';
+        if (form.whatsappNumber.trim() && !/^\d{10}$/.test(form.whatsappNumber.trim())) return 'Enter a valid 10-digit WhatsApp number.';
         if (!form.email.trim() || !/\S+@\S+\.\S+/.test(form.email)) return 'Enter a valid email address.';
         if (!form.dob) return 'Date of Birth is required.';
 
@@ -80,19 +115,22 @@ export default function DoctorRegister() {
         return null;
     };
 
+    // Step 1: validate + uniqueness + send OTP
     const handleSubmit = async (e) => {
         e.preventDefault();
         const err = validate();
-        if (err) {
-            setError(err);
-            return;
-        }
-
+        if (err) { setError(err); return; }
         setError('');
         setLoading(true);
         try {
-            const { data: phoneCheck } = await supabase.from('profiles').select('id').eq('phone', form.phone.trim()).maybeSingle();
-            if (phoneCheck) throw new Error('This phone number is already registered.');
+            // Uniqueness checks via RPC (bypasses RLS for anon users)
+            const { data: phoneTaken } = await supabase.rpc('is_phone_taken', { p_phone: form.phone.trim() });
+            if (phoneTaken) throw new Error('This phone number is already registered.');
+
+            if (form.whatsappNumber.trim()) {
+                const { data: waTaken } = await supabase.rpc('is_whatsapp_taken', { p_wa: form.whatsappNumber.trim() });
+                if (waTaken) throw new Error('This WhatsApp number is already registered.');
+            }
 
             const { data: licenseCheck } = await supabase.from('doctors').select('profile_id').eq('medical_license', form.medicalLicense.trim()).maybeSingle();
             if (licenseCheck) throw new Error('Medical License Number is already registered.');
@@ -100,24 +138,12 @@ export default function DoctorRegister() {
             const { data: registrationCheck } = await supabase.from('doctors').select('profile_id').eq('nmc_registration', form.nmcRegistration.trim()).maybeSingle();
             if (registrationCheck) throw new Error('NMC/MCI Registration Number is already registered.');
 
-            await register({
-                fullName: form.fullName,
-                email: form.email,
-                phone: form.phone,
-                password: form.password,
-                specialization: form.specialization,
-                city: form.city,
-                clinicName: form.clinicName,
-                fee: Number(form.fee),
-                medicalLicense: form.medicalLicense,
-                nmcRegistration: form.nmcRegistration,
-                dob: form.dob,
-                availableDays: form.availableDays,
-                hoursFrom: form.hoursFrom,
-                hoursTo: form.hoursTo,
-            });
-
-            navigate('/doctor/dashboard', { replace: true });
+            const e164 = await sendOtp(form.phone);
+            setOtpPhone(e164);
+            setOtp(['','','','','','']);
+            setOtpError('');
+            setResendCooldown(RESEND_COOLDOWN);
+            setStep('otp');
         } catch (err) {
             setError(err.message);
         } finally {
@@ -125,10 +151,46 @@ export default function DoctorRegister() {
         }
     };
 
+    // Resend
+    const handleResend = async () => {
+        if (resendCooldown > 0) return;
+        setOtpError(''); setOtpLoading(true);
+        try { await sendOtp(form.phone); setOtp(['','','','','','']); setResendCooldown(RESEND_COOLDOWN); }
+        catch (err) { setOtpError(err.message); }
+        finally { setOtpLoading(false); }
+    };
+
+    // Step 2: Verify OTP & create account
+    const handleVerifyAndRegister = async (e) => {
+        e.preventDefault();
+        const token = otp.join('');
+        if (token.length < OTP_LENGTH) { setOtpError('Please enter the complete 6-digit code.'); return; }
+        setOtpLoading(true); setOtpError('');
+        try {
+            await verifyOtp(otpPhone, token);
+            await supabase.auth.signOut(); // clear temp OTP session
+            await register({
+                fullName: form.fullName, email: form.email, phone: form.phone,
+                whatsappNumber: form.whatsappNumber, password: form.password,
+                specialization: form.specialization, city: form.city,
+                clinicName: form.clinicName, fee: Number(form.fee),
+                medicalLicense: form.medicalLicense, nmcRegistration: form.nmcRegistration,
+                dob: form.dob, availableDays: form.availableDays,
+                hoursFrom: form.hoursFrom, hoursTo: form.hoursTo,
+            });
+            navigate('/doctor/dashboard', { replace: true });
+        } catch (err) {
+            setOtpError(err.message);
+        } finally {
+            setOtpLoading(false);
+        }
+    };
+
     const fields = [
         { name: 'fullName', label: 'Full Name', placeholder: 'Dr. Priya Sharma', type: 'text', icon: User, required: true },
         { name: 'dob', label: 'Date of Birth', placeholder: '', type: 'date', icon: null, required: true },
         { name: 'phone', label: 'Phone Number', placeholder: '9876543210', type: 'tel', icon: Phone, required: true },
+        { name: 'whatsappNumber', label: 'WhatsApp (Optional)', placeholder: '9876543210', type: 'tel', icon: Phone, required: false },
         { name: 'medicalLicense', label: 'Medical License Number', placeholder: 'REG-123456', type: 'text', icon: null, required: true },
         { name: 'nmcRegistration', label: 'NMC / MCI Registration Number', placeholder: 'NMC/123/2024', type: 'text', icon: null, required: true },
         { name: 'email', label: 'Email Address', placeholder: 'doctor@clinic.com', type: 'email', icon: null, required: true },
@@ -158,10 +220,16 @@ export default function DoctorRegister() {
                             </div>
                             <div>
                                 <p className="text-white/70 text-xs font-medium uppercase tracking-widest">Upchaar Health</p>
-                                <h1 className="text-white font-bold text-xl">Create Doctor Account</h1>
+                                <h1 className="text-white font-bold text-xl">
+                                    {step === 'otp' ? 'Verify Mobile Number' : 'Create Doctor Account'}
+                                </h1>
                             </div>
                         </div>
-                        <p className="text-white/80 text-sm">Register your clinic timings and consultation details for the dashboard.</p>
+                        <p className="text-white/80 text-sm">
+                            {step === 'otp'
+                                ? `6-digit code sent to ${form.phone}`
+                                : 'Register your clinic timings and consultation details for the dashboard.'}
+                        </p>
                     </div>
 
                     <div className="px-8 py-8">
@@ -179,22 +247,20 @@ export default function DoctorRegister() {
                             )}
                         </AnimatePresence>
 
+                        {step === 'form' && (
                         <form onSubmit={handleSubmit} className="space-y-5">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {fields.map(({ name, label, placeholder, type, icon: Icon, required }) => (
                                     <div key={name} className={name === 'clinicName' ? 'md:col-span-2' : ''}>
                                         <label className="block text-xs font-semibold text-slate-600 mb-2">
                                             {label} {required && <span className="text-red-400">*</span>}
+                                            {name === 'phone' && <span className="text-slate-400 font-normal text-[10px] ml-1">(OTP sent)</span>}
                                         </label>
                                         <div className="relative">
                                             {Icon && <Icon size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />}
                                             <input
-                                                name={name}
-                                                type={type}
-                                                required={required}
-                                                value={form[name]}
-                                                onChange={handleChange}
-                                                placeholder={placeholder}
+                                                name={name} type={type} required={required}
+                                                value={form[name]} onChange={handleChange} placeholder={placeholder}
                                                 className={`w-full ${Icon ? 'pl-10' : 'pl-4'} pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition placeholder:text-slate-400`}
                                             />
                                         </div>
@@ -205,12 +271,8 @@ export default function DoctorRegister() {
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-2">Specialization</label>
                                 <div className="relative">
-                                    <select
-                                        name="specialization"
-                                        value={form.specialization}
-                                        onChange={handleChange}
-                                        className="w-full appearance-none pl-4 pr-9 py-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition text-slate-700"
-                                    >
+                                    <select name="specialization" value={form.specialization} onChange={handleChange}
+                                        className="w-full appearance-none pl-4 pr-9 py-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition text-slate-700">
                                         <option value="">Select specialization...</option>
                                         {SPECIALIZATIONS.map(s => <option key={s} value={s}>{s}</option>)}
                                     </select>
@@ -223,45 +285,27 @@ export default function DoctorRegister() {
                                     <Clock3 size={16} className="text-teal-600" />
                                     <h2 className="text-sm font-semibold text-slate-700">Clinic Timing</h2>
                                 </div>
-
                                 <label className="block text-xs font-semibold text-slate-600 mb-2">Available Days</label>
                                 <div className="flex flex-wrap gap-2 mb-4">
                                     {DAYS.map(day => (
-                                        <button
-                                            type="button"
-                                            key={day}
-                                            onClick={() => toggleDay(day)}
+                                        <button type="button" key={day} onClick={() => toggleDay(day)}
                                             className={`px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all ${
                                                 form.availableDays.includes(day)
                                                     ? 'bg-primary text-white border-primary'
                                                     : 'bg-white text-slate-500 border-slate-200 hover:border-primary/40'
-                                            }`}
-                                        >
-                                            {day}
-                                        </button>
+                                            }`}>{day}</button>
                                     ))}
                                 </div>
-
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-xs font-semibold text-slate-600 mb-2">Start Time</label>
-                                        <input
-                                            type="time"
-                                            name="hoursFrom"
-                                            value={form.hoursFrom}
-                                            onChange={handleChange}
-                                            className="w-full pl-4 pr-4 py-3 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary/25"
-                                        />
+                                        <input type="time" name="hoursFrom" value={form.hoursFrom} onChange={handleChange}
+                                            className="w-full pl-4 pr-4 py-3 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary/25" />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-semibold text-slate-600 mb-2">End Time</label>
-                                        <input
-                                            type="time"
-                                            name="hoursTo"
-                                            value={form.hoursTo}
-                                            onChange={handleChange}
-                                            className="w-full pl-4 pr-4 py-3 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary/25"
-                                        />
+                                        <input type="time" name="hoursTo" value={form.hoursTo} onChange={handleChange}
+                                            className="w-full pl-4 pr-4 py-3 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary/25" />
                                     </div>
                                 </div>
                             </div>
@@ -271,34 +315,21 @@ export default function DoctorRegister() {
                                     <label className="block text-xs font-semibold text-slate-600 mb-2">Password <span className="text-red-400">*</span></label>
                                     <div className="relative">
                                         <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                                        <input
-                                            name="password"
-                                            type={showPass ? 'text' : 'password'}
-                                            required
-                                            value={form.password}
-                                            onChange={handleChange}
-                                            placeholder="Min 6 characters"
-                                            className="w-full pl-10 pr-11 py-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition placeholder:text-slate-400"
-                                        />
+                                        <input name="password" type={showPass ? 'text' : 'password'} required
+                                            value={form.password} onChange={handleChange} placeholder="Min 6 characters"
+                                            className="w-full pl-10 pr-11 py-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition placeholder:text-slate-400" />
                                         <button type="button" onClick={() => setShowPass(s => !s)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition">
                                             {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
                                         </button>
                                     </div>
                                 </div>
-
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-600 mb-2">Confirm Password <span className="text-red-400">*</span></label>
                                     <div className="relative">
                                         <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                                        <input
-                                            name="confirmPassword"
-                                            type={showConfirm ? 'text' : 'password'}
-                                            required
-                                            value={form.confirmPassword}
-                                            onChange={handleChange}
-                                            placeholder="Re-enter password"
-                                            className="w-full pl-10 pr-11 py-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition placeholder:text-slate-400"
-                                        />
+                                        <input name="confirmPassword" type={showConfirm ? 'text' : 'password'} required
+                                            value={form.confirmPassword} onChange={handleChange} placeholder="Re-enter password"
+                                            className="w-full pl-10 pr-11 py-3 rounded-xl border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition placeholder:text-slate-400" />
                                         <button type="button" onClick={() => setShowConfirm(s => !s)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition">
                                             {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
                                         </button>
@@ -306,14 +337,64 @@ export default function DoctorRegister() {
                                 </div>
                             </div>
 
-                            <button
-                                type="submit"
-                                disabled={loading}
-                                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-primary to-teal-400 text-white font-semibold text-sm hover:shadow-lg hover:shadow-primary/25 hover:opacity-90 transition-all disabled:opacity-60 flex items-center justify-center gap-2 mt-2"
-                            >
-                                {loading ? <><Loader2 size={16} className="animate-spin" /> Creating account...</> : 'Create Account'}
+                            <button type="submit" disabled={loading}
+                                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-primary to-teal-400 text-white font-semibold text-sm hover:shadow-lg hover:shadow-primary/25 hover:opacity-90 transition-all disabled:opacity-60 flex items-center justify-center gap-2 mt-2">
+                                {loading ? <><Loader2 size={16} className="animate-spin" />Sending OTP…</> : <><ShieldCheck size={16} />Send OTP & Continue</>}
                             </button>
                         </form>
+                        )}
+
+                        {/* OTP Step */}
+                        {step === 'otp' && (
+                        <form onSubmit={handleVerifyAndRegister} className="space-y-6">
+                            <div className="flex flex-col items-center text-center gap-2 py-2">
+                                <div className="w-14 h-14 rounded-2xl bg-teal-50 border border-teal-100 flex items-center justify-center mb-1">
+                                    <ShieldCheck size={28} className="text-teal-500" />
+                                </div>
+                                <p className="text-sm text-slate-600">Enter the <span className="font-semibold text-slate-800">6-digit code</span> sent to</p>
+                                <p className="text-base font-bold text-teal-700 tracking-wide">{form.phone}</p>
+                            </div>
+
+                            <div className="flex gap-2.5 justify-center" onPaste={handleOtpPaste}>
+                                {otp.map((digit, idx) => (
+                                    <input key={idx} ref={el => otpRefs.current[idx] = el}
+                                        type="text" inputMode="numeric" maxLength={1} value={digit}
+                                        onChange={e => handleOtpChange(idx, e.target.value)}
+                                        onKeyDown={e => handleOtpKeyDown(idx, e)}
+                                        autoFocus={idx === 0} style={{ height: '52px' }}
+                                        className={`w-11 text-center text-xl font-bold rounded-xl border-2 transition-all outline-none
+                                            ${digit ? 'border-teal-500 bg-teal-50 text-teal-700' : 'border-slate-200 bg-slate-50 text-slate-800'}
+                                            focus:border-teal-400 focus:ring-2 focus:ring-teal-400/25`}
+                                    />
+                                ))}
+                            </div>
+
+                            <AnimatePresence>
+                                {otpError && (
+                                    <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                                        className="flex items-center gap-2 text-red-600 text-sm bg-red-50 border border-red-100 rounded-xl px-3.5 py-2.5">
+                                        <AlertCircle size={15} className="flex-shrink-0" />{otpError}
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+
+                            <button type="submit" disabled={otpLoading || otp.join('').length < OTP_LENGTH}
+                                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-primary to-teal-400 text-white font-semibold text-sm hover:shadow-lg hover:shadow-primary/25 hover:opacity-90 transition-all disabled:opacity-60 flex items-center justify-center gap-2">
+                                {otpLoading ? <><Loader2 size={16} className="animate-spin" />Verifying…</> : <><CheckCircle2 size={16} />Verify & Create Account</>}
+                            </button>
+
+                            <div className="flex items-center justify-between text-sm">
+                                <button type="button" onClick={() => { setStep('form'); setError(''); setOtpError(''); }}
+                                    className="text-slate-500 hover:text-slate-700 transition">← Edit details</button>
+                                <button type="button" onClick={handleResend}
+                                    disabled={resendCooldown > 0 || otpLoading}
+                                    className="flex items-center gap-1.5 text-teal-600 hover:text-teal-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed transition">
+                                    <RefreshCw size={13} />
+                                    {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend OTP'}
+                                </button>
+                            </div>
+                        </form>
+                        )}
 
                         <p className="mt-6 text-center text-sm text-slate-500">
                             Already have an account?{' '}

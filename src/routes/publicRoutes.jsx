@@ -49,7 +49,7 @@ export function PublicRoutes() {
             <Route path="/diagnostics" element={<AppLayout><DiagnosticsPage /></AppLayout>} />
             <Route path="/hospitals" element={<AppLayout><HospitalsPage /></AppLayout>} />
             <Route path="/records" element={<AppLayout><RecordsPage /></AppLayout>} />
-            <Route path="/emergency" element={<AppLayout><EmergencyPage /></AppLayout>} />
+            <Route path="/emergency" element={<EmergencyPage />} />
 
             {/* Blog – public listing and post detail */}
             <Route path="/blogs" element={<AppLayout><BlogsPage /></AppLayout>} />
