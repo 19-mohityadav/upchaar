@@ -362,14 +362,14 @@ function DoctorCard({ doctor }) {
                     <div className="flex items-center gap-2 mt-2">
                         <Button
                             className="flex-1 bg-primary hover:bg-teal-700 group-hover:shadow-lg transition-all"
-                            onClick={() => navigate(`/doctors/${doctor.id}`)}
+                            onClick={() => navigate('/appointment-options')}
                         >
                             Book Appointment
                         </Button>
                         <Button
                             variant="outline"
                             className="px-3 border-primary/20 hover:bg-primary/5 text-primary"
-                            onClick={() => navigate(`/doctors/${doctor.id}`)}
+                            onClick={() => navigate('/appointment-options')}
                         >
                             <ChevronRight className="h-5 w-5" />
                         </Button>

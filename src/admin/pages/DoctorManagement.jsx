@@ -69,6 +69,7 @@ export default function DoctorManagement() {
         subSpecialization: d.sub_specialization || '',
         passingYear: d.passing_year,
         documents: d.metadata?.documents || {},
+        avatarUrl: d.avatar_url || d.metadata?.avatar_url || null,
     });
 
     useEffect(() => {
@@ -296,8 +297,12 @@ export default function DoctorManagement() {
                                 <tr key={doc.id} className="hover:bg-slate-50/70 transition-colors">
                                     <td className="px-4 py-3">
                                         <div className="flex items-center gap-3">
-                                            <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary text-sm flex-shrink-0">
-                                                {doc.fullName.replace('Dr. ', '')[0]}
+                                            <div className="h-9 w-9 rounded-full overflow-hidden bg-primary/10 flex items-center justify-center font-bold text-primary text-sm flex-shrink-0">
+                                                {doc.avatarUrl ? (
+                                                    <AvatarImage path={doc.avatarUrl} supabase={supabase} className="h-full w-full object-cover" />
+                                                ) : (
+                                                    doc.fullName.replace('Dr. ', '')[0]
+                                                )}
                                             </div>
                                             <div>
                                                 <p className="font-medium text-slate-800">{doc.fullName}</p>
@@ -414,8 +419,12 @@ export default function DoctorManagement() {
                             <div className="flex-1 overflow-y-auto p-5 space-y-5">
                                 {/* Profile top */}
                                 <div className="flex items-start gap-4">
-                                    <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center font-bold text-primary text-2xl flex-shrink-0">
-                                        {selectedDoc.fullName.replace('Dr. ', '')[0]}
+                                    <div className="h-16 w-16 rounded-2xl overflow-hidden bg-primary/10 flex items-center justify-center font-bold text-primary text-2xl flex-shrink-0">
+                                        {selectedDoc.avatarUrl ? (
+                                            <AvatarImage path={selectedDoc.avatarUrl} supabase={supabase} className="h-full w-full object-cover" />
+                                        ) : (
+                                            selectedDoc.fullName.replace('Dr. ', '')[0]
+                                        )}
                                     </div>
                                     <div className="flex-1">
                                         <h3 className="text-lg font-bold text-slate-800">{selectedDoc.fullName}</h3>
@@ -607,6 +616,51 @@ export default function DoctorManagement() {
                 )}
             </AnimatePresence>
         </div>
+    );
+}
+
+
+/* ── Avatar Image Component ─────────────────────────── */
+function AvatarImage({ path, supabase, className }) {
+    const [url, setUrl] = useState(null);
+    const [error, setError] = useState(false);
+
+    useEffect(() => {
+        if (!path) return;
+        
+        // If it's already a full URL, use it directly
+        if (path.startsWith('http')) {
+            setUrl(path);
+            return;
+        }
+
+        supabase.storage.from('doctor-docs').createSignedUrl(path, 3600)
+            .then(({ data, error }) => {
+                if (error || !data?.signedUrl) {
+                    setError(true);
+                } else {
+                    setUrl(data.signedUrl);
+                }
+            })
+            .catch(() => setError(true));
+    }, [path, supabase]);
+
+    if (error || (!path && !url)) {
+        return (
+            <div className={cn("bg-slate-100 flex items-center justify-center text-slate-400", className)}>
+                <User size={20} />
+            </div>
+        );
+    }
+
+    if (!url) return <div className={cn("animate-pulse bg-slate-200", className)} />;
+    return (
+        <img 
+            src={url} 
+            alt="Profile" 
+            className={className} 
+            onError={() => setError(true)}
+        />
     );
 }
 

@@ -237,6 +237,21 @@ export default function DoctorDashboard() {
                 </motion.div>
             )}
 
+            <div className="bg-white rounded-3xl border border-teal-100 shadow-sm p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center">
+                        <Users size={20} />
+                    </div>
+                    <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Your Secret Key</p>
+                        <p className="text-lg font-mono font-bold text-teal-700">{doctorRecord?.secret_key || '—'}</p>
+                    </div>
+                </div>
+                <div className="text-right">
+                    <p className="text-[10px] font-medium text-slate-500 max-w-[200px]">Share this key with medical centers or clinics to link your profile with them.</p>
+                </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 {loading ? (
                     Array(4).fill(0).map((_, i) => (

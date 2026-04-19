@@ -33,9 +33,20 @@ export default function ClinicDashboard() {
   const [doctorSecretKey, setDoctorSecretKey] = useState('');
   const [addingDoctor, setAddingDoctor] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true); 
+  const [appointments, setAppointments] = useState([]);
   const sidebarRef = useRef(null);
 
-  const stats = useMemo(() => ({ doctors: staffDoctors.length, patients: 0, todayVisits: 0, revenue: '0' }), [staffDoctors.length]);
+  const stats = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    const todayVisits = appointments.filter(a => a.date?.startsWith(today)).length;
+    const totalRev = appointments.reduce((sum, a) => sum + (a.fee || 0), 0);
+    return { 
+      doctors: staffDoctors.length, 
+      patients: [...new Set(appointments.map(a => a.patient_id))].length, 
+      todayVisits: todayVisits, 
+      revenue: totalRev.toLocaleString() 
+    };
+  }, [staffDoctors.length, appointments]);
   const circumference = useMemo(() => 2 * Math.PI * 54, []);
 
   // Handle mobile resize
@@ -154,23 +165,28 @@ export default function ClinicDashboard() {
     }
   }, [fetchStaff]);
 
-  const fetchClinics = useCallback(async () => {
-    // Keep this for the 'Registered Nodes' table if needed, or remove if unused
+  const fetchAppointments = useCallback(async () => {
+    if (!profile?.id) return;
     try {
-      const { data, error } = await supabase.from('clinics').select('*').order('created_at', { ascending: false });
+      const { data, error } = await supabase
+        .from('appointments')
+        .select('*')
+        .eq('organization_id', profile.id)
+        .order('date', { ascending: false });
       if (error) throw error;
-      setClinics(data || []);
+      setAppointments(data || []);
     } catch (err) {
-      console.error('Error fetching clinics:', err.message);
+      console.error('Error fetching appointments:', err.message);
     }
-  }, []);
-  
+  }, [profile?.id]);
+
   useEffect(() => { 
     if (profile?.id) {
       fetchStaff();
       fetchClinics();
+      fetchAppointments();
     }
-  }, [profile?.id, fetchStaff, fetchClinics]);
+  }, [profile?.id, fetchStaff, fetchClinics, fetchAppointments]);
 
   const handleSignOut = useCallback(async () => { await signOut(); navigate('/login'); }, [signOut, navigate]);
   const handleNavClick = useCallback((label) => {
@@ -473,6 +489,30 @@ export default function ClinicDashboard() {
                   <span className="material-symbols-outlined text-teal-600">history</span> Recent Activity
                 </h3>
                 <a href="#" className="text-xs font-semibold text-teal-600 hover:underline">View All</a>
+              </div>
+              <div className="bg-white rounded-2xl p-5 sm:p-6" style={{ boxShadow: '0 4px 6px -1px rgb(0 0 0/0.05)' }}>
+                {appointments.length > 0 ? (
+                  appointments.slice(0, 5).map((item, idx) => (
+                    <div key={item.id} className="flex gap-4 mb-6 last:mb-0">
+                      <div className="relative flex-shrink-0">
+                        {idx !== appointments.slice(0, 5).length - 1 && <div className="w-0.5 bg-teal-100 absolute left-1.5 top-4 bottom-0" />}
+                        <div className="w-3 h-3 bg-teal-500 rounded-full border-2 border-white relative z-10 mt-0.5" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-bold text-gray-800">Visit: {item.patient_name}</p>
+                        <p className="text-[10px] text-gray-500">with Dr. {item.doctor_name}</p>
+                        <p className="text-xs text-teal-600 mt-1">{new Date(item.date).toLocaleDateString()} {item.time_slot}</p>
+                      </div>
+                      <div className="text-right">
+                        <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${
+                          item.status === 'Completed' ? 'bg-teal-50 text-teal-700' : 'bg-blue-50 text-blue-700'
+                        }`}>{item.status}</span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-gray-500 text-center">No recent activity</p>
+                )}
               </div>
 
             </div>

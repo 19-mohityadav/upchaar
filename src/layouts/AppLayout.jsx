@@ -25,7 +25,7 @@ const NAV = [
     { to: '/records',     icon: FileText,         label: 'Health Records' },
 ];
 
-export default function AppLayout({ children }) {
+export default function AppLayout({ children, hideSidebar = false, hideNavbar = false }) {
     const { signOut, user, profile } = useAuth();
     const navigate = useNavigate();
     const [collapsed, setCollapsed] = useState(false);
@@ -135,63 +135,69 @@ export default function AppLayout({ children }) {
             </AnimatePresence>
 
             {/* ── Desktop Sidebar ──────────────────────────────────── */}
-            <motion.aside
-                animate={{ width: collapsed ? 64 : 210 }}
-                transition={{ duration: 0.22, ease: 'easeInOut' }}
-                className="relative hidden lg:flex flex-col bg-white border-r border-slate-200 shadow-sm flex-shrink-0 overflow-hidden z-20">
-                <SidebarContent onClose={null} />
+            {!hideSidebar && (
+                <motion.aside
+                    animate={{ width: collapsed ? 64 : 210 }}
+                    transition={{ duration: 0.22, ease: 'easeInOut' }}
+                    className="relative hidden lg:flex flex-col bg-white border-r border-slate-200 shadow-sm flex-shrink-0 overflow-hidden z-20">
+                    <SidebarContent onClose={null} />
 
-                {/* Collapse toggle pill */}
-                <button onClick={() => setCollapsed(c => !c)}
-                    className="absolute -right-3 top-20 h-6 w-6 rounded-full border border-slate-200 bg-white shadow flex items-center justify-center text-slate-400 hover:text-primary transition-colors z-10">
-                    {collapsed ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
-                </button>
-            </motion.aside>
+                    {/* Collapse toggle pill */}
+                    <button onClick={() => setCollapsed(c => !c)}
+                        className="absolute -right-3 top-20 h-6 w-6 rounded-full border border-slate-200 bg-white shadow flex items-center justify-center text-slate-400 hover:text-primary transition-colors z-10">
+                        {collapsed ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
+                    </button>
+                </motion.aside>
+            )}
 
             {/* ── Main content ─────────────────────────────────────── */}
             <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
                 {/* Topbar */}
-                <header className="h-16 bg-white border-b border-slate-200 flex items-center gap-3 px-4 sm:px-6 flex-shrink-0">
-                    {/* Mobile hamburger */}
-                    <button onClick={() => setMobileOpen(true)}
-                        className="lg:hidden h-9 w-9 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 transition-colors">
-                        <Menu size={20} />
-                    </button>
-
-                    {/* Search */}
-                    <div className="relative flex-1 max-w-xs hidden sm:block">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                        <input type="text" placeholder="Search…"
-                            className="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition" />
-                    </div>
-
-                    <div className="flex-1" />
-
-                    {/* Bell */}
-                    <button className="h-9 w-9 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors">
-                        <Bell size={18} />
-                    </button>
-
-                    {/* Avatar Dropdown */}
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <button className="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-teal-400 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 outline-none hover:opacity-90 transition">
-                                {initials}
+                {!hideNavbar && (
+                    <header className="h-16 bg-white border-b border-slate-200 flex items-center gap-3 px-4 sm:px-6 flex-shrink-0">
+                        {/* Mobile hamburger */}
+                        {!hideSidebar && (
+                            <button onClick={() => setMobileOpen(true)}
+                                className="lg:hidden h-9 w-9 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 transition-colors">
+                                <Menu size={20} />
                             </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48">
-                            <DropdownMenuItem onClick={() => setEditProfileOpen(true)} className="cursor-pointer">
-                                <User className="mr-2 h-4 w-4" />
-                                <span>Edit Profile</span>
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer text-red-500 focus:text-red-500 focus:bg-red-50">
-                                <LogOut className="mr-2 h-4 w-4" />
-                                <span>Sign Out</span>
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                </header>
+                        )}
+
+                        {/* Search */}
+                        <div className="relative flex-1 max-w-xs hidden sm:block">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                            <input type="text" placeholder="Search…"
+                                className="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition" />
+                        </div>
+
+                        <div className="flex-1" />
+
+                        {/* Bell */}
+                        <button className="h-9 w-9 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors">
+                            <Bell size={18} />
+                        </button>
+
+                        {/* Avatar Dropdown */}
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <button className="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-teal-400 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 outline-none hover:opacity-90 transition">
+                                    {initials}
+                                </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-48">
+                                <DropdownMenuItem onClick={() => setEditProfileOpen(true)} className="cursor-pointer">
+                                    <User className="mr-2 h-4 w-4" />
+                                    <span>Edit Profile</span>
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer text-red-500 focus:text-red-500 focus:bg-red-50">
+                                    <LogOut className="mr-2 h-4 w-4" />
+                                    <span>Sign Out</span>
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </header>
+                )}
 
                 <main className="flex-1 overflow-y-auto p-4 sm:p-6">
                     {children}

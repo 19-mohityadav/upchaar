@@ -12,11 +12,7 @@ export const Hero = () => {
     const { user, loading } = useAuth();
 
     const handleBookAppointment = () => {
-        if (!loading && !user) {
-            navigate('/login', { state: { from: '/doctors' } });
-        } else {
-            navigate('/doctors');
-        }
+        navigate('/appointment-options');
     };
     return (
         <section className="container grid lg:grid-cols-2 items-center gap-8 md:gap-12 pt-8 md:pt-16 pb-12 overflow-hidden">

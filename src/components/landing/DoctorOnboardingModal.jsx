@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     X, User, Stethoscope, Building2, ShieldCheck,
@@ -25,8 +25,22 @@ const INDIAN_STATES = [
     'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram',
     'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu',
     'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
-    'Delhi', 'Jammu & Kashmir', 'Ladakh', 'Other',
+    'Delhi', 'Other',
 ];
+
+const CITY_DATA = {
+    'Maharashtra': ['Mumbai', 'Pune', 'Nagpur', 'Thane', 'Nashik', 'Other'],
+    'Delhi': ['New Delhi', 'Delhi NCR', 'Other'],
+    'Karnataka': ['Bengaluru', 'Mysuru', 'Hubballi', 'Mangaluru', 'Other'],
+    'Tamil Nadu': ['Chennai', 'Coimbatore', 'Madurai', 'Other'],
+    'Uttar Pradesh': ['Lucknow', 'Kanpur', 'Noida', 'Varanasi', 'Other'],
+    'West Bengal': ['Kolkata', 'Howrah', 'Siliguri', 'Other'],
+    'Gujarat': ['Ahmedabad', 'Surat', 'Vadodara', 'Other'],
+    'Rajasthan': ['Jaipur', 'Jodhpur', 'Udaipur', 'Other'],
+    'Punjab': ['Ludhiana', 'Amritsar', 'Chandigarh', 'Other'],
+    'Bihar': ['Patna', 'Gaya', 'Bhagalpur', 'Other'],
+    'Other': ['Other']
+};
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const LANGUAGES = ['English', 'Hindi', 'Bengali', 'Marathi', 'Tamil', 'Telugu', 'Kannada', 'Malayalam', 'Gujarati', 'Punjabi', 'Odia', 'Urdu'];
@@ -41,14 +55,14 @@ const STEPS = [
 /* ─── helpers ────────────────────────────────────────────── */
 const initialData = {
     // Step 1
-    fullName: '', email: '', phone: '', dob: '', gender: '', photo: null,
+    fullName: '', email: '', phone: '', dob: '', gender: '', profilePhoto: null,
     password: '', confirmPassword: '',
     // Step 2
     licenseNo: '', nmcNo: '', specialization: '', subSpecialization: '',
     degree: '', passingYear: '', institution: '', additionalQualifications: '',
     // Step 3
     experience: '', languages: [],
-    clinics: [{ name: '', address: '', city: '', state: '', fee: '', availableDays: [], hoursFrom: '', hoursTo: '' }],
+    state: '', city: '', manualCity: '', 
     // Step 4
     govtId: null, licenseDoc: null, degreeCert: null,
     acceptTerms: false, declaration: false,
@@ -62,7 +76,13 @@ function validate(step, data) {
         if (!data.phone.match(/^[6-9]\d{9}$/)) errors.phone = 'Valid 10-digit mobile number required';
         if (!data.dob) errors.dob = 'Date of birth is required';
         if (!data.gender) errors.gender = 'Gender is required';
-        if (!data.photo) errors.photo = 'Profile photo is required';
+        if (!data.profilePhoto) {
+            errors.profilePhoto = 'Profile photo is required';
+        } else {
+            const validTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+            if (!validTypes.includes(data.profilePhoto.type)) errors.profilePhoto = 'Only JPG/PNG allowed';
+            if (data.profilePhoto.size > 10 * 1024 * 1024) errors.profilePhoto = 'Max size 10MB';
+        }
         // Password validation
         if (!data.password) {
             errors.password = 'Password is required';
@@ -93,20 +113,28 @@ function validate(step, data) {
     if (step === 3) {
         if (!data.experience || data.experience < 0) errors.experience = 'Years of experience is required';
         if (data.languages.length === 0) errors.languages = 'Select at least one language';
-        data.clinics.forEach((clinic, index) => {
-            if (!clinic.name.trim()) errors[`clinicName_${index}`] = 'Medical/Clinic name is required';
-            if (!clinic.address.trim()) errors[`clinicAddress_${index}`] = 'Address is required';
-            if (!clinic.city.trim()) errors[`clinicCity_${index}`] = 'City is required';
-            if (!clinic.state) errors[`clinicState_${index}`] = 'State is required';
-            if (!clinic.fee || clinic.fee < 0) errors[`clinicFee_${index}`] = 'Consultation fee is required';
-            if (clinic.availableDays.length === 0) errors[`clinicDays_${index}`] = 'Select at least one available day';
-            if (!clinic.hoursFrom) errors[`clinicHoursFrom_${index}`] = 'Start time is required';
-            if (!clinic.hoursTo) errors[`clinicHoursTo_${index}`] = 'End time is required';
-        });
+        if (!data.state) errors.state = 'State is required';
+        if (!data.city) errors.city = 'City is required';
+        if (data.city === 'Other' && !data.manualCity.trim()) errors.manualCity = 'Please enter your city';
     }
     if (step === 4) {
-        if (!data.govtId) errors.govtId = 'Government ID is required';
-        if (!data.licenseDoc) errors.licenseDoc = 'License document is required';
+        // Enforce PDF and < 100KB for documents
+        const validateDoc = (file) => {
+            if (!file) return 'Required';
+            if (file.type !== 'application/pdf') return 'Only PDF allowed';
+            if (file.size > 100 * 1024) return 'Max size 100KB';
+            return null;
+        };
+
+        const govtIdErr = validateDoc(data.govtId);
+        if (govtIdErr) errors.govtId = govtIdErr;
+
+        const licenseErr = validateDoc(data.licenseDoc);
+        if (licenseErr) errors.licenseDoc = licenseErr;
+
+        const degreeErr = validateDoc(data.degreeCert);
+        if (degreeErr) errors.degreeCert = degreeErr;
+        
         if (!data.acceptTerms) errors.acceptTerms = 'You must accept the terms';
         if (!data.declaration) errors.declaration = 'Declaration is required';
     }
@@ -197,17 +225,15 @@ function Step1({ data, onChange, errors }) {
                 <FieldError msg={errors.gender} />
             </div>
             <div className="sm:col-span-2">
-                <FormLabel required>Profile Photo</FormLabel>
-                <label className={`flex flex-col items-center justify-center gap-2 w-full h-24 rounded-xl border-2 border-dashed cursor-pointer transition-colors
-                    ${data.photo ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50 bg-muted/40'}`}>
-                    <input type="file" accept="image/*" className="hidden" onChange={e => onChange('photo', e.target.files[0] || null)} />
-                    {data.photo ? (
-                        <><CheckCircle2 className="h-5 w-5 text-primary" /><span className="text-xs text-primary font-medium">{data.photo.name}</span></>
-                    ) : (
-                        <><Upload className="h-5 w-5 text-muted-foreground" /><span className="text-xs text-muted-foreground">Upload profile photo</span></>
-                    )}
-                </label>
-                <FieldError msg={errors.photo} />
+                <FileUpload 
+                    label="Profile Photo (Formal/Professional)" 
+                    required 
+                    value={data.profilePhoto}
+                    onChange={v => onChange('profilePhoto', v)} 
+                    error={errors.profilePhoto} 
+                    accept=".jpg,.jpeg,.png" 
+                />
+                <p className="text-[10px] text-muted-foreground mt-1 px-1">Professional portrait recommended. JPG/PNG, Max 10MB</p>
             </div>
 
             {/* ─── Password Section ─────────────────────── */}
@@ -303,26 +329,7 @@ function Step3({ data, onChange, errors }) {
         onChange(field, arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val]);
     };
 
-    const addClinic = () => {
-        onChange('clinics', [...data.clinics, { name: '', address: '', city: '', state: '', availableDays: [], hoursFrom: '', hoursTo: '' }]);
-    };
-
-    const removeClinic = (index) => {
-        const newClinics = data.clinics.filter((_, i) => i !== index);
-        onChange('clinics', newClinics);
-    };
-
-    const updateClinic = (index, field, val) => {
-        const newClinics = [...data.clinics];
-        newClinics[index] = { ...newClinics[index], [field]: val };
-        onChange('clinics', newClinics);
-    };
-
-    const toggleClinicDay = (index, day) => {
-        const arr = data.clinics[index].availableDays;
-        const newDays = arr.includes(day) ? arr.filter(x => x !== day) : [...arr, day];
-        updateClinic(index, 'availableDays', newDays);
-    };
+    const cities = CITY_DATA[data.state] || (data.state ? ['Other'] : []);
 
     return (
         <div className="space-y-6">
@@ -351,94 +358,54 @@ function Step3({ data, onChange, errors }) {
                     </div>
                     <FieldError msg={errors.languages} />
                 </div>
-            </div>
 
-            <div className="space-y-4">
-                <div className="flex items-center justify-between border-b pb-2">
-                    <h3 className="font-semibold text-foreground/90">Medical/Clinic Details</h3>
-                    <Button type="button" onClick={addClinic} variant="outline" size="sm" className="h-8">
-                        + Add More
-                    </Button>
+                {/* State & City */}
+                <div>
+                    <FormLabel required>State</FormLabel>
+                    <select id="state" value={data.state} onChange={e => {
+                        onChange('state', e.target.value);
+                        onChange('city', '');
+                        onChange('manualCity', '');
+                    }}
+                        className={`w-full h-10 rounded-md border px-3 text-sm bg-background text-foreground focus:ring-2 focus:ring-ring focus:outline-none
+                            ${errors.state ? 'border-red-400' : 'border-input'}`}>
+                        <option value="">Select state</option>
+                        {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    <FieldError msg={errors.state} />
                 </div>
 
-                {data.clinics.map((clinic, index) => (
-                    <div key={index} className="p-4 bg-muted/40 border rounded-xl space-y-4 relative">
-                        {data.clinics.length > 1 && (
-                            <button type="button" onClick={() => removeClinic(index)}
-                                className="absolute right-3 top-3 h-6 w-6 rounded-full bg-red-100 text-red-600 flex items-center justify-center hover:bg-red-200 transition">
-                                <X size={12} />
-                            </button>
-                        )}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="sm:col-span-2">
-                                <FormLabel required>Medical/Clinic Name</FormLabel>
-                                <Input placeholder="Apollo Clinic" value={clinic.name}
-                                    onChange={e => updateClinic(index, 'name', e.target.value)} className={errors[`clinicName_${index}`] ? 'border-red-400' : ''} />
-                                <FieldError msg={errors[`clinicName_${index}`]} />
-                            </div>
-                            <div className="sm:col-span-2">
-                                <FormLabel required>Consultation Fee (₹)</FormLabel>
-                                <Input type="number" placeholder="500" min="0" value={clinic.fee}
-                                    onChange={e => updateClinic(index, 'fee', e.target.value)} className={errors[`clinicFee_${index}`] ? 'border-red-400' : ''} />
-                                <FieldError msg={errors[`clinicFee_${index}`]} />
-                            </div>
-                            <div className="sm:col-span-2">
-                                <FormLabel required>Clinic Address</FormLabel>
-                                <Input placeholder="Street, Area, Locality" value={clinic.address}
-                                    onChange={e => updateClinic(index, 'address', e.target.value)} className={errors[`clinicAddress_${index}`] ? 'border-red-400' : ''} />
-                                <FieldError msg={errors[`clinicAddress_${index}`]} />
-                            </div>
-                            <div>
-                                <FormLabel required>City</FormLabel>
-                                <Input placeholder="Mumbai" value={clinic.city}
-                                    onChange={e => updateClinic(index, 'city', e.target.value)} className={errors[`clinicCity_${index}`] ? 'border-red-400' : ''} />
-                                <FieldError msg={errors[`clinicCity_${index}`]} />
-                            </div>
-                            <div>
-                                <FormLabel required>State</FormLabel>
-                                <select value={clinic.state} onChange={e => updateClinic(index, 'state', e.target.value)}
-                                    className={`w-full h-10 rounded-md border px-3 text-sm bg-background text-foreground focus:ring-2 focus:ring-ring focus:outline-none
-                                        ${errors[`clinicState_${index}`] ? 'border-red-400' : 'border-input'}`}>
-                                    <option value="">Select state</option>
-                                    {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
-                                </select>
-                                <FieldError msg={errors[`clinicState_${index}`]} />
-                            </div>
+                <div>
+                    <FormLabel required>City</FormLabel>
+                    <select id="city" value={data.city} onChange={e => {
+                        onChange('city', e.target.value);
+                        if (e.target.value !== 'Other') onChange('manualCity', '');
+                    }}
+                        disabled={!data.state}
+                        className={`w-full h-10 rounded-md border px-3 text-sm bg-background text-foreground focus:ring-2 focus:ring-ring focus:outline-none
+                            ${errors.city ? 'border-red-400' : 'border-input'} disabled:opacity-50`}>
+                        <option value="">Select city</option>
+                        {cities.map(c => <option key={c} value={c}>{c}</option>)}
+                        {!cities.includes('Other') && data.state && <option value="Other">Other</option>}
+                    </select>
+                    <FieldError msg={errors.city} />
+                </div>
 
-                            {/* Available Days */}
-                            <div className="sm:col-span-2">
-                                <FormLabel required>Available Days</FormLabel>
-                                <div className="flex flex-wrap gap-2 mt-1">
-                                    {DAYS.map(day => (
-                                        <button key={day} type="button"
-                                            onClick={() => toggleClinicDay(index, day)}
-                                            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-200
-                                                ${clinic.availableDays.includes(day)
-                                                    ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                                                    : 'bg-card border-border text-foreground/70 hover:border-primary/50'}`}>
-                                            {day.slice(0, 3)}
-                                        </button>
-                                    ))}
-                                </div>
-                                <FieldError msg={errors[`clinicDays_${index}`]} />
-                            </div>
-
-                            {/* Consultation Hours */}
-                            <div>
-                                <FormLabel required>Consultation From</FormLabel>
-                                <Input type="time" value={clinic.hoursFrom}
-                                    onChange={e => updateClinic(index, 'hoursFrom', e.target.value)} className={errors[`clinicHoursFrom_${index}`] ? 'border-red-400' : ''} />
-                                <FieldError msg={errors[`clinicHoursFrom_${index}`]} />
-                            </div>
-                            <div>
-                                <FormLabel required>Consultation To</FormLabel>
-                                <Input type="time" value={clinic.hoursTo}
-                                    onChange={e => updateClinic(index, 'hoursTo', e.target.value)} className={errors[`clinicHoursTo_${index}`] ? 'border-red-400' : ''} />
-                                <FieldError msg={errors[`clinicHoursTo_${index}`]} />
-                            </div>
-                        </div>
+                {(data.city === 'Other' || data.state === 'Other') && (
+                    <div className="sm:col-span-2">
+                        <FormLabel required>Enter City Name</FormLabel>
+                        <Input id="manualCity" placeholder="Enter your city name" value={data.manualCity}
+                            onChange={e => onChange('manualCity', e.target.value)} className={errors.manualCity ? 'border-red-400' : ''} />
+                        <FieldError msg={errors.manualCity} />
                     </div>
-                ))}
+                )}
+            </div>
+            
+            <div className="bg-primary/5 border border-primary/20 rounded-xl p-4">
+                <p className="text-xs text-primary font-medium flex gap-2">
+                    <Building2 className="h-4 w-4 flex-shrink-0" />
+                    Note: Clinical details and linking with hospitals will be handled via your dashboard after approval using the <b>Secret Key</b> system.
+                </p>
             </div>
         </div>
     );
@@ -449,15 +416,18 @@ function Step4({ data, onChange, errors }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
                 <FileUpload label="Aadhaar / Govt. Photo ID" required value={data.govtId}
-                    onChange={v => onChange('govtId', v)} error={errors.govtId} />
+                    onChange={v => onChange('govtId', v)} error={errors.govtId} accept=".pdf" />
+                <p className="text-[10px] text-muted-foreground mt-1 px-1">Must be PDF, Max 100KB</p>
             </div>
             <div>
                 <FileUpload label="Medical License Document" required value={data.licenseDoc}
-                    onChange={v => onChange('licenseDoc', v)} error={errors.licenseDoc} />
+                    onChange={v => onChange('licenseDoc', v)} error={errors.licenseDoc} accept=".pdf" />
+                <p className="text-[10px] text-muted-foreground mt-1 px-1">Must be PDF, Max 100KB</p>
             </div>
             <div className="sm:col-span-2">
-                <FileUpload label="Degree / Marksheet (Optional)" value={data.degreeCert}
-                    onChange={v => onChange('degreeCert', v)} error={errors.degreeCert} />
+                <FileUpload label="Degree / Marksheet (Mandatory)" required value={data.degreeCert}
+                    onChange={v => onChange('degreeCert', v)} error={errors.degreeCert} accept=".pdf" />
+                <p className="text-[10px] text-muted-foreground mt-1 px-1">Must be PDF, Max 100KB</p>
             </div>
 
             <div className="sm:col-span-2 space-y-3 pt-2">
@@ -554,7 +524,7 @@ export function DoctorOnboardingModal({ isOpen, onClose }) {
         return path;
     };
 
-    const savePendingDoctorApplication = async ({ folder, govtIdPath, licenseDocPath, degreeCertPath }) => {
+    const savePendingDoctorApplication = async ({ folder, photoPath, govtIdPath, licenseDocPath, degreeCertPath }) => {
         const { data: existingSessionData } = await supabase.auth.getSession();
         const existingSession = existingSessionData.session;
         try {
@@ -586,7 +556,7 @@ export function DoctorOnboardingModal({ isOpen, onClose }) {
                 throw new Error('Registration failed. Please try again.');
             }
 
-            const primaryClinic = data.clinics[0] || {};
+            const cityToSave = data.city === 'Other' ? data.manualCity : data.city;
             const now = new Date().toISOString();
 
             const { error: profileError } = await supabase
@@ -597,6 +567,7 @@ export function DoctorOnboardingModal({ isOpen, onClose }) {
                     full_name: data.fullName.trim(),
                     phone: data.phone.trim(),
                     profile_type: 'doctor',
+                    avatar_url: photoPath,
                     status: 'pending',
                     updated_at: now,
                 }, {
@@ -624,25 +595,19 @@ export function DoctorOnboardingModal({ isOpen, onClose }) {
                     institution: data.institution.trim(),
                     license_no: data.licenseNo.trim(),
                     nmc_no: data.nmcNo.trim(),
-                    clinic_name: primaryClinic.name?.trim() || null,
-                    clinic_address: primaryClinic.address?.trim() || null,
-                    city: primaryClinic.city?.trim() || null,
-                    state: primaryClinic.state || null,
+                    city: cityToSave?.trim() || null,
+                    state: data.state || null,
                     languages: data.languages,
-                    available_days: primaryClinic.availableDays || [],
-                    hours_from: primaryClinic.hoursFrom || null,
-                    hours_to: primaryClinic.hoursTo || null,
                     experience: data.experience ? Number(data.experience) : 0,
-                    consultation_fee: data.consultationFee ? Number(data.consultationFee) : 500,
                     status: 'Pending',
                     applied_at: now,
                     metadata: {
-                        clinics: data.clinics,
                         documents: {
                             govtId: govtIdPath,
                             licenseDoc: licenseDocPath,
                             degreeCert: degreeCertPath,
                         },
+                        avatar_url: photoPath,
                         storageFolder: folder,
                         source: 'landing-modal',
                     },
@@ -671,17 +636,16 @@ export function DoctorOnboardingModal({ isOpen, onClose }) {
         setSubmitting(true);
         setSubmitError('');
         try {
-            const emailSlug = data.email.trim().replace(/[^a-z0-9]/gi, '_');
-            const folder = `${emailSlug}_${Date.now()}`;
-
-            // 1. Upload documents to Supabase Storage anonymously (bucket must allow anon uploads,
-            //    or we use a signed URL). Paths are passed to the Edge Function.
-            const [govtIdPath, licenseDocPath, degreeCertPath] = await Promise.all([
+            const folder = `doctor_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            
+            const [photoPath, govtIdPath, licenseDocPath, degreeCertPath] = await Promise.all([
+                uploadFile(data.profilePhoto, folder, 'profile_photo'),
                 uploadFile(data.govtId, folder, 'govt_id'),
                 uploadFile(data.licenseDoc, folder, 'license_doc'),
                 uploadFile(data.degreeCert, folder, 'degree_cert'),
             ]);
 
+            const cityToSave = data.city === 'Other' ? data.manualCity : data.city;
             // 2. Call the register-doctor Edge Function (service-role, bypasses RLS)
             //    — creates auth user, profile, and pending_doctors row server-side
             const payload = {
@@ -700,9 +664,9 @@ export function DoctorOnboardingModal({ isOpen, onClose }) {
                 institution: data.institution.trim(),
                 additionalQualifications: data.additionalQualifications || null,
                 experience: data.experience || 0,
-                consultationFee: data.consultationFee || 500,
                 languages: data.languages,
-                clinics: data.clinics,
+                city: cityToSave,
+                state: data.state,
                 metadata: {
                     documents: {
                         govtId: govtIdPath,
@@ -753,13 +717,23 @@ export function DoctorOnboardingModal({ isOpen, onClose }) {
         }
     };
 
+    const scrollerRef = useRef(null);
+    const [showValidationHint, setShowValidationHint] = useState(false);
+
     const goNext = () => {
         const errs = validate(step, data);
-        if (Object.keys(errs).length) { setErrors(errs); return; }
+        if (Object.keys(errs).length) { 
+            setErrors(errs); 
+            setShowValidationHint(true);
+            scrollerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+            return; 
+        }
+        setShowValidationHint(false);
         setDirection(1);
         if (step === 4) { handleSubmit(); return; }
         setStep(s => s + 1);
         setErrors({});
+        scrollerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     const goBack = () => {
@@ -810,6 +784,17 @@ export function DoctorOnboardingModal({ isOpen, onClose }) {
                         className="fixed inset-0 z-[200] flex items-center justify-center p-4 pointer-events-none"
                     >
                         <div className="relative w-full max-w-2xl max-h-[90vh] bg-card rounded-3xl shadow-2xl overflow-hidden flex flex-col pointer-events-auto">
+                            
+                            {showValidationHint && (
+                                <motion.div 
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: 'auto', opacity: 1 }}
+                                    className="bg-red-50 text-red-600 px-6 py-2 text-xs font-semibold border-b border-red-100 flex items-center gap-2"
+                                >
+                                    <AlertCircle className="h-3 w-3" />
+                                    Please fix the errors below to continue.
+                                </motion.div>
+                            )}
 
                             {/* Gradient header */}
                             <div className="relative bg-gradient-to-br from-primary via-teal-500 to-teal-400 px-6 pt-6 pb-8 flex-shrink-0">
@@ -849,7 +834,7 @@ export function DoctorOnboardingModal({ isOpen, onClose }) {
                             </div>
 
                             {/* Body */}
-                            <div className="flex-1 overflow-y-auto">
+                            <div ref={scrollerRef} className="flex-1 overflow-y-auto">
                                 {submitted ? (
                                     <SuccessScreen onClose={handleClose} />
                                 ) : (

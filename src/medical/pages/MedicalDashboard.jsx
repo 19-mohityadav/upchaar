@@ -34,9 +34,20 @@ export default function MedicalDashboard() {
   const [doctorSecretKey, setDoctorSecretKey] = useState('');
   const [addingDoctor, setAddingDoctor] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true); 
+  const [appointments, setAppointments] = useState([]);
   const sidebarRef = useRef(null);
 
-  const stats = useMemo(() => ({ totalDoctors: staffDoctors.length, totalPatients: 0, todayAppointments: 0, totalRevenue: '0' }), [staffDoctors.length]);
+  const stats = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    const todayAppointments = appointments.filter(a => a.date?.startsWith(today));
+    const totalRev = appointments.reduce((sum, a) => sum + (a.fee || 0), 0);
+    return { 
+      totalDoctors: staffDoctors.length, 
+      totalPatients: [...new Set(appointments.map(a => a.patient_id))].length, 
+      todayAppointments: todayAppointments.length, 
+      totalRevenue: totalRev.toLocaleString() 
+    };
+  }, [staffDoctors.length, appointments]);
   const circumference = useMemo(() => 2 * Math.PI * 54, []);
 
   // Handle mobile resize
@@ -150,23 +161,28 @@ export default function MedicalDashboard() {
     }
   }, [fetchStaff]);
 
-  const fetchMedicals = useCallback(async () => {
-    // Keep for potential usage in Registered Nodes table
+  const fetchAppointments = useCallback(async () => {
+    if (!profile?.id) return;
     try {
-      const { data, error } = await supabase.from('medicals').select('*').order('created_at', { ascending: false });
+      const { data, error } = await supabase
+        .from('appointments')
+        .select('*')
+        .eq('organization_id', profile.id)
+        .order('date', { ascending: false });
       if (error) throw error;
-      setMedicals(data || []);
+      setAppointments(data || []);
     } catch (err) {
-      console.error('Error fetching medicals:', err.message);
+      console.error('Error fetching appointments:', err.message);
     }
-  }, []);
+  }, [profile?.id]);
 
   useEffect(() => { 
     if (profile?.id) {
       fetchStaff();
       fetchMedicals();
+      fetchAppointments();
     }
-  }, [profile?.id, fetchStaff, fetchMedicals]);
+  }, [profile?.id, fetchStaff, fetchMedicals, fetchAppointments]);
 
   const handleSignOut = useCallback(async () => { await signOut(); navigate('/login'); }, [signOut, navigate]);
   const handleNavClick = useCallback((label) => {
@@ -451,18 +467,23 @@ export default function MedicalDashboard() {
                 <span className="material-symbols-outlined text-teal-600">history</span> Activity
               </h3>
                 <div className="bg-white rounded-2xl p-5 sm:p-6" style={{ boxShadow: '0 4px 6px -1px rgb(0 0 0/0.05)' }}>
-                  {MOCK_ACTIVITY.map((item) => (
-                    <div key={item.id} className="flex gap-4 mb-6 last:mb-0">
-                      <div className="relative flex-shrink-0">
-                        {!item.isLast && <div className="w-0.5 bg-teal-100 absolute left-1.5 top-4 bottom-0" />}
-                        <div className="w-3 h-3 bg-teal-500 rounded-full border-2 border-white relative z-10 mt-0.5" />
+                  {appointments.length > 0 ? (
+                    appointments.slice(0, 5).map((item, idx) => (
+                      <div key={item.id} className="flex gap-4 mb-6 last:mb-0">
+                        <div className="relative flex-shrink-0">
+                          {idx !== appointments.slice(0, 5).length - 1 && <div className="w-0.5 bg-teal-100 absolute left-1.5 top-4 bottom-0" />}
+                          <div className="w-3 h-3 bg-teal-500 rounded-full border-2 border-white relative z-10 mt-0.5" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-gray-800">Appt: {item.patient_name}</p>
+                          <p className="text-[10px] text-gray-500">with Dr. {item.doctor_name}</p>
+                          <p className="text-xs text-teal-600 mt-1">{new Date(item.date).toLocaleDateString()} {item.time_slot}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-bold text-gray-800">{item.title}</p>
-                        <p className="text-xs text-teal-600 mt-1">{item.time}</p>
-                      </div>
-                    </div>
-                  ))}
+                    ))
+                  ) : (
+                    <p className="text-xs text-gray-500 text-center">No recent activity</p>
+                  )}
                 </div>
             </div>
           </div>

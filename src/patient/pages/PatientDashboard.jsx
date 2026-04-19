@@ -20,9 +20,11 @@ import { uploadAvatar } from '@/lib/uploadImage.js';
 import { supabase } from '@/lib/supabase.js';
 import ChangePasswordModal from '@/components/ChangePasswordModal.jsx';
 import Skeleton from 'react-loading-skeleton';
+import QueueStatusCard from '@/components/QueueStatusCard.jsx';
+import { toast, Toaster } from 'sonner';
 // ── Quick action cards shown on the dashboard ─────
 const QUICK_ACTIONS = [
-    { icon: Calendar, label: 'Book Appointment', desc: 'Schedule with a doctor', color: 'from-blue-500 to-indigo-500', href: '/doctors' },
+    { icon: Calendar, label: 'Book Appointment', desc: 'Schedule with a doctor', color: 'from-blue-500 to-indigo-500', href: '/appointment-options' },
     { icon: FileText, label: 'Medical Records', desc: 'View your health history', color: 'from-violet-500 to-purple-500', href: '/records' },
     { icon: Pill, label: 'Prescriptions', desc: 'Your current medications', color: 'from-orange-500 to-amber-500', href: '/records' },
     { icon: MapPin, label: 'Find Nearby', desc: 'Hospitals & clinics', color: 'from-emerald-500 to-teal-500', href: '/hospitals' },
@@ -150,7 +152,7 @@ const AppointmentsBanner = React.memo(function AppointmentsBanner({ patientId })
                     <p className="text-sm text-slate-500 font-medium">No upcoming appointments</p>
                     <p className="text-xs text-slate-400 mt-1">Book with a doctor to see your appointments here.</p>
                     <Link
-                        to="/doctors"
+                        to="/appointment-options"
                         className="inline-flex items-center gap-1.5 mt-4 px-4 py-2 rounded-xl bg-teal-500 text-white text-xs font-semibold hover:bg-teal-600 transition"
                     >
                         <Calendar size={13} /> Book Appointment
@@ -201,6 +203,54 @@ export default function PatientDashboard() {
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
     const [avatarError, setAvatarError] = useState('');
     const [changePwOpen, setChangePwOpen] = useState(false);
+    const [activeAppointment, setActiveAppointment] = useState(null);
+    const [mockQueuePosition, setMockQueuePosition] = useState(5);
+
+    // Fetch active appointment for queue tracking
+    useEffect(() => {
+        if (!patient?.id) return;
+        const today = new Date().toISOString().split('T')[0];
+        const todayStart = new Date(today + 'T00:00:00').toISOString();
+
+        supabase
+            .from('appointments')
+            .select('*')
+            .eq('patient_id', patient.id)
+            .gte('date', todayStart)
+            .order('date', { ascending: true })
+            .limit(1)
+            .then(({ data }) => {
+                if (data?.[0]) {
+                    setActiveAppointment(data[0]);
+                    setMockQueuePosition(data[0].queue_number || 5);
+                }
+            });
+    }, [patient?.id]);
+
+    // Live Queue Notification Simulation
+    useEffect(() => {
+        if (!activeAppointment || mockQueuePosition <= 0) return;
+        
+        const interval = setInterval(() => {
+            setMockQueuePosition(prev => {
+                const next = Math.max(0, prev - 1);
+                if (next < prev && next > 0) {
+                    toast.info(`Queue Update: ${next} people ahead of you`, {
+                        description: `Your appointment with ${activeAppointment.doctor_name} is getting closer!`,
+                        icon: '🔔'
+                    });
+                } else if (next === 0) {
+                    toast.success('Your Turn!', {
+                        description: 'Please proceed to the doctor\'s cabin now.',
+                        duration: 10000,
+                    });
+                }
+                return next;
+            });
+        }, 120000); // 2 minutes
+
+        return () => clearInterval(interval);
+    }, [activeAppointment, mockQueuePosition]);
 
     /**
      * handleAvatarChange
@@ -252,6 +302,7 @@ export default function PatientDashboard() {
 
     return (
         <>
+            <Toaster position="top-right" expand={false} richColors />
             <div className="space-y-8">
 
                 {/* ── Welcome hero ──────────────────── */}
@@ -321,6 +372,27 @@ export default function PatientDashboard() {
                             </span>
                         </div>
                     </motion.div>
+
+                {/* ── Active Queue Tracking ─────────── */}
+                <AnimatePresence>
+                    {activeAppointment && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -20 }}
+                            className="mb-8"
+                        >
+                            <h2 className="text-base font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                                <Activity size={18} className="text-teal-500" /> Live Queue Tracking
+                            </h2>
+                            <QueueStatusCard 
+                                appointment={activeAppointment} 
+                                currentServing={activeAppointment.queue_number - mockQueuePosition}
+                                onAction={() => navigate(`/records`)}
+                            />
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
                 {/* ── Upcoming Appointments Banner ─── */}
                 <AppointmentsBanner patientId={patient.id} />

@@ -48,6 +48,8 @@ const RecordsPage     = lazy(() => import('@/pages/Records'));
 import EmergencyPage   from '@/pages/Emergency';
 // const EmergencyPage   = lazy(() => import('@/pages/Emergency'));
 const BlogsPage       = lazy(() => import('@/pages/Blogs.jsx'));
+const AppointmentOptions = lazy(() => import('@/pages/AppointmentOptions.jsx'));
+const BookAppointment = lazy(() => import('@/pages/BookAppointment.jsx'));
 const BlogPostPage    = lazy(() => import('@/pages/BlogPost.jsx'));
 const TermsPage       = lazy(() => import('@/pages/Terms.jsx'));
 
@@ -145,6 +147,8 @@ export function AppRoutes() {
             {/* Feature pages share the AppLayout (sidebar/topbar) */}
             <Route path="/doctors" element={<ProtectedRoute><AppLayout><DoctorsPage /></AppLayout></ProtectedRoute>} />
             <Route path="/doctors/:id" element={<ProtectedRoute><AppLayout><DoctorDetailPage /></AppLayout></ProtectedRoute>} />
+            <Route path="/appointment-options" element={<AppLayout hideSidebar hideNavbar><AppointmentOptions /></AppLayout>} />
+            <Route path="/book-appointment" element={<AppLayout hideSidebar hideNavbar><BookAppointment /></AppLayout>} />
             <Route path="/diagnostics" element={<AppLayout><DiagnosticsPage /></AppLayout>} />
             <Route path="/hospitals" element={<AppLayout><HospitalsPage /></AppLayout>} />
             <Route path="/records" element={<AppLayout><RecordsPage /></AppLayout>} />
