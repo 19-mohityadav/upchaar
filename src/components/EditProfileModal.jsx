@@ -42,7 +42,7 @@ export default function EditProfileModal({ isOpen, onClose, profile }) {
                 .from('profiles')
                 .update({ full_name: fullName, phone: phone, updated_at: new Date().toISOString() })
                 .eq('id', profile.id);
-            
+
             if (dbErr) throw dbErr;
 
             setSuccess(true);
