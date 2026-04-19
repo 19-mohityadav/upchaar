@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
     Building2, CalendarDays, Clock3, IndianRupee, Users, ChevronRight, AlertCircle
 } from 'lucide-react';
@@ -17,6 +17,42 @@ const parseClinics = (clinicValue) => {
             .map(item => item.trim())
             .filter(Boolean)
     )];
+};
+const normalizeDay = (day) => (day || '').slice(0, 3).toLowerCase();
+
+const parseTimeMinutes = (timeValue) => {
+    const [hours = '0', minutes = '0'] = String(timeValue || '00:00').split(':');
+    return Number(hours) * 60 + Number(minutes);
+};
+
+const buildWaitMessage = (availableDays, hoursFrom, hoursTo) => {
+    const now = new Date();
+    const currentDay = now.toLocaleDateString('en-US', { weekday: 'short' });
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const startMinutes = parseTimeMinutes(hoursFrom);
+    const endMinutes = parseTimeMinutes(hoursTo);
+    const safeDays = availableDays?.length ? availableDays : [currentDay];
+    const orderedDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    if (safeDays.some(day => normalizeDay(day) === normalizeDay(currentDay)) && currentMinutes < startMinutes) {
+        const minutesLeft = startMinutes - currentMinutes;
+        const hrs = Math.floor(minutesLeft / 60);
+        const mins = minutesLeft % 60;
+        return hrs > 0 ? `${hrs} hr ${mins} min` : `${mins} min`;
+    }
+
+    if (safeDays.some(day => normalizeDay(day) === normalizeDay(currentDay)) && currentMinutes >= endMinutes) {
+        const nextDay = safeDays.find(day => normalizeDay(day) !== normalizeDay(currentDay)) || safeDays[0];
+        return `${nextDay} at ${hoursFrom}`;
+    }
+
+    const todayIndex = orderedDays.findIndex(day => normalizeDay(day) === normalizeDay(currentDay));
+    const nextDay = [...safeDays]
+        .sort((a, b) => orderedDays.findIndex(day => normalizeDay(day) === normalizeDay(a)) - orderedDays.findIndex(day => normalizeDay(day) === normalizeDay(b)))
+        .find(day => orderedDays.findIndex(item => normalizeDay(item) === normalizeDay(day)) >= todayIndex)
+        || safeDays[0];
+
+    return `${nextDay} at ${hoursFrom}`;
 };
 
 const FIXED_AVAILABLE_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -37,6 +73,48 @@ export default function DoctorDashboard() {
     const { doctor, doctorRecord } = useDoctor();
     const [appointments, setAppointments] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [updatingId, setUpdatingId] = useState(null);
+
+    const availableDays = doctor?.availableDays || doctorRecord?.available_days || FIXED_AVAILABLE_DAYS;
+    const hoursFrom = doctor?.hoursFrom || doctorRecord?.hours_from || FIXED_HOURS_FROM;
+    const hoursTo = doctor?.hoursTo || doctorRecord?.hours_to || FIXED_HOURS_TO;
+
+    const canStartConsultation = () => {
+        const now = new Date();
+        const currentDay = now.toLocaleDateString('en-US', { weekday: 'short' });
+        const currentMinutes = now.getHours() * 60 + now.getMinutes();
+        const startMinutes = parseTimeMinutes(hoursFrom);
+        const endMinutes = parseTimeMinutes(hoursTo);
+        const allowedDay = !availableDays.length || availableDays.some(day => normalizeDay(day) === normalizeDay(currentDay));
+        return allowedDay && currentMinutes >= startMinutes && currentMinutes < endMinutes;
+    };
+
+    const handleStart = async (appointmentId) => {
+        if (!canStartConsultation()) {
+            window.alert(`You can start in ${buildWaitMessage(availableDays, hoursFrom, hoursTo)}.`);
+            return;
+        }
+
+        setUpdatingId(appointmentId);
+        try {
+            const { error } = await supabase
+                .from('appointments')
+                .update({ status: 'In-Progress', started_at: new Date().toISOString() })
+                .eq('id', appointmentId);
+
+            if (error) throw error;
+
+            setAppointments(prev => prev.map(apt => (
+                apt.id === appointmentId ? { ...apt, status: 'In-Progress', started_at: new Date().toISOString() } : apt
+            )));
+            window.alert('Consultation started successfully!');
+        } catch (error) {
+            console.error('Failed to start consultation:', error.message);
+            window.alert('Failed to start consultation. Please try again.');
+        } finally {
+            setUpdatingId(null);
+        }
+    };
 
     useEffect(() => {
         if (!doctorRecord?.id) {
@@ -93,9 +171,12 @@ export default function DoctorDashboard() {
                 totalPatients: relatedAppointments.length,
                 todayPatients: relatedAppointments.filter(apt => String(apt.date || '').slice(0, 10) === today).length,
                 upcoming: relatedAppointments.find(apt => String(apt.date || '').slice(0, 10) >= today) || null,
+                appointments: relatedAppointments,
             };
         });
     }, [appointments, clinics, today]);
+
+    const [selectedClinic, setSelectedClinic] = useState(null);
 
     return (
         <div className="space-y-6 max-w-7xl mx-auto pb-8">
@@ -137,7 +218,7 @@ export default function DoctorDashboard() {
                     <div className="flex items-center justify-between mb-5">
                         <div>
                             <h2 className="font-bold text-slate-800 text-lg">My Clinics / Medicals</h2>
-                            <p className="text-sm text-slate-500 mt-1">Click a clinic to see booked patients and start consultations.</p>
+                            <p className="text-sm text-slate-500 mt-1">Click a clinic to see booked patients right here.</p>
                         </div>
                     </div>
 
@@ -155,7 +236,7 @@ export default function DoctorDashboard() {
                                     initial={{ opacity: 0, y: 12 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: index * 0.06 }}
-                                    onClick={() => navigate(`/doctor/clinics/${encodeURIComponent(clinic.clinicName)}`)}
+                                    onClick={() => setSelectedClinic(clinic)}
                                     className="text-left rounded-3xl border border-slate-200 bg-slate-50/70 hover:bg-white hover:border-teal-300 hover:shadow-md transition-all p-5"
                                 >
                                     <div className="flex items-center justify-between mb-4">
@@ -223,6 +304,80 @@ export default function DoctorDashboard() {
             <Skeleton name="appointments" loading={loading}>
                 <div className="text-sm text-slate-400">Appointments ready.</div>
             </Skeleton>
+
+            {/* In-page patients modal for selected clinic */}
+            <AnimatePresence>
+                {selectedClinic && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                            className="bg-white rounded-3xl shadow-xl w-full max-w-2xl overflow-hidden max-h-[90vh] flex flex-col"
+                        >
+                            <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-slate-50/50">
+                                <div>
+                                    <h3 className="font-bold text-slate-800 text-lg">Patients for {selectedClinic.clinicName}</h3>
+                                    <p className="text-xs text-slate-500 mt-0.5">Quick view of booked appointments</p>
+                                </div>
+                                <button
+                                    onClick={() => setSelectedClinic(null)}
+                                    className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 transition-colors"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                                </button>
+                            </div>
+                            <div className="p-5 overflow-y-auto flex-1">
+                                {selectedClinic.appointments?.length === 0 ? (
+                                    <div className="text-center py-10">
+                                        <p className="text-sm text-slate-500">No appointments booked yet.</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {selectedClinic.appointments.map(apt => (
+                                            <div key={apt.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl border border-slate-100 bg-white shadow-sm hover:shadow-md transition-shadow">
+                                                <div>
+                                                    <p className="font-bold text-slate-800">{apt.patient_name || apt.patient || 'Patient'}</p>
+                                                    <div className="flex items-center gap-2 mt-1 text-xs text-slate-500 font-medium">
+                                                        <span className="bg-slate-100 px-2 py-0.5 rounded-md">{formatDate(apt.date)}</span>
+                                                        <span className="bg-slate-100 px-2 py-0.5 rounded-md">{apt.time_slot || '-'}</span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <span className={cn(
+                                                        'px-2.5 py-1 rounded-full text-xs font-semibold border whitespace-nowrap',
+                                                        apt.status === 'Completed' ? 'bg-blue-50 text-blue-600 border-blue-200' :
+                                                            apt.status === 'In-Progress' ? 'bg-violet-50 text-violet-600 border-violet-200' :
+                                                            apt.status === 'Cancelled' ? 'bg-red-50 text-red-600 border-red-200' :
+                                                                    'bg-emerald-50 text-emerald-600 border-emerald-200'
+                                                    )}>
+                                                        {apt.status}
+                                                    </span>
+                                                    {apt.status === 'Scheduled' && (
+                                                        <button
+                                                            onClick={() => handleStart(apt.id)}
+                                                            disabled={updatingId === apt.id}
+                                                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors whitespace-nowrap disabled:opacity-50"
+                                                        >
+                                                            {updatingId === apt.id ? 'Starting...' : 'Start'}
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        onClick={() => navigate(`/doctor/clinics/${encodeURIComponent(selectedClinic.clinicName)}`)}
+                                                        className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-teal-50 text-teal-700 hover:bg-teal-100 transition-colors whitespace-nowrap"
+                                                    >
+                                                        Manage
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }
