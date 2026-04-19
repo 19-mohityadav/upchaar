@@ -6,6 +6,7 @@ import {
     Filter, ArrowRight, CheckCircle, ChevronLeft, 
     Stethoscope, Info, AlertCircle, Loader2 
 } from 'lucide-react';
+import { toast, Toaster } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,24 +16,7 @@ import { supabase } from '@/lib/supabase.js';
 import { useAuth } from '@/auth/AuthContext.jsx';
 
 // ── Static Data ──────────────────────────────────────
-const INDIAN_STATES = [
-    "Andhra Pradesh", "Assam", "Bihar", "Chhattisgarh", "Delhi", "Goa", "Gujarat", 
-    "Haryana", "Himachal Pradesh", "Jammu and Kashmir", "Jharkhand", "Karnataka", 
-    "Kerala", "Madhya Pradesh", "Maharashtra", "Odisha", "Punjab", "Rajasthan", 
-    "Tamil Nadu", "Telangana", "Uttar Pradesh", "Uttarakhand", "West Bengal"
-];
-
-// Major cities mapping (Simplified for demonstration)
-const CITIES_BY_STATE = {
-    "Maharashtra": ["Mumbai", "Pune", "Nagpur", "Thane", "Nashik"],
-    "Delhi": ["New Delhi", "North Delhi", "South Delhi"],
-    "Karnataka": ["Bengaluru", "Mysuru", "Hubballi", "Mangaluru"],
-    "Tamil Nadu": ["Chennai", "Coimbatore", "Madurai", "Salem"],
-    "Uttar Pradesh": ["Lucknow", "Kanpur", "Varanasi", "Agra", "Noida"],
-    "West Bengal": ["Kolkata", "Howrah", "Durgapur", "Siliguri"],
-    "Rajasthan": ["Jaipur", "Jodhpur", "Udaipur", "Kota"],
-    "Gujarat": ["Ahmedabad", "Surat", "Vadodara", "Rajkot"],
-};
+// Constants will be fetched dynamically
 
 export default function BookAppointment() {
     const navigate = useNavigate();
@@ -52,44 +36,110 @@ export default function BookAppointment() {
     const [selectedClinic, setSelectedClinic] = useState(null);
     const [selectedDate, setSelectedDate] = useState('');
     const [selectedSlot, setSelectedSlot] = useState('');
+    const [availableStates, setAvailableStates] = useState([]);
+    const [availableCities, setAvailableCities] = useState([]);
     
     // ── UI Flow State ────────────────────────────────
-    const [step, setStep] = useState(1); // 1: Search, 2: Clinic/Slot, 3: Confirmation
+    const [step, setStep] = useState(1); // 1: Search, 2: Clinic/Slot, 3: Details & OTP, 4: Payment, 5: Confirmation
     const [bookingLoading, setBookingLoading] = useState(false);
     const [bookingSuccess, setBookingSuccess] = useState(false);
 
+    // ── Patient Details State ────────────────────────
+    const [patientInfo, setPatientInfo] = useState({
+        name: user?.user_metadata?.full_name || '',
+        phone: user?.user_metadata?.phone || '',
+    });
+    const [otp, setOtp] = useState(['', '', '', '', '', '']);
+    const [otpVerified, setOtpVerified] = useState(false);
+    const [verifyingOtp, setVerifyingOtp] = useState(false);
+
+    // Update patient info when auth user changes
+    useEffect(() => {
+        if (user) {
+            setPatientInfo({
+                name: user.user_metadata?.full_name || '',
+                phone: user.user_metadata?.phone || '',
+            });
+        }
+    }, [user]);
+
+    // ── Fetch Available Locations ─────────────────────
+    useEffect(() => {
+        const fetchLocations = async () => {
+            const { data, error } = await supabase
+                .from('doctors')
+                .select('state')
+                .eq('status', 'Approved')
+                .not('state', 'is', null);
+            
+            if (!error && data) {
+                const states = [...new Set(data.map(d => d.state))].sort();
+                setAvailableStates(states);
+            }
+        };
+        fetchLocations();
+    }, []);
+
+    useEffect(() => {
+        if (!selectedState) {
+            setAvailableCities([]);
+            return;
+        }
+        const fetchCities = async () => {
+            const { data, error } = await supabase
+                .from('doctors')
+                .select('city')
+                .eq('status', 'Approved')
+                .eq('state', selectedState)
+                .not('city', 'is', null);
+            
+            if (!error && data) {
+                const cities = [...new Set(data.map(d => d.city))].sort();
+                setAvailableCities(cities);
+            }
+        };
+        fetchCities();
+    }, [selectedState]);
+
     // ── Geolocation ──────────────────────────────────
     const handleAutoDetect = () => {
+        if (detectingLocation) return;
         setDetectingLocation(true);
         if ("geolocation" in navigator) {
             navigator.geolocation.getCurrentPosition(
                 async (position) => {
-                    // In a real app, we'd use reverse geocoding here.
-                    // For now, let's mock the detection to Maharashtra/Mumbai for demo.
+                    // Mock detection for demo: using Manipur/jvhuvv since it's in the DB
                     setTimeout(() => {
-                        setSelectedState("Maharashtra");
-                        setSelectedCity("Mumbai");
+                        setSelectedState("Manipur");
+                        setSelectedCity("jvhuvv");
                         setDetectingLocation(false);
-                    }, 1500);
+                    }, 1000);
                 },
                 (error) => {
                     console.error("Geolocation error:", error);
                     setDetectingLocation(false);
-                }
+                },
+                { timeout: 5000 }
             );
         } else {
             setDetectingLocation(false);
         }
     };
 
+    // Auto-detect on mount
+    useEffect(() => {
+        handleAutoDetect();
+    }, []);
+
     // ── Fetch Doctors ────────────────────────────────
     useEffect(() => {
         const fetchDoctors = async () => {
             setLoading(true);
-            let query = supabase.from('doctors').select('*').eq('status', 'approved');
+            // Use 'Approved' (capital A) to match DB
+            let query = supabase.from('doctors').select('*').eq('status', 'Approved');
             
-            if (selectedState) query = query.ilike('metadata->>state', `%${selectedState}%`);
-            if (selectedCity) query = query.ilike('metadata->>city', `%${selectedCity}%`);
+            if (selectedState && selectedState !== '') query = query.ilike('state', `%${selectedState}%`);
+            if (selectedCity && selectedCity !== '' && selectedCity !== 'Other') query = query.ilike('city', `%${selectedCity}%`);
 
             const { data, error } = await query;
             if (!error) setDoctors(data || []);
@@ -123,33 +173,52 @@ export default function BookAppointment() {
         setStep(2);
     };
 
-    // ── Finalize Booking ─────────────────────────────
+    // ── Navigation & Actions ─────────────────────────
+    const handleConfirmSlots = () => {
+        setStep(3);
+    };
+
+    const handleVerifyOtp = () => {
+        setVerifyingOtp(true);
+        // Simulate OTP verification
+        setTimeout(() => {
+            setOtpVerified(true);
+            setVerifyingOtp(false);
+            setStep(4);
+        }, 1500);
+    };
+
     const handleConfirmBooking = async () => {
         setBookingLoading(true);
         
         // Sync to appointments table
         const appointmentData = {
-            patient_id: user?.id || null, // Allow guest for now if needed, though usually requires login
+            patient_id: user?.id || null,
+            patient_name: patientInfo.name,
             doctor_id: selectedDoctor.id,
+            doctor_name: selectedDoctor.full_name,
             organization_id: selectedClinic?.id,
             date: selectedDate,
             time_slot: selectedSlot,
-            status: 'confirmed',
-            type: 'non-queue',
-            metadata: {
-                doctor_name: selectedDoctor.full_name,
-                clinic_name: selectedClinic?.name,
-                patient_name: user?.user_metadata?.full_name || "Guest Patient"
-            }
+            status: 'Confirmed',
+            type: 'In-person',
+            fee: selectedDoctor.fees || 500,
+            queue_number: Math.floor(Math.random() * 20) + 1, // Mock queue number
+            specialization: selectedDoctor.specialization
         };
 
         const { error } = await supabase.from('appointments').insert([appointmentData]);
         
         if (!error) {
             setBookingSuccess(true);
-            setStep(3);
+            toast.success('Congratulations / Appointment Confirmed message', {
+                description: `Your appointment with ${selectedDoctor.full_name} is set for ${new Date(selectedDate).toDateString()}.`,
+                duration: 5000,
+            });
+            setStep(5);
         } else {
-            alert("Error booking appointment. Please try again.");
+            console.error("Booking error:", error);
+            toast.error("Error booking appointment. Please try again.");
         }
         setBookingLoading(false);
     };
@@ -175,11 +244,17 @@ export default function BookAppointment() {
                         )}
                         <div>
                             <h1 className="text-3xl font-bold text-slate-900 font-headline">
-                                {step === 1 ? 'Find Your Doctor' : step === 2 ? 'Schedule Appointment' : 'Booking Confirmed'}
+                                {step === 1 ? 'Find Your Doctor' : 
+                                 step === 2 ? 'Schedule Appointment' : 
+                                 step === 3 ? 'Patient Details' :
+                                 step === 4 ? 'Payment Summary' :
+                                 'Booking Confirmed'}
                             </h1>
                             <p className="text-slate-500">
                                 {step === 1 ? 'Search by location, specialty, or doctor name.' : 
                                  step === 2 ? 'Choose a clinic and time slot for your visit.' : 
+                                 step === 3 ? 'Confirm your contact information for verification.' :
+                                 step === 4 ? 'Review and complete your consultation payment.' :
                                  'Your appointment has been successfully scheduled.'}
                             </p>
                         </div>
@@ -206,7 +281,7 @@ export default function BookAppointment() {
                                                         <SelectValue placeholder="Select State" />
                                                     </SelectTrigger>
                                                     <SelectContent>
-                                                        {INDIAN_STATES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                                                        {availableStates.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                                                     </SelectContent>
                                                 </Select>
                                             </div>
@@ -217,7 +292,7 @@ export default function BookAppointment() {
                                                         <SelectValue placeholder="Select City" />
                                                     </SelectTrigger>
                                                     <SelectContent>
-                                                        {(CITIES_BY_STATE[selectedState] || []).map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                                                        {availableCities.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                                                         <SelectItem value="Other">Other</SelectItem>
                                                     </SelectContent>
                                                 </Select>
@@ -271,7 +346,7 @@ export default function BookAppointment() {
                                                                 <p className="text-emerald-600 text-sm font-medium">{doc.specialization}</p>
                                                                 <div className="flex items-center gap-1 text-xs text-slate-500 mt-1">
                                                                     <MapPin className="h-3 w-3" />
-                                                                    {doc.metadata?.city}, {doc.metadata?.state}
+                                                                    {doc.city}, {doc.state}
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -447,10 +522,11 @@ export default function BookAppointment() {
                                             {/* Confirm Button */}
                                             <Button 
                                                 className="w-full h-14 text-lg bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-500/20 mt-4 font-bold"
-                                                onClick={handleConfirmBooking}
-                                                disabled={!selectedDate || !selectedSlot || bookingLoading}
+                                                onClick={handleConfirmSlots}
+                                                disabled={!selectedDate || !selectedSlot}
                                             >
-                                                {bookingLoading ? <Loader2 className="animate-spin mr-2" /> : 'Confirm Appointment'}
+                                                Continue to Booking
+                                                <ArrowRight className="ml-2 h-5 w-5" />
                                             </Button>
                                         </CardContent>
                                     </Card>
@@ -458,8 +534,138 @@ export default function BookAppointment() {
                             </motion.div>
                         )}
 
-                        {/* STEP 3: SUCCESS */}
-                        {step === 3 && bookingSuccess && (
+                        {/* STEP 3: PATIENT DETAILS & OTP */}
+                        {step === 3 && (
+                            <motion.div
+                                key="step3"
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                                className="max-w-2xl mx-auto"
+                            >
+                                <Card className="border-none shadow-xl">
+                                    <CardContent className="p-8 space-y-8">
+                                        <div className="space-y-4">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                <div className="space-y-2">
+                                                    <label className="text-xs font-bold text-slate-500 uppercase">Patient Name</label>
+                                                    <Input 
+                                                        value={patientInfo.name} 
+                                                        onChange={(e) => setPatientInfo({...patientInfo, name: e.target.value})}
+                                                        placeholder="Enter full name"
+                                                        className="h-12"
+                                                    />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <label className="text-xs font-bold text-slate-500 uppercase">Phone Number</label>
+                                                    <Input 
+                                                        value={patientInfo.phone} 
+                                                        onChange={(e) => setPatientInfo({...patientInfo, phone: e.target.value})}
+                                                        placeholder="Enter phone number"
+                                                        className="h-12"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-4 border-t pt-8">
+                                            <div className="text-center">
+                                                <h3 className="font-bold text-slate-900">OTP Verification</h3>
+                                                <p className="text-sm text-slate-500">We've sent a code to your phone (Demo: 000000)</p>
+                                            </div>
+                                            <div className="flex justify-center gap-2">
+                                                {otp.map((digit, idx) => (
+                                                    <Input
+                                                        key={idx}
+                                                        type="text"
+                                                        maxLength={1}
+                                                        className="w-12 h-14 text-center text-xl font-bold rounded-xl border-2 focus:border-blue-500"
+                                                        value={digit}
+                                                        onChange={(e) => {
+                                                            const newOtp = [...otp];
+                                                            newOtp[idx] = e.target.value;
+                                                            setOtp(newOtp);
+                                                            if (e.target.value && idx < 5) {
+                                                                const next = e.target.nextElementSibling;
+                                                                if (next) next.focus();
+                                                            }
+                                                        }}
+                                                    />
+                                                ))}
+                                            </div>
+                                            <Button 
+                                                className="w-full h-14 bg-slate-900 hover:bg-slate-800 text-white font-bold"
+                                                onClick={handleVerifyOtp}
+                                                disabled={verifyingOtp || otp.join('').length < 6}
+                                            >
+                                                {verifyingOtp ? <Loader2 className="animate-spin mr-2" /> : 'Verify & Continue'}
+                                            </Button>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </motion.div>
+                        )}
+
+                        {/* STEP 4: PAYMENT SUMMARY */}
+                        {step === 4 && (
+                            <motion.div
+                                key="step4"
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                                className="max-w-xl mx-auto"
+                            >
+                                <Card className="border-none shadow-xl overflow-hidden">
+                                    <div className="bg-slate-900 p-6 text-white">
+                                        <h3 className="text-xl font-bold">Booking Summary</h3>
+                                        <p className="text-slate-400 text-sm">Review your consultation details</p>
+                                    </div>
+                                    <CardContent className="p-8 space-y-6">
+                                        <div className="space-y-4">
+                                            <div className="flex justify-between items-center text-sm">
+                                                <span className="text-slate-500">Doctor</span>
+                                                <span className="font-bold text-slate-900">{selectedDoctor.full_name}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-sm">
+                                                <span className="text-slate-500">Clinic</span>
+                                                <span className="font-bold text-slate-900">{selectedClinic?.name || 'In-Person'}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-sm">
+                                                <span className="text-slate-500">Date & Time</span>
+                                                <span className="font-bold text-slate-900">{new Date(selectedDate).toDateString()} at {selectedSlot}</span>
+                                            </div>
+                                            <div className="h-[1px] bg-slate-100 my-4" />
+                                            <div className="flex justify-between items-center text-sm">
+                                                <span className="text-slate-500">Consultation Fee</span>
+                                                <span className="font-bold">₹{selectedDoctor.fees || 500}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-sm">
+                                                <span className="text-slate-500">Booking Charges</span>
+                                                <span className="font-bold">₹50</span>
+                                            </div>
+                                            <div className="flex justify-between items-center text-lg pt-4 border-t font-black">
+                                                <span className="text-slate-900">Total Payable</span>
+                                                <span className="text-blue-600">₹{(selectedDoctor.fees || 500) + 50}</span>
+                                            </div>
+                                        </div>
+
+                                        <Button 
+                                            className="w-full h-14 bg-emerald-600 hover:bg-emerald-700 text-white text-lg font-bold shadow-xl shadow-emerald-500/20"
+                                            onClick={handleConfirmBooking}
+                                            disabled={bookingLoading}
+                                        >
+                                            {bookingLoading ? <Loader2 className="animate-spin mr-2" /> : 'Confirm & Pay Now'}
+                                        </Button>
+                                        <p className="text-[10px] text-center text-slate-400">
+                                            By clicking confirm, you agree to our terms of service and refund policy.
+                                        </p>
+                                    </CardContent>
+                                </Card>
+                            </motion.div>
+                        )}
+
+                        {/* STEP 5: SUCCESS */}
+                        {step === 5 && bookingSuccess && (
                             <motion.div 
                                 key="step3"
                                 initial={{ opacity: 0, scale: 0.9 }}
@@ -505,6 +711,7 @@ export default function BookAppointment() {
                         )}
                     </AnimatePresence>
                 </div>
+                <Toaster position="top-right" richColors />
             </div>
     );
 }
