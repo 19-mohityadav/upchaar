@@ -148,6 +148,21 @@ export default function MedicalDashboard() {
     }
   }, [profile?.id]);
 
+  const fetchMedicals = useCallback(async () => {
+    if (!profile?.id) return;
+    try {
+      const { data, error } = await supabase
+        .from('facilities')
+        .select('*')
+        .eq('type', 'medical')
+        .limit(10);
+      if (error) throw error;
+      setMedicals(data || []);
+    } catch (err) {
+      console.error('Error fetching medicals:', err.message);
+    }
+  }, [profile?.id]);
+
   const handleAddDoctor = useCallback(async (e) => {
     e.preventDefault();
     if (!doctorSecretKey.trim()) return;
