@@ -77,15 +77,6 @@ export default function MedicalDashboard() {
 
 
 
-  const fetchMedicals = useCallback(async () => {
-    try {
-      const { data, error } = await supabase.from('medicals').select('*').limit(10);
-      if (error) throw error;
-      setMedicals(data || []);
-    } catch (err) {
-      console.error('Error fetching medicals:', err.message);
-    }
-  }, []);
 
   const fetchStaff = useCallback(async () => {
     try {

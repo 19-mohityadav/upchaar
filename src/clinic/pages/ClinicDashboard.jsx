@@ -82,15 +82,6 @@ export default function ClinicDashboard() {
 
 
 
-  const fetchClinics = useCallback(async () => {
-    try {
-      const { data, error } = await supabase.from('clinics').select('*').limit(10);
-      if (error) throw error;
-      setClinics(data || []);
-    } catch (err) {
-      console.error('Error fetching clinics:', err.message);
-    }
-  }, []);
 
   const fetchStaff = useCallback(async () => {
     try {
