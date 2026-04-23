@@ -575,7 +575,7 @@ export default function MedicalDashboard() {
                                   </div>
                                 ))
                               ) : (
-                                <p className="text-[11px] text-gray-400 italic">Doctor hasn't set a timetable yet.</p>
+                                <p className="text-[11px] text-gray-400 italic">Doctor hasn&apos;t set a timetable yet.</p>
                               )}
                             </div>
                           )}
@@ -949,7 +949,7 @@ export default function MedicalDashboard() {
                                   </div>
                                 ))
                               ) : (
-                                <p className="text-[11px] text-gray-400 italic">Doctor hasn't set a timetable yet.</p>
+                                <p className="text-[11px] text-gray-400 italic">Doctor hasn&apos;t set a timetable yet.</p>
                               )}
                             </div>
                           )}
