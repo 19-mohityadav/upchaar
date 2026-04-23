@@ -250,7 +250,7 @@ export default function BookAppointmentQueued() {
             patient_name: patientInfo.name,
             doctor_id: selectedDoctor.id,
             doctor_name: selectedDoctor.full_name,
-            organization_id: selectedClinic?.profile_id || selectedClinic?.id,
+            organization_id: selectedClinic?.id,
             organization_type: selectedClinic?.organization_type || 'clinic',
             date: selectedDate,
             time_slot: selectedSlot,
@@ -291,7 +291,8 @@ export default function BookAppointmentQueued() {
         const dStr = new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long' }); // e.g. "Monday"
         
         // Find which timetables match clinic and day
-        const matchedOrgId = selectedClinic.profile_id || selectedClinic.id;
+        // Use internal org ID (medicals.id / clinics.id) to match timetable entries
+        const matchedOrgId = selectedClinic.id;
         const matched = doctorTimetables.filter(t => t.org_id === matchedOrgId && t.day === dStr);
         if (matched.length === 0) return [];
         
@@ -318,7 +319,8 @@ export default function BookAppointmentQueued() {
     // Which days has at least one active slot in that clinic?
     const daysWithSlots = useMemo(() => {
         if (!selectedClinic) return new Set();
-        const matchedOrgId = selectedClinic.profile_id || selectedClinic.id;
+        // Use internal org ID (medicals.id / clinics.id) to match timetable entries
+        const matchedOrgId = selectedClinic.id;
         return new Set(doctorTimetables.filter(t => t.org_id === matchedOrgId).map(t => {
             // Ensure the day format from timetable matches the Javascript short form (Mon, Tue)
             // Doctor timetables has full day name e.g. "Monday". Convert to short format for tracking.
