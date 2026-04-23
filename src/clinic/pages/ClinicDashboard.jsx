@@ -222,11 +222,27 @@ export default function ClinicDashboard() {
   const fetchAppointments = useCallback(async () => {
     if (!profile?.id) return;
     try {
-      const { data, error } = await supabase
+      // Resolve internal clinics.id for this profile
+      const { data: clinicRow } = await supabase
+        .from('clinics')
+        .select('id')
+        .eq('profile_id', profile.id)
+        .maybeSingle();
+      const internalOrgId = clinicRow?.id;
+
+      // Query appointments using internal org ID (new data) OR profile ID (legacy data)
+      let query = supabase
         .from('appointments')
         .select('*')
-        .eq('organization_id', profile.id)
         .order('date', { ascending: false });
+
+      if (internalOrgId) {
+        query = query.or(`organization_id.eq.${internalOrgId},organization_id.eq.${profile.id}`);
+      } else {
+        query = query.eq('organization_id', profile.id);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       setAppointments(data || []);
     } catch (err) {
