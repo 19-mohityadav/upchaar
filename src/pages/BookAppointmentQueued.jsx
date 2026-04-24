@@ -3,9 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     Search, MapPin, Calendar as CalendarIcon, Clock, 
-    ArrowRight, CheckCircle, ChevronLeft, 
-    Info, AlertCircle, Loader2,
-    Sparkles, Bell, Activity, BotMessageSquare, Hash
+    Filter, ArrowRight, CheckCircle, ChevronLeft, 
+    Stethoscope, Info, AlertCircle, Loader2 
 } from 'lucide-react';
 import { toast, Toaster } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -19,11 +18,18 @@ import { useAuth } from '@/auth/AuthContext.jsx';
 // ── Static Data ──────────────────────────────────────
 // Constants will be fetched dynamically
 
-export default function BookAppointment() {
+export default function BookAppointmentQueued() {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
-    const { user } = useAuth();
+    const { user, loading: authLoading } = useAuth();
     
+    useEffect(() => {
+        if (!authLoading && !user) {
+            navigate('/login', { state: { from: '/book-appointment-queued' } });
+            toast.error("You must be logged in to book a queued appointment.");
+        }
+    }, [user, authLoading, navigate]);
+
     // ── Search & Filter State ────────────────────────
     const [selectedState, setSelectedState] = useState('');
     const [selectedCity, setSelectedCity] = useState('');
@@ -41,6 +47,7 @@ export default function BookAppointment() {
     const [availableStates, setAvailableStates] = useState([]);
     const [availableCities, setAvailableCities] = useState([]);
     const [doctorTimetables, setDoctorTimetables] = useState([]);
+    const [availableScheduleDays, setAvailableScheduleDays] = useState([]);
     
     // ── UI Flow State ────────────────────────────────
     const [step, setStep] = useState(1); // 1: Search, 2: Clinic/Slot, 3: Details & OTP, 4: Payment, 5: Confirmation
@@ -111,6 +118,7 @@ export default function BookAppointment() {
         if ("geolocation" in navigator) {
             navigator.geolocation.getCurrentPosition(
                 async (position) => {
+                    // Mock detection for demo: using Manipur/jvhuvv since it's in the DB
                     setTimeout(() => {
                         setSelectedState("Manipur");
                         setSelectedCity("jvhuvv");
@@ -128,7 +136,8 @@ export default function BookAppointment() {
         }
     }, [detectingLocation]);
 
-    // No auto-detect on mount — users arrive via a doctorId link and skip Step 1
+    // Auto-detect only if user is on step 1 (browsing, no doctorId in URL)
+    // Removed auto-detect on mount since most users arrive via a doctorId link
 
     // ── Fetch Doctors ────────────────────────────────
     useEffect(() => {
@@ -146,7 +155,38 @@ export default function BookAppointment() {
         fetchDoctors();
     }, [selectedState, selectedCity]);
 
-    // ── Handle Deep Link Doctor & Redirect ──────────────────────
+    // ── Handle Deep Link Doctor ──────────────────────────────────────
+    useEffect(() => {
+        const doctorId = searchParams.get('doctorId');
+        if (!doctorId) {
+            // No doctor ID in URL — stay on step 1 for searching
+            return;
+        }
+
+        // Fetch this doctor directly by ID, regardless of the filter state
+        const fetchAndSelectDoctor = async () => {
+            setLoading(true);
+            const { data, error } = await supabase
+                .from('doctors')
+                .select('*')
+                .eq('id', doctorId)
+                .maybeSingle();
+
+            if (error || !data) {
+                console.error('Doctor not found:', error);
+                setLoading(false);
+                navigate('/doctors');
+                return;
+            }
+
+            await handleSelectDoctor(data);
+        };
+
+        fetchAndSelectDoctor();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchParams]);
+
+    // ── Fetch Clinics for Selected Doctor ────────────
     const handleSelectDoctor = async (doc) => {
         setSelectedDoctor(doc);
         setLoading(true);
@@ -154,6 +194,7 @@ export default function BookAppointment() {
         setSelectedDate('');
         setSelectedSlot('');
         
+        // Fetch linked clinics via staff_links
         const { data: staffData, error: staffError } = await supabase
             .from('staff_links')
             .select('organization_id, organization_type')
@@ -178,6 +219,7 @@ export default function BookAppointment() {
             setClinics([]);
         }
 
+        // Fetch doctor timetables for all linked orgs
         const { data: ttData, error: ttError } = await supabase
             .from('doctor_timetables')
             .select('*')
@@ -192,45 +234,18 @@ export default function BookAppointment() {
         setStep(2);
     };
 
-    // ── Handle Deep Link Doctor ──────────────────────────────────────
-    useEffect(() => {
-        const doctorId = searchParams.get('doctorId');
-        if (!doctorId) return;
-
-        // Fetch this doctor directly by ID — no dependency on the filtered list
-        const fetchAndSelectDoctor = async () => {
-            setLoading(true);
-            const { data, error } = await supabase
-                .from('doctors')
-                .select('*')
-                .eq('id', doctorId)
-                .maybeSingle();
-
-            if (error || !data) {
-                console.error('Doctor not found:', error);
-                setLoading(false);
-                navigate('/doctors');
-                return;
-            }
-
-            await handleSelectDoctor(data);
-        };
-
-        fetchAndSelectDoctor();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchParams]);
-
     // ── Navigation & Actions ─────────────────────────
     const handleConfirmSlots = () => {
         if (user) {
-            setStep(4);
+            setStep(4); // Skip OTP for logged-in users
         } else {
-            setStep(3);
+            setStep(3); // Prompt for OTP
         }
     };
 
     const handleVerifyOtp = () => {
         setVerifyingOtp(true);
+        // Simulate OTP verification
         setTimeout(() => {
             setOtpVerified(true);
             setVerifyingOtp(false);
@@ -242,48 +257,56 @@ export default function BookAppointment() {
         setBookingLoading(true);
         
         try {
-            // For guest (non-logged-in) users patient_id must be explicitly null
-            // so the RLS "Allow guest appointment booking" policy passes.
-            // For logged-in users it must match auth.uid().
+            // Calculate real queue number: count existing appointments for same doctor + org + date + slot
+            const { count, error: countError } = await supabase
+                .from('appointments')
+                .select('id', { count: 'exact', head: true })
+                .eq('doctor_id', selectedDoctor.id)
+                .eq('organization_id', selectedClinic?.id)
+                .eq('date', selectedDate)
+                .eq('time_slot', selectedSlot);
+
+            const realQueueNumber = countError ? 1 : (count ?? 0) + 1;
+
+            // Sync to appointments table
             const appointmentData = {
-                patient_id: user?.id ?? null,
+                patient_id: user?.id || null,
                 patient_name: patientInfo.name,
                 doctor_id: selectedDoctor.id,
                 doctor_name: selectedDoctor.full_name,
-                organization_id: selectedClinic?.id ?? null,
-                organization_type: selectedClinic?.organization_type ?? 'clinic',
+                organization_id: selectedClinic?.id,
+                organization_type: selectedClinic?.organization_type || 'clinic',
                 date: selectedDate,
                 time_slot: selectedSlot,
                 status: 'Confirmed',
-                type: 'In-person',       // DB constraint allows: 'In-person' | 'Online'
+                type: 'In-person',
                 fee: selectedDoctor.fees || 500,
-                queue_number: null,       // no queue for scheduled bookings
-                specialization: selectedDoctor.specialization ?? null,
+                queue_number: realQueueNumber,
+                specialization: selectedDoctor.specialization
             };
 
             const { error } = await supabase.from('appointments').insert([appointmentData]);
-            
+        
             if (!error) {
                 setBookingSuccess(true);
                 toast.success('Appointment Confirmed!', {
-                    description: `Your appointment with ${selectedDoctor.full_name} is set for ${new Date(selectedDate).toDateString()} at ${selectedSlot}.`,
+                    description: `Your appointment with ${selectedDoctor.full_name} is set for ${new Date(selectedDate).toDateString()}. Queue #${realQueueNumber}`,
                     duration: 5000,
                 });
                 setStep(5);
             } else {
-                console.error('Booking error:', error);
-                toast.error(`Booking failed: ${error.message}`);
+                console.error("Booking error:", error);
+                toast.error("Error booking appointment. Please try again.");
             }
         } catch (err) {
-            console.error('Unexpected error:', err);
-            toast.error('Something went wrong. Please try again.');
+            console.error("Unexpected error:", err);
+            toast.error("Something went wrong. Please try again.");
         } finally {
             setBookingLoading(false);
         }
     };
 
-
-
+    // Derived: filtered doctors by search term
     const filteredDoctors = useMemo(() => {
         return doctors.filter(d => 
             d.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -291,13 +314,18 @@ export default function BookAppointment() {
         );
     }, [doctors, searchTerm]);
 
+    // Calculate slots for the currently selected date and clinic
     const availableSlots = useMemo(() => {
         if (!selectedClinic || !selectedDate) return [];
-        const dStr = new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long' });
+        const dStr = new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long' }); // e.g. "Monday"
+        
+        // Find which timetables match clinic and day
+        // Use internal org ID (medicals.id / clinics.id) to match timetable entries
         const matchedOrgId = selectedClinic.id;
         const matched = doctorTimetables.filter(t => t.org_id === matchedOrgId && t.day === dStr);
         if (matched.length === 0) return [];
         
+        // Convert ranges like '09:00' to '12:00' into 30m slots
         const slots = [];
         matched.forEach(t => {
             let [h1, m1] = t.time_from.split(':').map(Number);
@@ -317,10 +345,14 @@ export default function BookAppointment() {
         return [...new Set(slots)];
     }, [selectedClinic, selectedDate, doctorTimetables]);
 
+    // Which days has at least one active slot in that clinic?
     const daysWithSlots = useMemo(() => {
         if (!selectedClinic) return new Set();
+        // Use internal org ID (medicals.id / clinics.id) to match timetable entries
         const matchedOrgId = selectedClinic.id;
         return new Set(doctorTimetables.filter(t => t.org_id === matchedOrgId).map(t => {
+            // Ensure the day format from timetable matches the Javascript short form (Mon, Tue)
+            // Doctor timetables has full day name e.g. "Monday". Convert to short format for tracking.
             return t.day.substring(0, 3);
         }));
     }, [selectedClinic, doctorTimetables]);
@@ -343,7 +375,6 @@ export default function BookAppointment() {
                             </Button>
                         )}
                         <div>
-
                             <h1 className="text-3xl font-bold text-slate-900 font-headline">
                                 {step === 1 ? 'Find Your Doctor' : 
                                  step === 2 ? 'Schedule Appointment' : 
@@ -525,46 +556,21 @@ export default function BookAppointment() {
                                         </CardContent>
                                     </Card>
 
-                                    {/* Info + Upsell Card */}
-                                    <Card className="border-none bg-gradient-to-br from-slate-800 to-slate-900 text-white shadow-xl overflow-hidden relative">
-                                        <div className="absolute -bottom-6 -right-6 opacity-5">
-                                            <Sparkles size={140} />
+                                    <Card className="border-none bg-blue-600 text-white shadow-lg overflow-hidden relative">
+                                        <div className="absolute top-0 right-0 p-4 opacity-10">
+                                            <Info size={120} />
                                         </div>
-                                        <CardContent className="p-6 space-y-4 relative z-10">
+                                        <CardContent className="p-6 space-y-4">
                                             <div className="flex items-center gap-2">
-                                                <AlertCircle size={18} className="text-amber-400" />
-                                                <h3 className="font-bold text-sm">Heads up!</h3>
+                                                <AlertCircle size={20} />
+                                                <h3 className="font-bold">Important Info</h3>
                                             </div>
-                                            <p className="text-slate-300 text-sm leading-relaxed">
-                                                Please arrive <span className="text-white font-semibold">10 minutes early</span>. Since this is a scheduled booking, you <span className="text-amber-300 font-semibold">won&apos;t have access</span> to a personal dashboard, live queue tracking, or AI notifications.
+                                            <p className="text-blue-100 text-sm">
+                                                Please arrive 10 minutes before your scheduled time. 
+                                                You can manage your booking in the patient dashboard.
                                             </p>
-                                            <div className="border-t border-white/10 pt-4 space-y-2">
-                                                <p className="text-[11px] font-black uppercase tracking-widest text-blue-400 flex items-center gap-1">
-                                                    <Sparkles size={11} /> Queue-Based unlocks
-                                                </p>
-                                                {[
-                                                    { icon: <Hash size={12} />, label: 'Live queue number & position' },
-                                                    { icon: <Activity size={12} />, label: 'Real-time queue status' },
-                                                    { icon: <Bell size={12} />, label: 'Prescription & appointment alerts' },
-                                                    { icon: <BotMessageSquare size={12} />, label: 'AI agent call when your turn nears' },
-                                                ].map((f, i) => (
-                                                    <div key={i} className="flex items-center gap-2 text-xs text-slate-300">
-                                                        <span className="text-blue-400">{f.icon}</span>
-                                                        {f.label}
-                                                    </div>
-                                                ))}
-                                            </div>
-                                            <Button
-                                                size="sm"
-                                                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs h-9 mt-1"
-                                                onClick={() => navigate('/register')}
-                                            >
-                                                Register &amp; Book with Queue Instead
-                                                <ArrowRight size={12} className="ml-1" />
-                                            </Button>
                                         </CardContent>
                                     </Card>
-
                                 </div>
 
                                 {/* Right: Selection Form */}
@@ -757,7 +763,7 @@ export default function BookAppointment() {
                                                 onClick={handleVerifyOtp}
                                                 disabled={verifyingOtp || otp.join('').length < 6}
                                             >
-                                                {verifyingOtp ? <Loader2 className="animate-spin mr-2" /> : "Verify & Continue"}
+                                                {verifyingOtp ? <Loader2 className="animate-spin mr-2" /> : 'Verify & Continue'}
                                             </Button>
                                         </div>
                                     </CardContent>
@@ -826,106 +832,45 @@ export default function BookAppointment() {
                         {/* STEP 5: SUCCESS */}
                         {step === 5 && bookingSuccess && (
                             <motion.div 
-                                key="step5"
+                                key="step3"
                                 initial={{ opacity: 0, scale: 0.9 }}
                                 animate={{ opacity: 1, scale: 1 }}
-                                className="max-w-2xl mx-auto space-y-6 py-8"
+                                className="max-w-xl mx-auto text-center space-y-8 py-12"
                             >
-                                {/* Confirmation Header */}
-                                <div className="text-center space-y-4">
-                                    <div className="h-24 w-24 bg-emerald-100 rounded-full flex items-center justify-center mx-auto text-emerald-600">
-                                        <motion.div
-                                            initial={{ scale: 0 }}
-                                            animate={{ scale: 1 }}
-                                            transition={{ type: 'spring', stiffness: 200, delay: 0.1 }}
-                                        >
-                                            <CheckCircle size={52} strokeWidth={1.5} />
-                                        </motion.div>
-                                    </div>
-                                    <div>
-                                        <h2 className="text-3xl font-bold text-slate-900">Appointment Confirmed!</h2>
-                                        <p className="text-slate-500 mt-2">
-                                            Your appointment with{' '}
-                                            <span className="text-emerald-600 font-bold">{selectedDoctor?.full_name}</span>{' '}
-                                            is scheduled for{' '}
-                                            <span className="font-semibold text-slate-800">{new Date(selectedDate).toDateString()}</span>{' '}
-                                            at{' '}
-                                            <span className="font-semibold text-slate-800">{selectedSlot}</span>.
-                                        </p>
-                                    </div>
+                                <div className="h-24 w-24 bg-emerald-100 rounded-full flex items-center justify-center mx-auto text-emerald-600 animate-bounce">
+                                    <CheckCircle size={48} />
                                 </div>
-
-                                {/* Booking Summary Card */}
-                                <Card className="border border-emerald-100 shadow-md bg-emerald-50/40">
-                                    <CardContent className="p-5 space-y-3">
+                                <div className="space-y-4">
+                                    <h2 className="text-4xl font-bold text-slate-900">Appointment Confirmed!</h2>
+                                    <p className="text-slate-500 text-lg">
+                                        Your session with <span className="text-emerald-600 font-bold">{selectedDoctor.full_name}</span> is booked for <span className="text-slate-900 font-medium">{new Date(selectedDate).toDateString()}</span> at <span className="text-slate-900 font-medium">{selectedSlot}</span>.
+                                    </p>
+                                </div>
+                                
+                                <Card className="border-none shadow-lg bg-emerald-50/50 p-6 text-left">
+                                    <div className="space-y-3">
                                         <div className="flex justify-between text-sm">
-                                            <span className="text-slate-500">Doctor</span>
-                                            <span className="font-bold text-slate-900">{selectedDoctor?.full_name}</span>
+                                            <span className="text-slate-500">Practice:</span>
+                                            <span className="font-bold text-slate-900">{selectedClinic?.name || 'In-Person'}</span>
                                         </div>
                                         <div className="flex justify-between text-sm">
-                                            <span className="text-slate-500">Clinic / Hospital</span>
-                                            <span className="font-bold text-slate-900">{selectedClinic?.name || '—'}</span>
+                                            <span className="text-slate-500">Booking ID:</span>
+                                            <span className="font-mono text-xs text-slate-400">#UP-{Math.random().toString(36).substr(2, 9).toUpperCase()}</span>
                                         </div>
-                                        <div className="flex justify-between text-sm">
-                                            <span className="text-slate-500">Date &amp; Time</span>
-                                            <span className="font-bold text-slate-900">{new Date(selectedDate).toDateString()} · {selectedSlot}</span>
-                                        </div>
-                                        <div className="flex justify-between text-sm border-t pt-3 mt-1">
-                                            <span className="text-slate-500">Status</span>
-                                            <span className="font-bold text-emerald-600">Confirmed ✓</span>
-                                        </div>
-                                    </CardContent>
+                                    </div>
                                 </Card>
 
-                                {/* Upsell: Queue-Based Benefits */}
-                                <motion.div
-                                    initial={{ opacity: 0, y: 16 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: 0.3 }}
-                                >
-                                    <Card className="border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 shadow-lg overflow-hidden">
-                                        <CardContent className="p-6">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <Sparkles className="h-5 w-5 text-blue-600" />
-                                                <span className="text-xs font-black uppercase tracking-widest text-blue-500">Upgrade Your Experience</span>
-                                            </div>
-                                            <h3 className="text-lg font-extrabold text-slate-900 mb-1">
-                                                Want more with Queue-Based Booking?
-                                            </h3>
-                                            <p className="text-sm text-slate-500 mb-5">
-                                                Register and book through the queue system to unlock a full personal dashboard with real-time features.
-                                            </p>
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
-                                                {[
-                                                    { icon: <Hash className="h-4 w-4 text-blue-600" />, title: 'Live Queue Number', desc: 'See your exact position in the doctor\'s queue in real time.' },
-                                                    { icon: <Activity className="h-4 w-4 text-emerald-600" />, title: 'Current Queue Status', desc: 'Know live how many patients are ahead of you.' },
-                                                    { icon: <Bell className="h-4 w-4 text-amber-500" />, title: 'Prescription Notifications', desc: 'Receive prescription updates and reminders directly.' },
-                                                    { icon: <BotMessageSquare className="h-4 w-4 text-violet-600" />, title: 'AI Calling Agent', desc: 'Get notified by our AI agent when your turn is approaching.' },
-                                                ].map((item, i) => (
-                                                    <div key={i} className="flex items-start gap-3 bg-white/70 rounded-xl p-3 border border-white shadow-sm">
-                                                        <div className="mt-0.5 shrink-0 h-7 w-7 rounded-lg bg-slate-50 flex items-center justify-center">
-                                                            {item.icon}
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-sm font-bold text-slate-800">{item.title}</p>
-                                                            <p className="text-xs text-slate-500 mt-0.5">{item.desc}</p>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                            <Button
-                                                className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-lg shadow-blue-500/20 group"
-                                                onClick={() => navigate('/register')}
-                                            >
-                                                Create Free Account &amp; Book with Queue
-                                                <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
-                                            </Button>
-                                        </CardContent>
-                                    </Card>
-                                </motion.div>
-
-                                <p className="text-center text-slate-400 text-xs">
-                                    A confirmation note has been saved. Please arrive 10 minutes before your scheduled time.
+                                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                                    <Button className="h-12 px-8 font-bold" onClick={() => navigate('/patient/dashboard')}>
+                                        Go to My Dashboard
+                                    </Button>
+                                    <Button variant="outline" className="h-12 px-8 font-bold" onClick={() => window.print()}>
+                                        Print Receipt
+                                    </Button>
+                                </div>
+                                
+                                <p className="text-slate-400 text-sm">
+                                    A confirmation SMS has been sent to your registered mobile number.
                                 </p>
                             </motion.div>
                         )}

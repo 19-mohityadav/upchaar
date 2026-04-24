@@ -44,12 +44,14 @@ const DoctorsPage     = lazy(() => import('@/pages/Doctors'));
 const DoctorDetailPage = lazy(() => import('@/pages/DoctorDetail.jsx'));
 const DiagnosticsPage = lazy(() => import('@/pages/Diagnostics'));
 const HospitalsPage   = lazy(() => import('@/pages/Hospitals'));
+const MedicalsPage    = lazy(() => import('@/pages/Medicals.jsx'));
 const RecordsPage     = lazy(() => import('@/pages/Records'));
 import EmergencyPage   from '@/pages/Emergency';
 // const EmergencyPage   = lazy(() => import('@/pages/Emergency'));
 const BlogsPage       = lazy(() => import('@/pages/Blogs.jsx'));
 const AppointmentOptions = lazy(() => import('@/pages/AppointmentOptions.jsx'));
 const BookAppointment = lazy(() => import('@/pages/BookAppointment.jsx'));
+const BookAppointmentQueued = lazy(() => import('@/pages/BookAppointmentQueued.jsx'));
 const BlogPostPage    = lazy(() => import('@/pages/BlogPost.jsx'));
 const TermsPage       = lazy(() => import('@/pages/Terms.jsx'));
 const PrivacyPolicyPage = lazy(() => import('@/pages/PrivacyPolicy.jsx'));
@@ -96,6 +98,7 @@ const BloggerProfile  = lazy(() => import('@/blog/pages/BloggerProfile.jsx'));
 // ── MEDICAL & CLINIC pages ───────────
 const MedicalDashboard = lazy(() => import('@/medical/pages/MedicalDashboard.jsx'));
 const ClinicDashboard = lazy(() => import('@/clinic/pages/ClinicDashboard.jsx'));
+const DiagnosticDashboard = lazy(() => import('@/diagnostic/pages/DiagnosticDashboard.jsx'));
 
 // ── Minimal loading fallback ───────────────────────────
 const PageLoader = () => (
@@ -151,8 +154,10 @@ export function AppRoutes() {
             <Route path="/doctors/:id" element={<ProtectedRoute><AppLayout><DoctorDetailPage /></AppLayout></ProtectedRoute>} />
             <Route path="/appointment-options" element={<AppLayout hideSidebar hideNavbar><AppointmentOptions /></AppLayout>} />
             <Route path="/book-appointment" element={<AppLayout hideSidebar hideNavbar><BookAppointment /></AppLayout>} />
+            <Route path="/book-appointment-queued" element={<AppLayout hideSidebar hideNavbar><BookAppointmentQueued /></AppLayout>} />
             <Route path="/diagnostics" element={<AppLayout><DiagnosticsPage /></AppLayout>} />
             <Route path="/hospitals" element={<AppLayout><HospitalsPage /></AppLayout>} />
+            <Route path="/medicals" element={<AppLayout><MedicalsPage /></AppLayout>} />
             <Route path="/records" element={<AppLayout><RecordsPage /></AppLayout>} />
             <Route path="/emergency" element={<EmergencyPage />} />
 
@@ -240,6 +245,7 @@ export function AppRoutes() {
                 ═══════════════════════════════════════ */}
             <Route path="/medical/dashboard" element={<RequireAuth><MedicalDashboard /></RequireAuth>} />
             <Route path="/clinic/dashboard" element={<RequireAuth><ClinicDashboard /></RequireAuth>} />
+            <Route path="/diagnostic/dashboard" element={<RequireAuth><DiagnosticDashboard /></RequireAuth>} />
 
         </Routes>
         </Suspense>

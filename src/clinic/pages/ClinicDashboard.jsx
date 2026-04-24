@@ -38,7 +38,6 @@ export default function ClinicDashboard() {
   const [appointments, setAppointments] = useState([]);
   const [timetables, setTimetables] = useState({});
   const [expandedDoctor, setExpandedDoctor] = useState(null);
-  const [selectedDoctorForAppointments, setSelectedDoctorForAppointments] = useState(null);
   const sidebarRef = useRef(null);
 
   const stats = useMemo(() => {
@@ -222,11 +221,27 @@ export default function ClinicDashboard() {
   const fetchAppointments = useCallback(async () => {
     if (!profile?.id) return;
     try {
-      const { data, error } = await supabase
+      // Resolve internal clinics.id for this profile
+      const { data: clinicRow } = await supabase
+        .from('clinics')
+        .select('id')
+        .eq('profile_id', profile.id)
+        .maybeSingle();
+      const internalOrgId = clinicRow?.id;
+
+      // Query appointments using internal org ID (new data) OR profile ID (legacy data)
+      let query = supabase
         .from('appointments')
         .select('*')
-        .eq('organization_id', profile.id)
         .order('date', { ascending: false });
+
+      if (internalOrgId) {
+        query = query.or(`organization_id.eq.${internalOrgId},organization_id.eq.${profile.id}`);
+      } else {
+        query = query.eq('organization_id', profile.id);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       setAppointments(data || []);
     } catch (err) {
@@ -242,7 +257,11 @@ export default function ClinicDashboard() {
     }
   }, [profile?.id, fetchStaff, fetchClinics, fetchAppointments]);
 
-  const handleSignOut = useCallback(async () => { await signOut(); navigate('/login'); }, [signOut, navigate]);
+  const handleSignOut = useCallback(async () => {
+    if (!window.confirm('Are you sure you want to sign out?')) return;
+    await signOut();
+    navigate('/login');
+  }, [signOut, navigate]);
   const handleNavClick = useCallback((label) => {
     setActiveNav(label);
     if (window.innerWidth < 1024) setSidebarOpen(false);
@@ -385,7 +404,7 @@ export default function ClinicDashboard() {
               STAT_CARDS.map((s) => (
                 <div key={s.label}
                   className={`bg-white p-4 sm:p-6 rounded-2xl border-l-4 border-teal-500 flex items-center gap-3 sm:gap-4`}
-                  style={{ boxShadow: '0 4px 6px -1px rgb(0 0 0/0.05),0 2px 4px -2px rgb(0 0 0/0.05)' }}>
+                  style={{ boxShadow: '0 4px 6px -1px rgb(0 0 0/0.05), 0 2px 4px -2px rgb(0 0 0/0.05)' }}>
                   <div className={`w-10 h-10 sm:w-12 sm:h-12 bg-teal-50 rounded-xl flex items-center justify-center text-teal-600 flex-shrink-0`}>
                     <span className="material-symbols-outlined text-2xl sm:text-3xl">{s.icon}</span>
                   </div>
@@ -468,7 +487,7 @@ export default function ClinicDashboard() {
                               type="button"
                               onClick={(e) => {
                                  e.stopPropagation();
-                                 setSelectedDoctorForAppointments(doc);
+                                 // setSelectedDoctorForAppointments(doc);
                               }}
                               className="w-full mt-3 py-2 text-[11px] font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 rounded-xl transition-colors tracking-wide uppercase"
                             >
@@ -509,7 +528,7 @@ export default function ClinicDashboard() {
                                     </div>
                                   ))
                                 ) : (
-                                  <p className="text-[11px] text-gray-400 italic">Doctor hasn't set a timetable yet.</p>
+                                  <p className="text-[11px] text-gray-400 italic">Doctor hasn&apos;t set a timetable yet.</p>
                                 )}
                               </div>
                             )}
@@ -651,7 +670,7 @@ export default function ClinicDashboard() {
             </div>
             <form onSubmit={handleAddDoctor} className="p-6 sm:p-8 space-y-6">
               <div>
-                <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">Doctor's Unique Secret Key *</label>
+                <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">Doctor&apos;s Unique Secret Key *</label>
                 <div className="relative">
                   <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xl">key</span>
                   <input 

@@ -180,29 +180,31 @@ export default function DoctorDashboard() {
                 // 2. Fetch linked organizations
                 const { data: staffLinks, error: staffError } = await supabase
                     .from('staff_links')
-                    .select('*, organization:organization_id(id, full_name, clinics(*), medicals(*))')
+                    .select('organization_id, organization_type')
                     .eq('doctor_id', doctorRecord.id);
 
                 if (staffError) throw staffError;
 
-                const orgs = (staffLinks || []).map(link => {
-                    const profile = link.organization;
-                    if (!profile) return null;
-
-                    // A profile can have one clinic or one medical store
-                    const orgDetails = (profile.clinics && profile.clinics[0]) || (profile.medicals && profile.medicals[0]);
+                const orgPromises = (staffLinks || []).map(async (link) => {
+                    const table = link.organization_type === 'medical' ? 'medicals' : 'clinics';
+                    const { data } = await supabase
+                        .from(table)
+                        .select('id, name, address, city, state')
+                        .eq('profile_id', link.organization_id)
+                        .maybeSingle();
                     
-                    if (!orgDetails) return null;
+                    if (!data) return null;
 
                     return {
-                        ...orgDetails,
-                        id: orgDetails.id, // Entry ID for timetables
-                        profile_id: profile.id, // Profile ID for appointments
+                        ...data,
+                        id: data.id, // Entry ID for timetables
+                        profile_id: link.organization_id, // Profile ID for appointments
                         type: link.organization_type,
-                        displayName: orgDetails.name || profile.full_name
+                        displayName: data.name
                     };
-                }).filter(Boolean);
+                });
 
+                const orgs = (await Promise.all(orgPromises)).filter(Boolean);
                 setLinkedOrgs(orgs);
 
             } catch (error) {
@@ -228,26 +230,24 @@ export default function DoctorDashboard() {
         { label: 'Total Revenue', value: `Rs. ${(doctorRecord?.total_revenue || doctor?.totalRevenue || 0).toLocaleString()}`, icon: IndianRupee, tone: 'text-amber-600 bg-amber-50' },
     ], [linkedOrgs.length, todayAppointments, doctorRecord?.total_revenue, doctor?.totalRevenue]);
 
-    const clinicCards = useMemo(() => {
-        if (!clinics.length) return [];
+    const orgCards = useMemo(() => {
+        if (!linkedOrgs.length) return [];
 
-        return clinics.map(clinicName => {
+        return linkedOrgs.map(org => {
             const relatedAppointments = appointments.filter(apt => {
-                if (!apt.clinic_name) return clinics.length === 1;
-                return apt.clinic_name === clinicName || String(apt.clinic_name).includes(clinicName);
+                // Support both legacy organization_id format and new format
+                return apt.organization_id === org.id || apt.organization_id === org.profile_id;
             });
 
             return {
-                clinicName,
+                ...org,
                 totalPatients: relatedAppointments.length,
                 todayPatients: relatedAppointments.filter(apt => String(apt.date || '').slice(0, 10) === today).length,
                 upcoming: relatedAppointments.find(apt => String(apt.date || '').slice(0, 10) >= today) || null,
                 appointments: relatedAppointments,
             };
         });
-    }, [appointments, clinics, today]);
-
-    const [selectedClinic, setSelectedClinic] = useState(null);
+    }, [appointments, linkedOrgs, today]);
 
     return (
         <div className="space-y-6 max-w-7xl mx-auto pb-8">
@@ -305,106 +305,60 @@ export default function DoctorDashboard() {
                 )}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
-                    <div className="flex items-center justify-between mb-5">
-                        <div>
-                            <h2 className="font-bold text-slate-800 text-lg">My Clinics / Medicals</h2>
-                            <p className="text-sm text-slate-500 mt-1">Click a clinic to see booked patients right here.</p>
-                        </div>
-                    </div>
-
-                    {loading ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <Skeleton height={180} borderRadius={24} />
-                            <Skeleton height={180} borderRadius={24} />
-                        </div>
-                    ) : linkedOrgs.length === 0 ? (
-                        <div className="rounded-2xl border border-dashed border-slate-200 p-8 text-center">
-                            <Building2 size={28} className="mx-auto text-slate-300 mb-3" />
-                            <p className="text-sm font-medium text-slate-500">No organizations linked yet.</p>
-                            <p className="text-xs text-slate-400 mt-1">Share your secret key with clinics/medicals to get linked.</p>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {linkedOrgs.map((org, index) => {
-                                    const relatedApts = appointments.filter(apt => 
-                                        apt.organization_id === org.id || apt.organization_id === org.profile_id
-                                    );
-                                const todayApts = relatedApts.filter(apt => String(apt.date || '').slice(0, 10) === today);
-                                
-                                return (
-                                    <motion.button
-                                        key={org.id}
-                                        initial={{ opacity: 0, y: 12 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        transition={{ delay: index * 0.06 }}
-                                        onClick={() => setSelectedOrgForAppointments(org)}
-                                        className="text-left rounded-3xl border border-slate-200 bg-slate-50/70 hover:bg-white hover:border-teal-300 hover:shadow-md transition-all p-5 group"
-                                    >
-                                        <div className="flex items-center justify-between mb-4">
-                                            <div className="h-12 w-12 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center">
-                                                <Building2 size={20} />
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-[10px] font-bold text-slate-400 uppercase">{org.type}</span>
-                                                <ChevronRight size={18} className="text-slate-400 group-hover:translate-x-1 transition-transform" />
-                                            </div>
-                                        </div>
-                                        <h3 className="font-bold text-slate-800 text-base">{org.name}</h3>
-                                        <p className="text-xs text-slate-400 flex items-center gap-1 mt-1 font-medium">
-                                            <MapPin size={12} /> {org.city}, {org.state}
-                                        </p>
-                                        
-                                        <div className="flex flex-wrap gap-2 mt-4">
-                                            <span className="px-2.5 py-1 rounded-full bg-white border border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-tight">
-                                                {relatedApts.length} total
-                                            </span>
-                                            <span className="px-2.5 py-1 rounded-full bg-teal-50 border border-teal-100 text-[10px] font-bold text-teal-700 uppercase tracking-tight">
-                                                {todayApts.length} today
-                                            </span>
-                                        </div>
-                                    </motion.button>
-                                );
-                            })}
-                        </div>
-                    )}
-                </div>
-
-                <div className="space-y-6">
-                    <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
-                        <h2 className="font-bold text-slate-800 text-lg mb-4">Consultation Window</h2>
-                        <div className="space-y-3 text-sm text-slate-600">
-                            <div className="flex items-center justify-between">
-                                <span>Available Days</span>
-                                <span className="font-semibold text-slate-800">{FIXED_AVAILABLE_DAYS.join(', ')}</span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <span>Start Time</span>
-                                <span className="font-semibold text-slate-800">{FIXED_HOURS_FROM}</span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <span>End Time</span>
-                                <span className="font-semibold text-slate-800">{FIXED_HOURS_TO}</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-6 text-white shadow-xl">
-                        <div className="flex items-center gap-3 mb-3">
-                            <Users size={18} className="text-teal-300" />
-                            <h2 className="font-bold text-lg">Patient Snapshot</h2>
-                        </div>
-                        <p className="text-sm text-slate-300">All booked patients for your selected clinic will appear on the clinic page with Start and End consultation controls.</p>
-                        <button
-                            onClick={() => clinics[0] && navigate(`/doctor/clinics/${encodeURIComponent(clinics[0])}`)}
-                            disabled={!clinics[0]}
-                            className="mt-5 w-full py-3 rounded-2xl bg-white/10 hover:bg-white/20 disabled:opacity-40 text-sm font-semibold transition"
-                        >
-                            Open Patient List
-                        </button>
+            <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
+                <div className="flex items-center justify-between mb-5">
+                    <div>
+                        <h2 className="font-bold text-slate-800 text-lg">My Clinics / Medicals</h2>
+                        <p className="text-sm text-slate-500 mt-1">Click a clinic to see booked patients right here.</p>
                     </div>
                 </div>
+
+                {loading ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Skeleton height={180} borderRadius={24} />
+                        <Skeleton height={180} borderRadius={24} />
+                    </div>
+                ) : orgCards.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate-200 p-8 text-center">
+                        <Building2 size={28} className="mx-auto text-slate-300 mb-3" />
+                        <p className="text-sm font-medium text-slate-500">No linked clinics or medical centers.</p>
+                        <p className="text-xs text-slate-400 mt-1">Provide your Secret Key to an admin to get linked.</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {orgCards.map((org, index) => (
+                            <motion.button
+                                key={org.id || org.profile_id}
+                                initial={{ opacity: 0, y: 12 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: index * 0.06 }}
+                                onClick={() => setSelectedOrgForAppointments(org)}
+                                className="text-left rounded-3xl border border-slate-200 bg-slate-50/70 hover:bg-white hover:border-teal-300 hover:shadow-md transition-all p-5"
+                            >
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="h-12 w-12 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center">
+                                        <Building2 size={20} />
+                                    </div>
+                                    <ChevronRight size={18} className="text-slate-400" />
+                                </div>
+                                <h3 className="font-semibold text-slate-800 text-base">{org.displayName}</h3>
+                                <div className="flex flex-wrap gap-2 mt-4">
+                                    <span className="px-2.5 py-1 rounded-full bg-white border border-slate-200 text-xs font-medium text-slate-600">
+                                        {org.totalPatients} total patients
+                                    </span>
+                                    <span className="px-2.5 py-1 rounded-full bg-teal-50 border border-teal-100 text-xs font-medium text-teal-700">
+                                        {org.todayPatients} today
+                                    </span>
+                                </div>
+                                {org.upcoming && (
+                                    <p className="mt-4 text-xs text-slate-500">
+                                        Next booking: {org.upcoming.patient_name || org.upcoming.patient || 'Patient'} on {formatDate(org.upcoming.date)} at {org.upcoming.time_slot || '-'}
+                                    </p>
+                                )}
+                            </motion.button>
+                        ))}
+                    </div>
+                )}
             </div>
 
             <Skeleton name="appointments" loading={loading}>

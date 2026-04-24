@@ -6,7 +6,7 @@ import {
   ChevronRight, Phone, Stethoscope, CheckCircle,
   Clock3, XCircle, FileText
 } from 'lucide-react';
-import { format, addDays, startOfToday, parseISO } from 'date-fns';
+import { format, addDays, startOfToday } from 'date-fns';
 import Skeleton from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
 
@@ -81,7 +81,7 @@ export default function DoctorAppointmentsModal({
     };
 
     fetchSlots();
-  }, [isOpen, doctor?.id, orgId, selectedDate]);
+  }, [isOpen, doctor, orgId, selectedDate]);
 
   // Use effect to fetch appointments when slot changes
   useEffect(() => {
@@ -102,8 +102,8 @@ export default function DoctorAppointmentsModal({
           .eq('doctor_id', doctor.id)
           .eq('date', dateStr);
 
-        // Support both Entry ID and Profile ID filtering
-        if (orgId && orgProfileId) {
+        // Filter by internal org ID (primary) with profile ID fallback for legacy data
+        if (orgId && orgProfileId && orgId !== orgProfileId) {
           query = query.or(`organization_id.eq.${orgId},organization_id.eq.${orgProfileId}`);
         } else if (orgId) {
           query = query.eq('organization_id', orgId);
