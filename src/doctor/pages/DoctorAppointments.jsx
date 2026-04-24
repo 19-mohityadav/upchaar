@@ -50,6 +50,23 @@ export default function DoctorAppointments() {
         };
 
         fetchAppointments();
+
+        const subscription = supabase
+            .channel('doctor-appointments')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments', filter: `doctor_id=eq.${doctorRecord.id}` }, (payload) => {
+                if (payload.eventType === 'INSERT') {
+                    setAppointments(prev => [...prev, payload.new].sort((a,b) => new Date(a.date) - new Date(b.date)));
+                } else if (payload.eventType === 'UPDATE') {
+                    setAppointments(prev => prev.map(apt => apt.id === payload.new.id ? payload.new : apt));
+                } else if (payload.eventType === 'DELETE') {
+                    setAppointments(prev => prev.filter(apt => apt.id !== payload.old.id));
+                }
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(subscription);
+        };
     }, [doctorRecord?.id]);
 
     const updateAppointmentStatus = async (appointmentId, nextStatus) => {
@@ -173,24 +190,88 @@ export default function DoctorAppointments() {
                                 </td>
                                 <td className="px-4 py-3">
                                     <div className="flex gap-1.5">
-                                        <button
-                                            type="button"
-                                            disabled={updatingId === apt.id || apt.status === 'Confirmed' || apt.status === 'Completed'}
-                                            onClick={() => updateAppointmentStatus(apt.id, 'Confirmed')}
-                                            className="h-8 w-8 flex items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40"
-                                            title="Confirm appointment"
-                                        >
-                                            {updatingId === apt.id ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            disabled={updatingId === apt.id || apt.status === 'Cancelled' || apt.status === 'Completed'}
-                                            onClick={() => updateAppointmentStatus(apt.id, 'Cancelled')}
-                                            className="h-8 w-8 flex items-center justify-center rounded-lg bg-red-50 text-red-500 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40"
-                                            title="Cancel appointment"
-                                        >
-                                            {updatingId === apt.id ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />}
-                                        </button>
+                                        {(apt.status === 'Pending' || !apt.status) && (
+                                            <>
+                                                <button
+                                                    type="button"
+                                                    disabled={updatingId === apt.id}
+                                                    onClick={() => updateAppointmentStatus(apt.id, 'Confirmed')}
+                                                    className="h-8 w-8 flex items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                                    title="Confirm appointment"
+                                                >
+                                                    {updatingId === apt.id ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    disabled={updatingId === apt.id}
+                                                    onClick={() => updateAppointmentStatus(apt.id, 'Cancelled')}
+                                                    className="h-8 w-8 flex items-center justify-center rounded-lg bg-red-50 text-red-500 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                                    title="Cancel appointment"
+                                                >
+                                                    {updatingId === apt.id ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />}
+                                                </button>
+                                            </>
+                                        )}
+
+                                        {apt.status === 'Confirmed' && (
+                                            <>
+                                                <button
+                                                    type="button"
+                                                    disabled={updatingId === apt.id}
+                                                    onClick={() => updateAppointmentStatus(apt.id, 'In-Progress')}
+                                                    className="h-8 w-8 flex items-center justify-center rounded-lg bg-blue-50 text-blue-600 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                                    title="Mark as In-Progress"
+                                                >
+                                                    {updatingId === apt.id ? <Loader2 size={14} className="animate-spin" /> : <Clock size={14} />}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    disabled={updatingId === apt.id}
+                                                    onClick={() => updateAppointmentStatus(apt.id, 'Completed')}
+                                                    className="h-8 w-8 flex items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                                    title="Mark as Completed"
+                                                >
+                                                    {updatingId === apt.id ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    disabled={updatingId === apt.id}
+                                                    onClick={() => updateAppointmentStatus(apt.id, 'Cancelled')}
+                                                    className="h-8 w-8 flex items-center justify-center rounded-lg bg-red-50 text-red-500 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                                    title="Cancel appointment"
+                                                >
+                                                    {updatingId === apt.id ? <Loader2 size={14} className="animate-spin" /> : <XCircle size={14} />}
+                                                </button>
+                                            </>
+                                        )}
+
+                                        {apt.status === 'In-Progress' && (
+                                            <>
+                                                <button
+                                                    type="button"
+                                                    disabled={updatingId === apt.id}
+                                                    onClick={() => updateAppointmentStatus(apt.id, 'Completed')}
+                                                    className="h-8 w-8 flex items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                                    title="Mark as Completed"
+                                                >
+                                                    {updatingId === apt.id ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
+                                                </button>
+                                            </>
+                                        )}
+
+                                        {apt.status === 'Cancelled' && (
+                                            <>
+                                                <button
+                                                    type="button"
+                                                    disabled={updatingId === apt.id}
+                                                    onClick={() => updateAppointmentStatus(apt.id, 'Confirmed')}
+                                                    className="h-8 w-8 flex items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                                    title="Confirm appointment"
+                                                >
+                                                    {updatingId === apt.id ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />}
+                                                </button>
+                                            </>
+                                        )}
                                     </div>
                                 </td>
                             </motion.tr>

@@ -254,7 +254,7 @@ export default function BookAppointmentQueued() {
             organization_type: selectedClinic?.organization_type || 'clinic',
             date: selectedDate,
             time_slot: selectedSlot,
-            status: 'Confirmed',
+            status: 'Pending',
             type: 'In-person',
             fee: selectedDoctor.fees || 500,
             queue_number: Math.floor(Math.random() * 20) + 1, // Mock queue number

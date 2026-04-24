@@ -205,7 +205,7 @@ export default function PatientDashboard() {
     const [avatarError, setAvatarError] = useState('');
     const [changePwOpen, setChangePwOpen] = useState(false);
     const [activeAppointment, setActiveAppointment] = useState(null);
-    const [mockQueuePosition, setMockQueuePosition] = useState(5);
+    const [currentServing, setCurrentServing] = useState(1);
 
     // Fetch active appointment for queue tracking
     useEffect(() => {
@@ -213,45 +213,63 @@ export default function PatientDashboard() {
         const today = new Date().toISOString().split('T')[0];
         const todayStart = new Date(today + 'T00:00:00').toISOString();
 
-        supabase
-            .from('appointments')
-            .select('*')
-            .eq('patient_id', patient.id)
-            .gte('date', todayStart)
-            .order('date', { ascending: true })
-            .limit(1)
-            .then(({ data }) => {
-                if (data?.[0]) {
-                    setActiveAppointment(data[0]);
-                    setMockQueuePosition(data[0].queue_number || 5);
-                }
-            });
+        const fetchActive = async () => {
+            const { data } = await supabase
+                .from('appointments')
+                .select('*')
+                .eq('patient_id', patient.id)
+                .gte('date', todayStart)
+                .in('status', ['Pending', 'Confirmed', 'In-Progress'])
+                .order('date', { ascending: true })
+                .order('queue_number', { ascending: true })
+                .limit(1);
+
+            if (data?.[0]) {
+                setActiveAppointment(data[0]);
+            }
+        };
+
+        fetchActive();
     }, [patient?.id]);
 
-    // Live Queue Notification Simulation
+    // Live Queue Tracking using Supabase Realtime
     useEffect(() => {
-        if (!activeAppointment || mockQueuePosition <= 0) return;
-        
-        const interval = setInterval(() => {
-            setMockQueuePosition(prev => {
-                const next = Math.max(0, prev - 1);
-                if (next < prev && next > 0) {
-                    toast.info(`Queue Update: ${next} people ahead of you`, {
-                        description: `Your appointment with ${activeAppointment.doctor_name} is getting closer!`,
-                        icon: '🔔'
-                    });
-                } else if (next === 0) {
-                    toast.success('Your Turn!', {
-                        description: 'Please proceed to the doctor\'s cabin now.',
-                        duration: 10000,
-                    });
-                }
-                return next;
-            });
-        }, 120000); // 2 minutes
+        if (!activeAppointment) return;
 
-        return () => clearInterval(interval);
-    }, [activeAppointment, mockQueuePosition]);
+        const fetchCurrentServing = async () => {
+            const { data, error } = await supabase
+                .from('appointments')
+                .select('queue_number, status')
+                .eq('doctor_id', activeAppointment.doctor_id)
+                .eq('date', activeAppointment.date)
+                .in('status', ['Completed', 'In-Progress'])
+                .order('queue_number', { ascending: false })
+                .limit(1);
+
+            if (!error && data && data.length > 0) {
+                let serving = data[0].queue_number;
+                if (data[0].status === 'Completed') serving += 1;
+                setCurrentServing(serving);
+            } else {
+                setCurrentServing(1);
+            }
+        };
+
+        fetchCurrentServing();
+
+        const subscription = supabase
+            .channel('active-queue')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments', filter: `doctor_id=eq.${activeAppointment.doctor_id}` }, (payload) => {
+                // If it's my own appointment being updated
+                if (payload.new && payload.new.id === activeAppointment.id) {
+                    setActiveAppointment(payload.new);
+                }
+                fetchCurrentServing();
+            })
+            .subscribe();
+
+        return () => supabase.removeChannel(subscription);
+    }, [activeAppointment?.id, activeAppointment?.doctor_id, activeAppointment?.date]);
 
     /**
      * handleAvatarChange
@@ -386,7 +404,7 @@ export default function PatientDashboard() {
                             </h2>
                             <QueueStatusCard 
                                 appointment={activeAppointment} 
-                                currentServing={activeAppointment.queue_number - mockQueuePosition}
+                                currentServing={currentServing}
                                 onAction={() => navigate(`/records`)}
                             />
                         </motion.div>

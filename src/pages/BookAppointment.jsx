@@ -247,7 +247,7 @@ export default function BookAppointment() {
             organization_type: selectedClinic?.organization_type || 'clinic',
             date: selectedDate,
             time_slot: selectedSlot,
-            status: 'Confirmed',
+            status: 'Pending',
             type: 'In-person',
             fee: selectedDoctor.fees || 500,
             specialization: selectedDoctor.specialization

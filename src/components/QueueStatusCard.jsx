@@ -16,6 +16,10 @@ export default function QueueStatusCard({ appointment, currentServing, onAction 
 
     const myNumber = appointment.queue_number || 1;
     const position = myNumber - currentServing;
+    
+    const isServing = position === 0;
+    const isNext = position === 1;
+    const hasPassed = position < 0 || appointment.status === 'Completed';
 
     if (hasPassed) return null; // Or show "Completed" state
 
