@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase.js';
 import { 
@@ -40,7 +40,15 @@ export default function DoctorAppointmentsModal({
   
   const [loadingAppointments, setLoadingAppointments] = useState(false);
   const [appointments, setAppointments] = useState([]);
-  const [expandedAptId, setExpandedAptId] = useState(null);
+   const [expandedAptId, setExpandedAptId] = useState(null);
+   const patientsListRef = useRef(null);
+
+   // Scroll to patients list when a slot is selected on mobile
+   useEffect(() => {
+     if (selectedSlot && patientsListRef.current && window.innerWidth < 768) {
+       patientsListRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+     }
+   }, [selectedSlot]);
 
   // Generate an array of next 14 days for date selection
   const upcomingDates = useMemo(() => {
@@ -352,7 +360,10 @@ export default function DoctorAppointmentsModal({
             </div>
 
             {/* Patients List Area */}
-            <div className="flex-1 flex flex-col overflow-hidden min-h-[400px]">
+            <div 
+              ref={patientsListRef}
+              className="flex-1 flex flex-col overflow-hidden min-h-[400px]"
+            >
               
               {!selectedSlot ? (
                 <div className="flex-1 flex flex-col items-center justify-center p-10 text-center">
