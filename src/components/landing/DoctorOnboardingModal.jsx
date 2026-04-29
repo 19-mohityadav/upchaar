@@ -519,7 +519,7 @@ export function DoctorOnboardingModal({ isOpen, onClose }) {
         const path = `${folder}/${fieldName}.${ext}`;
         
         // Use doctor-documents for PDFs (private) and doctor-avatars for images (public)
-        const bucket = file.type === 'application/pdf' ? 'doctor-documents' : 'doctor-avatars';
+        const bucket = file.type === 'application/pdf' ? 'doctor-doc' : 'doctor-avatar';
 
         const { error } = await supabase.storage
             .from(bucket)
