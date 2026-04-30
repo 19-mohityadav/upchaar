@@ -7,10 +7,10 @@ export async function uploadDoctorAvatar(file, doctorId) {
     const ext = file.name.split('.').pop();
     const path = `doctors/${doctorId}/avatar_${Date.now()}.${ext}`;
     const { error: uploadError } = await supabase.storage
-        .from('doctor-docs')
+        .from('doctor-avtar')
         .upload(path, file, { upsert: true, contentType: file.type });
     if (uploadError) throw new Error('Upload failed: ' + uploadError.message);
-    const { data } = supabase.storage.from('doctor-docs').getPublicUrl(path);
+    const { data } = supabase.storage.from('doctor-avtar').getPublicUrl(path);
     return data.publicUrl;
 }
 
@@ -70,6 +70,7 @@ export function DoctorProvider({ children }) {
 
     const fetchDoctorRecord = useCallback(async (userId, email) => {
         try {
+            // First check the approved doctors table
             let { data } = await supabase
                 .from('doctors')
                 .select('*')
@@ -82,6 +83,27 @@ export function DoctorProvider({ children }) {
                     .select('*')
                     .eq('email', email)
                     .maybeSingle());
+            }
+
+            // If not found in approved doctors, check the pending_doctors table
+            if (!data) {
+                let { data: pendingData } = await supabase
+                    .from('pending_doctors')
+                    .select('*')
+                    .eq('profile_id', userId)
+                    .maybeSingle();
+                
+                if (!pendingData && email) {
+                    ({ data: pendingData } = await supabase
+                        .from('pending_doctors')
+                        .select('*')
+                        .eq('email', email)
+                        .maybeSingle());
+                }
+                
+                if (pendingData) {
+                    data = pendingData;
+                }
             }
 
             return data ?? null;
@@ -138,6 +160,7 @@ export function DoctorProvider({ children }) {
             }
 
             if (event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'TOKEN_REFRESHED') {
+                setLoading(true);
                 void (async () => {
                     await restoreDoctorSession(session);
                     if (mounted) setLoading(false);

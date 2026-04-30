@@ -34,6 +34,7 @@ export default function AppLayout({ children, hideSidebar = false, hideNavbar = 
     const [editProfileOpen, setEditProfileOpen] = useState(false);
 
     const handleSignOut = useCallback(async () => {
+        if (!window.confirm('Are you sure you want to sign out?')) return;
         await signOut();
         navigate('/');
     }, [signOut, navigate]);
@@ -58,7 +59,7 @@ export default function AppLayout({ children, hideSidebar = false, hideNavbar = 
                         {(!collapsed || onClose) && (
                             <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.12 }}
                                 className="font-bold text-sm text-primary whitespace-nowrap">
-                                Upchaar
+                                Upchar
                             </motion.span>
                         )}
                     </AnimatePresence>

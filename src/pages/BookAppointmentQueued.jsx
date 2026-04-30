@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -22,6 +22,7 @@ export default function BookAppointmentQueued() {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const { user, loading: authLoading } = useAuth();
+    const clinicIdParam = searchParams.get('clinicId');
     
     useEffect(() => {
         if (!authLoading && !user) {
@@ -112,7 +113,7 @@ export default function BookAppointmentQueued() {
     }, [selectedState]);
 
     // ── Geolocation ──────────────────────────────────
-    const handleAutoDetect = () => {
+    const handleAutoDetect = useCallback(() => {
         if (detectingLocation) return;
         setDetectingLocation(true);
         if ("geolocation" in navigator) {
@@ -134,12 +135,10 @@ export default function BookAppointmentQueued() {
         } else {
             setDetectingLocation(false);
         }
-    };
+    }, [detectingLocation]);
 
-    // Auto-detect on mount
-    useEffect(() => {
-        handleAutoDetect();
-    }, []);
+    // Auto-detect only if user is on step 1 (browsing, no doctorId in URL)
+    // Removed auto-detect on mount since most users arrive via a doctorId link
 
     // ── Fetch Doctors ────────────────────────────────
     useEffect(() => {
@@ -157,22 +156,36 @@ export default function BookAppointmentQueued() {
         fetchDoctors();
     }, [selectedState, selectedCity]);
 
-    // ── Fetch Clinics & Timetables for Selected Doctor ────────────
-    // ── Handle Deep Link Doctor & Redirect ──────────────────────
+    // ── Handle Deep Link Doctor ──────────────────────────────────────
     useEffect(() => {
         const doctorId = searchParams.get('doctorId');
         if (!doctorId) {
-            navigate('/doctors');
+            // No doctor ID in URL — stay on step 1 for searching
             return;
         }
 
-        if (doctors.length > 0) {
-            const doc = doctors.find(d => d.id === doctorId);
-            if (doc && !selectedDoctor) {
-                handleSelectDoctor(doc);
+        // Fetch this doctor directly by ID, regardless of the filter state
+        const fetchAndSelectDoctor = async () => {
+            setLoading(true);
+            const { data, error } = await supabase
+                .from('doctors')
+                .select('*')
+                .eq('id', doctorId)
+                .maybeSingle();
+
+            if (error || !data) {
+                console.error('Doctor not found:', error);
+                setLoading(false);
+                navigate('/doctors');
+                return;
             }
-        }
-    }, [searchParams, doctors, selectedDoctor, navigate]);
+
+            await handleSelectDoctor(data);
+        };
+
+        fetchAndSelectDoctor();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchParams]);
 
     // ── Fetch Clinics for Selected Doctor ────────────
     const handleSelectDoctor = async (doc) => {
@@ -202,7 +215,12 @@ export default function BookAppointmentQueued() {
             });
             const list = (await Promise.all(orgPromises)).filter(Boolean);
             setClinics(list);
-            if (list.length > 0) setSelectedClinic(list[0]);
+            if (list.length > 0) {
+                const desiredClinic = clinicIdParam
+                    ? list.find(c => String(c.id) === String(clinicIdParam))
+                    : null;
+                setSelectedClinic(desiredClinic || list[0]);
+            }
         } else {
             setClinics([]);
         }
@@ -244,37 +262,88 @@ export default function BookAppointmentQueued() {
     const handleConfirmBooking = async () => {
         setBookingLoading(true);
         
-        // Sync to appointments table
-        const appointmentData = {
-            patient_id: user?.id || null,
-            patient_name: patientInfo.name,
-            doctor_id: selectedDoctor.id,
-            doctor_name: selectedDoctor.full_name,
-            organization_id: selectedClinic?.id,
-            organization_type: selectedClinic?.organization_type || 'clinic',
-            date: selectedDate,
-            time_slot: selectedSlot,
-            status: 'Confirmed',
-            type: 'In-person',
-            fee: selectedDoctor.fees || 500,
-            queue_number: Math.floor(Math.random() * 20) + 1, // Mock queue number
-            specialization: selectedDoctor.specialization
-        };
+        try {
+            const normalizedPhone = patientInfo.phone?.trim() || null;
 
-        const { error } = await supabase.from('appointments').insert([appointmentData]);
+            let duplicateQuery = supabase
+                .from('appointments')
+                .select('id', { count: 'exact', head: true })
+                .eq('doctor_id', selectedDoctor.id)
+                .eq('organization_id', selectedClinic?.id)
+                .eq('date', selectedDate)
+                .eq('time_slot', selectedSlot)
+                .neq('status', 'Cancelled');
+
+            if (user?.id) {
+                duplicateQuery = duplicateQuery.eq('patient_id', user.id);
+            } else if (normalizedPhone) {
+                duplicateQuery = duplicateQuery.eq('patient_phone', normalizedPhone);
+            }
+
+            const { count: existingCount, error: duplicateError } = await duplicateQuery;
+
+            if (duplicateError) throw duplicateError;
+
+            if ((existingCount ?? 0) > 0) {
+                toast.error('Duplicate booking not allowed.', {
+                    description: 'You already have an appointment with this doctor on the same date and time slot.',
+                });
+                return;
+            }
+
+            // Calculate real queue number: count existing appointments for same doctor + org + date + slot
+            const { count, error: countError } = await supabase
+                .from('appointments')
+                .select('id', { count: 'exact', head: true })
+                .eq('doctor_id', selectedDoctor.id)
+                .eq('organization_id', selectedClinic?.id)
+                .eq('date', selectedDate)
+                .eq('time_slot', selectedSlot);
+
+            const realQueueNumber = countError ? 1 : (count ?? 0) + 1;
+
+            // Sync to appointments table
+            const appointmentData = {
+                patient_id: user?.id || null,
+                patient_name: patientInfo.name,
+                patient_phone: normalizedPhone,
+                doctor_id: selectedDoctor.id,
+                doctor_name: selectedDoctor.full_name,
+                organization_id: selectedClinic?.id,
+                organization_type: selectedClinic?.organization_type || 'clinic',
+                date: selectedDate,
+                time_slot: selectedSlot,
+                status: 'Confirmed',
+                type: 'In-person',
+                fee: selectedDoctor.fees || 500,
+                queue_number: realQueueNumber,
+                specialization: selectedDoctor.specialization
+            };
+
+            let { error } = await supabase.from('appointments').insert([appointmentData]);
+
+            if (error?.message?.includes("Could not find the 'patient_phone' column")) {
+                const { patient_phone: _unusedPhone, ...fallbackAppointmentData } = appointmentData;
+                ({ error } = await supabase.from('appointments').insert([fallbackAppointmentData]));
+            }
         
-        if (!error) {
-            setBookingSuccess(true);
-            toast.success('Congratulations / Appointment Confirmed message', {
-                description: `Your appointment with ${selectedDoctor.full_name} is set for ${new Date(selectedDate).toDateString()}.`,
-                duration: 5000,
-            });
-            setStep(5);
-        } else {
-            console.error("Booking error:", error);
-            toast.error("Error booking appointment. Please try again.");
+            if (!error) {
+                setBookingSuccess(true);
+                toast.success('Appointment Confirmed!', {
+                    description: `Your appointment with ${selectedDoctor.full_name} is set for ${new Date(selectedDate).toDateString()}. Queue #${realQueueNumber}`,
+                    duration: 5000,
+                });
+                setStep(5);
+            } else {
+                console.error("Booking error:", error);
+                toast.error("Error booking appointment. Please try again.");
+            }
+        } catch (err) {
+            console.error("Unexpected error:", err);
+            toast.error("Something went wrong. Please try again.");
+        } finally {
+            setBookingLoading(false);
         }
-        setBookingLoading(false);
     };
 
     // Derived: filtered doctors by search term
@@ -707,7 +776,7 @@ export default function BookAppointmentQueued() {
                                         <div className="space-y-4 border-t pt-8">
                                             <div className="text-center">
                                                 <h3 className="font-bold text-slate-900">OTP Verification</h3>
-                                                <p className="text-sm text-slate-500">We've sent a code to your phone (Demo: 000000)</p>
+                                                <p className="text-sm text-slate-500">We&apos;ve sent a code to your phone (Demo: 000000)</p>
                                             </div>
                                             <div className="flex justify-center gap-2">
                                                 {otp.map((digit, idx) => (

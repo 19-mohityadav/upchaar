@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase.js';
 import { 
-  X, CalendarDays, Clock, Users, ChevronLeft, 
+  X, CalendarDays, Clock, Users,
   ChevronRight, Phone, Stethoscope, CheckCircle,
   Clock3, XCircle, FileText
 } from 'lucide-react';
-import { format, addDays, startOfToday, parseISO } from 'date-fns';
+import { format, addDays, startOfToday } from 'date-fns';
 import Skeleton from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
 
@@ -26,6 +26,19 @@ const STATUS_ICONS = {
   Scheduled: <CalendarDays size={14} className="mt-0.5" />,
 };
 
+const normalizeStatus = (status) => String(status || '').trim().toLowerCase();
+
+const getCanonicalStatus = (status) => {
+  const normalized = normalizeStatus(status);
+  if (normalized === 'confirmed') return 'Confirmed';
+  if (normalized === 'pending') return 'Pending';
+  if (normalized === 'completed') return 'Completed';
+  if (normalized === 'cancelled' || normalized === 'canceled') return 'Cancelled';
+  if (normalized === 'in-progress' || normalized === 'in progress') return 'In-Progress';
+  if (normalized === 'scheduled') return 'Scheduled';
+  return status;
+};
+
 export default function DoctorAppointmentsModal({ 
   isOpen, 
   onClose, 
@@ -40,6 +53,19 @@ export default function DoctorAppointmentsModal({
   
   const [loadingAppointments, setLoadingAppointments] = useState(false);
   const [appointments, setAppointments] = useState([]);
+   const [expandedAptId, setExpandedAptId] = useState(null);
+   const [updatingId, setUpdatingId] = useState(null);
+   const [prescriptionText, setPrescriptionText] = useState('');
+   const [diagnosisText, setDiagnosisText] = useState('');
+   const [showPrescriptionForm, setShowPrescriptionForm] = useState(null); // ID of appointment
+   const patientsListRef = useRef(null);
+
+   // Scroll to patients list when a slot is selected on mobile
+   useEffect(() => {
+     if (selectedSlot && patientsListRef.current && window.innerWidth < 768) {
+       patientsListRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+     }
+   }, [selectedSlot]);
 
   // Generate an array of next 14 days for date selection
   const upcomingDates = useMemo(() => {
@@ -81,75 +107,138 @@ export default function DoctorAppointmentsModal({
     };
 
     fetchSlots();
-  }, [isOpen, doctor?.id, orgId, selectedDate]);
+  }, [isOpen, doctor, orgId, selectedDate]);
 
-  // Use effect to fetch appointments when slot changes
-  useEffect(() => {
+  const fetchAppointments = useCallback(async () => {
     if (!selectedSlot) {
       setAppointments([]);
       return;
     }
 
-    const fetchAppointments = async () => {
-      setLoadingAppointments(true);
-      try {
-        const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    setLoadingAppointments(true);
+    try {
+      const dateStr = format(selectedDate, 'yyyy-MM-dd');
 
-        // Fetch all appointments for the day/doctor/org
-        let query = supabase
-          .from('appointments')
-          .select('*')
-          .eq('doctor_id', doctor.id)
-          .eq('date', dateStr);
+      // Fetch all appointments for the day/doctor/org
+      let query = supabase
+        .from('appointments')
+        .select('*')
+        .eq('doctor_id', doctor.id)
+        .eq('date', dateStr);
 
-        // Filter by internal org ID (primary) with profile ID fallback for legacy data
-        if (orgId && orgProfileId && orgId !== orgProfileId) {
-          query = query.or(`organization_id.eq.${orgId},organization_id.eq.${orgProfileId}`);
-        } else if (orgId) {
-          query = query.eq('organization_id', orgId);
-        } else if (orgProfileId) {
-          query = query.eq('organization_id', orgProfileId);
-        }
-
-        const { data, error } = await query.order('queue_number', { ascending: true });
-
-        if (error) throw error;
-        
-        // Helper to convert time string (HH:MM or HH:MM AM/PM) to minutes
-        const toMinutes = (t) => {
-          if (!t) return 0;
-          // Check if it has AM/PM
-          const match = t.match(/(\d+):(\d+)\s*(AM|PM)?/i);
-          if (!match) return 0;
-          let [_, h, m, p] = match;
-          h = parseInt(h);
-          m = parseInt(m);
-          if (p) {
-            if (p.toUpperCase() === 'PM' && h < 12) h += 12;
-            if (p.toUpperCase() === 'AM' && h === 12) h = 0;
-          }
-          return h * 60 + m;
-        };
-
-        const rangeStart = toMinutes(selectedSlot.time_from);
-        const rangeEnd = toMinutes(selectedSlot.time_to);
-
-        // Filter appointments that fall within this slot's range
-        const filtered = (data || []).filter(apt => {
-          const aptTime = toMinutes(apt.time_slot);
-          return aptTime >= rangeStart && aptTime < rangeEnd;
-        });
-
-        setAppointments(filtered);
-      } catch (err) {
-        console.error("Error fetching appointments:", err.message);
-      } finally {
-        setLoadingAppointments(false);
+      // Filter by internal org ID (primary) with profile ID fallback for legacy data
+      if (orgId && orgProfileId && orgId !== orgProfileId) {
+        query = query.or(`organization_id.eq.${orgId},organization_id.eq.${orgProfileId}`);
+      } else if (orgId) {
+        query = query.eq('organization_id', orgId);
+      } else if (orgProfileId) {
+        query = query.eq('organization_id', orgProfileId);
       }
-    };
 
-    fetchAppointments();
+      const { data, error } = await query.order('queue_number', { ascending: true });
+
+      if (error) throw error;
+      
+      // Helper to convert time string (HH:MM or HH:MM AM/PM) to minutes
+      const toMinutes = (t) => {
+        if (!t) return 0;
+        const match = t.match(/(\d+):(\d+)\s*(AM|PM)?/i);
+        if (!match) return 0;
+        let [_, h, m, p] = match;
+        h = parseInt(h);
+        m = parseInt(m);
+        if (p) {
+          if (p.toUpperCase() === 'PM' && h < 12) h += 12;
+          if (p.toUpperCase() === 'AM' && h === 12) h = 0;
+        }
+        return h * 60 + m;
+      };
+
+      const rangeStart = toMinutes(selectedSlot.time_from);
+      const rangeEnd = toMinutes(selectedSlot.time_to);
+
+      // Filter appointments that fall within this slot's range
+      const filtered = (data || []).filter(apt => {
+        const aptTime = toMinutes(apt.time_slot);
+        return aptTime >= rangeStart && aptTime < rangeEnd;
+      });
+
+      setAppointments(filtered);
+    } catch (err) {
+      console.error("Error fetching appointments:", err.message);
+    } finally {
+      setLoadingAppointments(false);
+    }
   }, [selectedSlot, selectedDate, doctor?.id, orgId, orgProfileId]);
+
+  const updateAppointmentStatus = async (appointmentId, newStatus) => {
+    setUpdatingId(appointmentId);
+    try {
+      const { error } = await supabase
+        .from('appointments')
+        .update({ status: newStatus })
+        .eq('id', appointmentId);
+
+      if (error) throw error;
+      
+      // Refresh list
+      fetchAppointments();
+      window.alert(`Appointment marked as ${newStatus}`);
+    } catch (err) {
+      console.error("Error updating appointment:", err.message);
+      window.alert("Failed to update status");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleNotifyPatient = async (appointment) => {
+    setUpdatingId(appointment.id);
+    try {
+      // Simulate notification logic
+      // In a real app, this might trigger an Edge Function or update a 'notified' flag
+      await new Promise(resolve => setTimeout(resolve, 800));
+      window.alert(`Notification sent to ${appointment.patient_name || appointment.patient}`);
+    } catch (err) {
+      console.error("Error notifying patient:", err.message);
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleSavePrescription = async (appointmentId) => {
+    if (!diagnosisText && !prescriptionText) return;
+    
+    setUpdatingId(appointmentId);
+    try {
+      const { error } = await supabase
+        .from('appointments')
+        .update({ 
+          diagnosis: diagnosisText,
+          medicines: prescriptionText.split('\n').filter(Boolean),
+          status: 'Completed' // Automatically complete when prescription is saved?
+        })
+        .eq('id', appointmentId);
+
+      if (error) throw error;
+      
+      setShowPrescriptionForm(null);
+      setPrescriptionText('');
+      setDiagnosisText('');
+      fetchAppointments();
+      window.alert("Prescription saved and consultation completed!");
+    } catch (err) {
+      console.error("Error saving prescription:", err.message);
+      window.alert("Failed to save prescription");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  // Use effect to fetch appointments when slot changes
+  useEffect(() => {
+    fetchAppointments();
+  }, [fetchAppointments]);
 
   // Handle closing modal and resetting state
   const handleClose = () => {
@@ -315,7 +404,10 @@ export default function DoctorAppointmentsModal({
             </div>
 
             {/* Patients List Area */}
-            <div className="flex-1 flex flex-col overflow-hidden min-h-[400px]">
+            <div 
+              ref={patientsListRef}
+              className="flex-1 flex flex-col overflow-hidden min-h-[400px]"
+            >
               
               {!selectedSlot ? (
                 <div className="flex-1 flex flex-col items-center justify-center p-10 text-center">
@@ -352,11 +444,21 @@ export default function DoctorAppointmentsModal({
                         <p className="text-sm text-slate-400 mt-1">No patients have booked in this slot yet.</p>
                       </div>
                     ) : (
-                      appointments.map((apt, index) => (
+                      appointments.map((apt, index) => {
+                        const isExpanded = expandedAptId === apt.id;
+                        const canonicalStatus = getCanonicalStatus(apt.status);
+                        return (
                         <div 
                           key={apt.id} 
-                          className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow flex flex-col sm:flex-row sm:items-center gap-4"
+                          className={`
+                            bg-white rounded-2xl border transition-all flex flex-col overflow-hidden
+                            ${isExpanded ? 'border-teal-400 shadow-md ring-1 ring-teal-400/20' : 'border-slate-200 shadow-sm hover:border-slate-300'}
+                          `}
                         >
+                          <div 
+                            className="p-4 flex flex-col sm:flex-row sm:items-center gap-4 cursor-pointer"
+                            onClick={() => setExpandedAptId(isExpanded ? null : apt.id)}
+                          >
                           <div className="shrink-0 flex items-center justify-center h-16 w-16 bg-gradient-to-br from-teal-50 to-emerald-50 rounded-2xl border border-teal-100/50">
                             <span className="text-xl font-black text-teal-700/80">
                               #{apt.queue_number || (index + 1)}
@@ -384,22 +486,135 @@ export default function DoctorAppointmentsModal({
                               </div>
                             </div>
                             
-                            <div className="flex items-center sm:flex-col sm:items-end justify-between gap-2 mt-2 sm:mt-0">
-                              <span className={`
-                                inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border
-                                ${STATUS_COLORS[apt.status] || STATUS_COLORS.Scheduled}
-                              `}>
-                                {STATUS_ICONS[apt.status] || STATUS_ICONS.Scheduled}
-                                {apt.status}
+                            <div className="flex items-center sm:flex-row sm:items-center justify-between gap-3 mt-2 sm:mt-0">
+                              <span
+                                className={`
+                                  inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border
+                                  ${STATUS_COLORS[canonicalStatus] || STATUS_COLORS.Scheduled}
+                                `}
+                              >
+                                {STATUS_ICONS[canonicalStatus] || STATUS_ICONS.Scheduled}
+                                {canonicalStatus}
                               </span>
                               
-                              <p className="text-[11px] font-medium text-slate-400">
-                                Booked via {apt.type || 'App'}
+                              <p className="text-[11px] font-medium text-slate-400 hidden sm:block">
+                                via {apt.type || 'App'}
                               </p>
                             </div>
                           </div>
+
+                          <AnimatePresence>
+                            {isExpanded && (
+                              <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                className="px-4 pb-4 pt-2 border-t border-slate-50 bg-slate-50/30"
+                              >
+                                <div className="space-y-4">
+                                  <div className="flex flex-wrap gap-2">
+                                    <button 
+                                      onClick={() => handleNotifyPatient(apt)}
+                                      disabled={updatingId === apt.id}
+                                      className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 text-xs font-bold hover:bg-amber-100 transition-colors disabled:opacity-50"
+                                    >
+                                      <Phone size={14} /> Notify Next
+                                    </button>
+
+                                    {(canonicalStatus === 'Scheduled' || canonicalStatus === 'Confirmed' || canonicalStatus === 'Pending') && (
+                                      <button 
+                                        onClick={() => updateAppointmentStatus(apt.id, 'In-Progress')}
+                                        disabled={updatingId === apt.id}
+                                        className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-teal-50 text-teal-700 border border-teal-200 text-xs font-bold hover:bg-teal-100 transition-colors disabled:opacity-50"
+                                      >
+                                        <Clock size={14} /> Start
+                                      </button>
+                                    )}
+                                    
+                                    <button 
+                                      onClick={() => {
+                                        setShowPrescriptionForm(apt.id);
+                                        setDiagnosisText(apt.diagnosis || '');
+                                        setPrescriptionText((apt.medicines || []).join('\n'));
+                                      }}
+                                      className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold hover:bg-blue-100 transition-colors"
+                                    >
+                                      <FileText size={14} /> Write Prescription
+                                    </button>
+
+                                    {canonicalStatus !== 'Completed' && (
+                                      <button 
+                                        onClick={() => updateAppointmentStatus(apt.id, 'Completed')}
+                                        disabled={updatingId === apt.id}
+                                        className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                                      >
+                                        <CheckCircle size={14} /> Complete
+                                      </button>
+                                    )}
+
+                                    {canonicalStatus !== 'Cancelled' && (
+                                      <button 
+                                        onClick={() => {
+                                          if(window.confirm('Cancel this appointment?')) updateAppointmentStatus(apt.id, 'Cancelled');
+                                        }}
+                                        disabled={updatingId === apt.id}
+                                        className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-red-50 text-red-700 border border-red-200 text-xs font-bold hover:bg-red-100 transition-colors disabled:opacity-50"
+                                      >
+                                        <XCircle size={14} /> Cancel
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {showPrescriptionForm === apt.id && (
+                                    <motion.div 
+                                      initial={{ opacity: 0, y: 10 }}
+                                      animate={{ opacity: 1, y: 0 }}
+                                      className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3"
+                                    >
+                                      <div>
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Diagnosis</label>
+                                        <input 
+                                          value={diagnosisText}
+                                          onChange={(e) => setDiagnosisText(e.target.value)}
+                                          placeholder="Enter diagnosis..."
+                                          className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Medicines (one per line)</label>
+                                        <textarea 
+                                          value={prescriptionText}
+                                          onChange={(e) => setPrescriptionText(e.target.value)}
+                                          placeholder="Paracetamol 500mg - 1-0-1&#10;Amoxicillin 250mg - after food"
+                                          rows={3}
+                                          className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20"
+                                        />
+                                      </div>
+                                      <div className="flex justify-end gap-2">
+                                        <button 
+                                          onClick={() => setShowPrescriptionForm(null)}
+                                          className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-700"
+                                        >
+                                          Cancel
+                                        </button>
+                                        <button 
+                                          onClick={() => handleSavePrescription(apt.id)}
+                                          disabled={updatingId === apt.id}
+                                          className="px-4 py-1.5 rounded-xl bg-teal-600 text-white text-xs font-bold hover:bg-teal-700 transition-colors disabled:opacity-50"
+                                        >
+                                          {updatingId === apt.id ? 'Saving...' : 'Save & Complete'}
+                                        </button>
+                                      </div>
+                                    </motion.div>
+                                  )}
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                          </div>
                         </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
                 </>

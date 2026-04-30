@@ -46,14 +46,15 @@ const DiagnosticsPage = lazy(() => import('@/pages/Diagnostics'));
 const HospitalsPage   = lazy(() => import('@/pages/Hospitals'));
 const MedicalsPage    = lazy(() => import('@/pages/Medicals.jsx'));
 const RecordsPage     = lazy(() => import('@/pages/Records'));
-import EmergencyPage   from '@/pages/Emergency';
-// const EmergencyPage   = lazy(() => import('@/pages/Emergency'));
+const EmergencyPage   = lazy(() => import('@/pages/Emergency'));
+
 const BlogsPage       = lazy(() => import('@/pages/Blogs.jsx'));
 const AppointmentOptions = lazy(() => import('@/pages/AppointmentOptions.jsx'));
 const BookAppointment = lazy(() => import('@/pages/BookAppointment.jsx'));
 const BookAppointmentQueued = lazy(() => import('@/pages/BookAppointmentQueued.jsx'));
 const BlogPostPage    = lazy(() => import('@/pages/BlogPost.jsx'));
 const TermsPage       = lazy(() => import('@/pages/Terms.jsx'));
+const PrivacyPolicyPage = lazy(() => import('@/pages/PrivacyPolicy.jsx'));
 
 // ── PATIENT pages ─────────────────────────────────────
 const PatientLogin     = lazy(() => import('@/patient/pages/PatientLogin.jsx'));
@@ -164,6 +165,7 @@ export function AppRoutes() {
             <Route path="/blogs" element={<BlogsPage />} />
             <Route path="/blogs/:slug" element={<BlogPostPage />} />
             <Route path="/terms" element={<TermsPage />} />
+            <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
 
 
             {/* ═══════════════════════════════════════
