@@ -62,7 +62,7 @@ export const Hero = () => {
                         Book Appointment
                     </Button>
                     <Button size="lg" variant="outline" className="w-full sm:w-auto" asChild>
-                        <NavLink to="/emergency">Find Emergency Care</NavLink>
+                        <NavLink to="/login">Get Started for Free</NavLink>
                     </Button>
                 </motion.div>
             </motion.div>
