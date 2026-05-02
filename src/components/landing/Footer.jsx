@@ -35,10 +35,11 @@ export const Footer = () => {
             { title: "Terms and Conditions", href: "/terms" },
         ],
         "Social": [
-            { title: "Facebook", href: "#" },
-            { title: "Twitter", href: "#" },
-            { title: "LinkedIn", href: "#" },
-            { title: "YouTube", href: "#" },
+            { title: "Facebook", href: "https://www.facebook.com/61579044704694" },
+            { title: "Twitter", href: "https://twitter.com/HealthSanjiwani" },
+            { title: "LinkedIn", href: "https://www.linkedin.com/in/upchaar-health-6a348137a" },
+            { title: "YouTube", href: "https://www.youtube.com/watch?v=MfyFm00jNLA" },
+            { title: "Instagram", href: "https://www.instagram.com/upcharhealth_official" },
         ],
     };
 
@@ -52,9 +53,20 @@ export const Footer = () => {
                             <ul className="space-y-2">
                                 {links.map((link) => (
                                     <li key={link.title}>
-                                        <Link to={link.href} className="text-sm text-gray-300 hover:text-red-400">
-                                            {link.title}
-                                        </Link>
+                                        {link.href.startsWith('http') ? (
+                                            <a 
+                                                href={link.href} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer"
+                                                className="text-sm text-gray-300 hover:text-red-400 relative z-10"
+                                            >
+                                                {link.title}
+                                            </a>
+                                        ) : (
+                                            <Link to={link.href} className="text-sm text-gray-300 hover:text-red-400">
+                                                {link.title}
+                                            </Link>
+                                        )}
                                     </li>
                                 ))}
                             </ul>
@@ -73,10 +85,6 @@ export const Footer = () => {
                         <div className="flex items-center gap-1.5"><ShieldCheck size={14}/> <span>Email: support@upcharhealth.com</span></div>
                     </div>
 
-                    <div className="flex items-center space-x-2">
-                        <img src="/logo.png" alt="Upchar Health Logo" width={32} height={32} />
-                        <span className="font-bold text-lg">Upchar Health</span>
-                    </div>
 
                     <p className="text-sm text-gray-400">
                         {currentYear && <>© {currentYear} Upchar Health. All rights reserved.</>}
