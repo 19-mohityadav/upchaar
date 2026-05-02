@@ -40,7 +40,7 @@ export const MsmeSection = () => {
                 </motion.div>
 
                 <p className="text-sm text-muted-foreground mt-4">
-                    *For security reasons, your complete Udyam number is not displayed publicly.
+                    *For security reasons, our complete Udyam number is not displayed publicly.
                 </p>
             </motion.div>
         </section>
