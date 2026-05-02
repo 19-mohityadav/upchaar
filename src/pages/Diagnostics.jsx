@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Card,
@@ -9,7 +9,8 @@ import {
     CardFooter,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { diagnosticCenters } from '@/lib/data';
+import { supabase } from '@/lib/supabase.js';
+import { getStorageUrl } from '@/lib/uploadImage.js';
 import { Badge } from '@/components/ui/badge';
 import { 
     MapPin, 
@@ -28,8 +29,42 @@ import { Input } from '@/components/ui/input';
 export default function DiagnosticsPage() {
     const [searchTerm, setSearchTerm] = useState('');
     const [activeCategory, setActiveCategory] = useState('All');
+    const [diagnosticCenters, setDiagnosticCenters] = useState([]);
+    const [loading, setLoading] = useState(true);
 
     const categories = ['All', 'Pathology', 'Radiology', 'MRI/CT Scan', 'Blood Test'];
+
+    useEffect(() => {
+        const fetchCenters = async () => {
+            setLoading(true);
+            try {
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .eq('profile_type', 'diagnostic');
+                
+                if (error) throw error;
+                
+                if (data) {
+                    const mappedCenters = data.map(center => ({
+                        id: center.id,
+                        name: center.full_name || center.name || 'Diagnostic Center',
+                        location: center.address || center.city ? `${center.city || ''} ${center.state || ''}`.trim() : 'Location not specified',
+                        tests: ['Blood Test', 'Pathology', 'X-Ray'], // Default tests for now
+                        logo: getStorageUrl(center.avatar_url, 'avatars'),
+                        dataAiHint: 'diagnostic center'
+                    }));
+                    setDiagnosticCenters(mappedCenters);
+                }
+            } catch (err) {
+                console.error("Error fetching diagnostics centers:", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchCenters();
+    }, []);
 
     const filteredCenters = diagnosticCenters.filter(center => {
         const matchesSearch = center.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -98,12 +133,18 @@ export default function DiagnosticsPage() {
                         >
                             <Card className="group h-full flex flex-col border-slate-100 hover:border-emerald-500/20 transition-all duration-300 shadow-md hover:shadow-2xl overflow-hidden rounded-3xl">
                                 <div className="relative h-40 bg-slate-50 overflow-hidden">
-                                    <img 
-                                        src={center.logo} 
-                                        alt={center.name} 
-                                        className="h-full w-full object-contain p-8 group-hover:scale-110 transition-transform duration-500" 
-                                        data-ai-hint={center.dataAiHint} 
-                                    />
+                                    {center.logo ? (
+                                        <img 
+                                            src={center.logo} 
+                                            alt={center.name} 
+                                            className="h-full w-full object-cover p-0 group-hover:scale-110 transition-transform duration-500" 
+                                            data-ai-hint={center.dataAiHint} 
+                                        />
+                                    ) : (
+                                        <div className="h-full w-full flex items-center justify-center bg-slate-200 text-slate-400">
+                                            <FlaskConical className="w-12 h-12" />
+                                        </div>
+                                    )}
                                     <div className="absolute top-4 right-4">
                                         <Badge className="bg-white/90 backdrop-blur text-emerald-600 border-emerald-100 flex items-center gap-1 font-bold">
                                             <Star className="w-3 h-3 fill-emerald-600" /> 4.8

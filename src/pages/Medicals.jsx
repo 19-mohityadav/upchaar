@@ -78,7 +78,12 @@ export default function MedicalsPage() {
                         .select('*')
                         .in('profile_type', ['medical', 'clinic', 'hospital']);
                     if (!error && profileData) {
-                        setMedicals(profileData);
+                        const processed = profileData.map(p => ({
+                            ...p,
+                            avatar_url: getStorageUrl(p.avatar_url, 'avatars'),
+                            full_name: p.full_name || p.name
+                        }));
+                        setMedicals(processed);
                         return;
                     }
                 }
