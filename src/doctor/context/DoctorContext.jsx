@@ -159,12 +159,15 @@ export function DoctorProvider({ children }) {
                 return;
             }
 
-            if (event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'TOKEN_REFRESHED') {
+            if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
                 setLoading(true);
                 void (async () => {
                     await restoreDoctorSession(session);
                     if (mounted) setLoading(false);
                 })();
+            } else if (event === 'USER_UPDATED') {
+                // Background refresh only for metadata updates to avoid full-page spinner
+                void restoreDoctorSession(session);
             }
         });
 
@@ -383,18 +386,18 @@ export function DoctorProvider({ children }) {
 
         Object.keys(authMetaUpdates).forEach((key) => authMetaUpdates[key] === undefined && delete authMetaUpdates[key]);
 
-        const [{ data: authData, error: authError }, { data: doctorData, error: doctorError }] = await Promise.all([
-            supabase.auth.updateUser({ data: authMetaUpdates }),
-            supabase
-                .from('doctors')
-                .update(doctorUpdates)
-                .eq('id', doctorRecord.id)
-                .select()
-                .single(),
-        ]);
+        // Run DB update first, then Auth metadata to avoid race conditions with auth listeners
+        const { data: doctorData, error: doctorError } = await supabase
+            .from('doctors')
+            .update(doctorUpdates)
+            .eq('id', doctorRecord.id)
+            .select()
+            .single();
 
-        if (authError) throw new Error(authError.message);
         if (doctorError) throw new Error(doctorError.message);
+
+        const { data: authData, error: authError } = await supabase.auth.updateUser({ data: authMetaUpdates });
+        if (authError) throw new Error(authError.message);
 
         setDoctorRecord(doctorData);
         const nextDoctor = buildDoctorState(authData.user, doctorData);
