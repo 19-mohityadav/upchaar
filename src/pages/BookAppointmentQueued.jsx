@@ -859,7 +859,7 @@ export default function BookAppointmentQueued() {
                                             onClick={handleConfirmBooking}
                                             disabled={bookingLoading}
                                         >
-                                            {bookingLoading ? <Loader2 className="animate-spin mr-2" /> : 'Confirm & Pay Now'}
+                                            {bookingLoading ? <Loader2 className="animate-spin mr-2" /> : 'Confirm and Pay Cash'}
                                         </Button>
                                         <p className="text-[10px] text-center text-slate-400">
                                             By clicking confirm, you agree to our terms of service and refund policy.

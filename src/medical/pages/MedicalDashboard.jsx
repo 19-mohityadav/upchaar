@@ -8,7 +8,8 @@ import ChangePasswordModal from '@/components/ChangePasswordModal.jsx';
 import ImageCropperModal from '@/components/ImageCropperModal.jsx';
 import Skeleton from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
-import { uploadAvatar } from '@/lib/uploadImage.js';
+import MedicalAnalytics from './MedicalAnalytics';
+import { uploadAvatar, getStorageUrl } from '@/lib/uploadImage.js';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -333,12 +334,12 @@ export default function MedicalDashboard() {
   }, [profile, profile?.id]);
 
   useEffect(() => {
-    if (profile?.id) {
+    if (profile?.id && appointments.length === 0) {
       fetchStaff();
       fetchMedicals();
       fetchAppointments();
     }
-  }, [profile?.id, fetchStaff, fetchMedicals, fetchAppointments]);
+  }, [profile?.id, fetchStaff, fetchMedicals, fetchAppointments, appointments.length]);
 
   // Patient avatars (for "Patients" tab)
   useEffect(() => {
@@ -480,7 +481,7 @@ export default function MedicalDashboard() {
                     aria-label="Profile menu"
                   >
                     {profile?.avatar_url ? (
-                      <img src={profile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                      <img src={getStorageUrl(profile.avatar_url, 'avatars')} alt="Profile" className="w-full h-full object-cover" />
                     ) : (
                       displayName.charAt(0).toUpperCase()
                     )}
@@ -763,7 +764,7 @@ export default function MedicalDashboard() {
                     <div className="flex flex-col items-center space-y-4">
                       <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl aspect-square border-4 border-teal-50 bg-teal-600 flex items-center justify-center text-white text-4xl font-bold overflow-hidden shadow-sm">
                         {profile?.avatar_url ? (
-                          <img src={profile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                          <img src={getStorageUrl(profile.avatar_url, 'avatars')} alt="Profile" className="w-full h-full object-cover" />
                         ) : (
                           displayName.charAt(0).toUpperCase()
                         )}
@@ -1053,6 +1054,8 @@ export default function MedicalDashboard() {
                 )}
               </div>
             </div>
+          ) : activeNav === 'Analytics' ? (
+            <MedicalAnalytics orgId={internalOrgId || profile?.id} />
           ) : (
             <div className="flex flex-col items-center justify-center py-24 bg-white rounded-3xl border border-gray-100 shadow-sm min-h-[50vh]">
               <div className="w-20 h-20 bg-teal-50 rounded-full flex items-center justify-center mb-4">
