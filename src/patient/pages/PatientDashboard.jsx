@@ -15,7 +15,7 @@ import {
     User, Calendar, FileText, Pill,
     MapPin, ChevronRight, Activity, Camera, Loader2,
     Hash, Clock, CalendarCheck2, Stethoscope, ChevronLeft, ChevronRight as ChevronRightIcon, Store,
-    CheckCircle2
+    CheckCircle2, FlaskConical
 } from 'lucide-react';
 import { uploadAvatar, getStorageUrl } from '@/lib/uploadImage.js';
 import { supabase } from '@/lib/supabase.js';
@@ -28,7 +28,7 @@ const QUICK_ACTIONS = [
     { icon: Calendar, label: 'Doctors', desc: 'Schedule with a doctor', color: 'from-blue-500 to-indigo-500', href: '/doctors' },
     { icon: Store, label: 'Medical / Clinics', desc: 'Find nearby medicals', color: 'from-pink-500 to-rose-500', href: '/medicals' },
     { icon: Pill, label: 'Prescriptions', desc: 'Your current medications', color: 'from-orange-500 to-amber-500', href: '/records' },
-    { icon: Activity, label: 'Medical Reports', desc: 'Lab & diagnostic results', color: 'from-cyan-500 to-blue-500', href: '/records' },
+    { icon: Activity, label: 'Diagnostic Centers', desc: 'Book Lab & Diagnostic tests', color: 'from-cyan-500 to-blue-500', href: '/diagnostics' },
     { icon: MapPin, label: 'Find Nearby', desc: 'Hospitals & clinics', color: 'from-emerald-500 to-teal-500', href: '/hospitals' },
 ];
 
@@ -196,6 +196,228 @@ const AppointmentsBanner = React.memo(function AppointmentsBanner({ patientId, r
         </div>
     );
 });
+/* ── Medicals & Clinics Banner Section ── */
+const MedicalClinicsBanner = React.memo(function MedicalClinicsBanner() {
+    const [facilities, setFacilities] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const scrollRef = useRef(null);
+
+    useEffect(() => {
+        const fetchFacilities = async () => {
+            setLoading(true);
+            try {
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('id, full_name, name, city, state, avatar_url, profile_type')
+                    .in('profile_type', ['medical', 'clinic'])
+                    .limit(5);
+                
+                if (!error && data) {
+                    setFacilities(data.map(f => ({
+                        id: f.id,
+                        name: f.full_name || f.name || 'Healthcare Facility',
+                        location: [f.city, f.state].filter(Boolean).join(', ') || 'Nearby',
+                        logo: getStorageUrl(f.avatar_url, 'avatars'),
+                        type: f.profile_type
+                    })));
+                }
+            } catch (err) {
+                console.error("Error fetching facilities:", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchFacilities();
+    }, []);
+
+    const scroll = useCallback((dir) => {
+        if (scrollRef.current) {
+            scrollRef.current.scrollBy({ left: dir === 'left' ? -250 : 250, behavior: 'smooth' });
+        }
+    }, []);
+
+    if (loading) {
+        return (
+            <div className="mb-8">
+                <h2 className="text-base font-semibold text-slate-700 mb-4">Nearby Medicals & Clinics</h2>
+                <Skeleton height={120} borderRadius={16} />
+            </div>
+        );
+    }
+
+    if (facilities.length === 0) return null;
+
+    return (
+        <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base font-semibold text-slate-700">Nearby Medicals & Clinics</h2>
+                <div className="flex gap-1.5">
+                    <button
+                        onClick={() => scroll('left')}
+                        className="h-8 w-8 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-500 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-300 transition"
+                    >
+                        <ChevronLeft size={15} />
+                    </button>
+                    <button
+                        onClick={() => scroll('right')}
+                        className="h-8 w-8 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-500 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-300 transition"
+                    >
+                        <ChevronRightIcon size={15} />
+                    </button>
+                </div>
+            </div>
+
+            <div
+                ref={scrollRef}
+                className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide"
+                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            >
+                {facilities.map((fac, i) => (
+                    <motion.div
+                        key={fac.id}
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.08, duration: 0.35 }}
+                        className="flex-shrink-0 w-64 bg-white border border-slate-100 rounded-2xl p-4 shadow-sm hover:shadow-md hover:border-rose-200 transition-all cursor-pointer"
+                        onClick={() => window.location.href = '/medicals'}
+                    >
+                        <div className="flex items-center gap-4 mb-3">
+                            <div className="h-12 w-12 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center overflow-hidden flex-shrink-0 text-rose-500">
+                                {fac.logo ? (
+                                    <img src={fac.logo} alt={fac.name} className="h-full w-full object-cover" />
+                                ) : (
+                                    <Store size={20} />
+                                )}
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-sm text-slate-800 line-clamp-1">{fac.name}</h3>
+                                <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                                    <MapPin size={10} /> {fac.location}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-50">
+                            <span className="text-xs font-semibold text-rose-600 capitalize">View {fac.type}</span>
+                            <ChevronRightIcon size={14} className="text-rose-600" />
+                        </div>
+                    </motion.div>
+                ))}
+            </div>
+        </div>
+    );
+});
+
+/* ── Diagnostic Centers Banner Section ── */
+const DiagnosticCentersBanner = React.memo(function DiagnosticCentersBanner() {
+    const [centers, setCenters] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const scrollRef = useRef(null);
+
+    useEffect(() => {
+        const fetchCenters = async () => {
+            setLoading(true);
+            try {
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('id, full_name, name, city, state, avatar_url')
+                    .eq('profile_type', 'diagnostic')
+                    .limit(5);
+                
+                if (!error && data) {
+                    setCenters(data.map(c => ({
+                        id: c.id,
+                        name: c.full_name || c.name || 'Diagnostic Center',
+                        location: [c.city, c.state].filter(Boolean).join(', ') || 'Nearby',
+                        logo: getStorageUrl(c.avatar_url, 'avatars')
+                    })));
+                }
+            } catch (err) {
+                console.error("Error fetching diagnostics centers:", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchCenters();
+    }, []);
+
+    const scroll = useCallback((dir) => {
+        if (scrollRef.current) {
+            scrollRef.current.scrollBy({ left: dir === 'left' ? -250 : 250, behavior: 'smooth' });
+        }
+    }, []);
+
+    if (loading) {
+        return (
+            <div className="mb-8">
+                <h2 className="text-base font-semibold text-slate-700 mb-4">Nearby Diagnostic Centers</h2>
+                <Skeleton height={120} borderRadius={16} />
+            </div>
+        );
+    }
+
+    if (centers.length === 0) return null;
+
+    return (
+        <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base font-semibold text-slate-700">Nearby Diagnostic Centers</h2>
+                <div className="flex gap-1.5">
+                    <button
+                        onClick={() => scroll('left')}
+                        className="h-8 w-8 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-500 hover:bg-teal-50 hover:text-teal-600 hover:border-teal-300 transition"
+                    >
+                        <ChevronLeft size={15} />
+                    </button>
+                    <button
+                        onClick={() => scroll('right')}
+                        className="h-8 w-8 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-500 hover:bg-teal-50 hover:text-teal-600 hover:border-teal-300 transition"
+                    >
+                        <ChevronRightIcon size={15} />
+                    </button>
+                </div>
+            </div>
+
+            <div
+                ref={scrollRef}
+                className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide"
+                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            >
+                {centers.map((center, i) => (
+                    <motion.div
+                        key={center.id}
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.08, duration: 0.35 }}
+                        className="flex-shrink-0 w-64 bg-white border border-slate-100 rounded-2xl p-4 shadow-sm hover:shadow-md hover:border-emerald-200 transition-all cursor-pointer"
+                        onClick={() => window.location.href = '/diagnostics'}
+                    >
+                        <div className="flex items-center gap-4 mb-3">
+                            <div className="h-12 w-12 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center overflow-hidden flex-shrink-0 text-emerald-600">
+                                {center.logo ? (
+                                    <img src={center.logo} alt={center.name} className="h-full w-full object-cover" />
+                                ) : (
+                                    <FlaskConical size={20} />
+                                )}
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-sm text-slate-800 line-clamp-1">{center.name}</h3>
+                                <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                                    <MapPin size={10} /> {center.location}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-50">
+                            <span className="text-xs font-semibold text-emerald-600">Book Test</span>
+                            <ChevronRightIcon size={14} className="text-emerald-600" />
+                        </div>
+                    </motion.div>
+                ))}
+            </div>
+        </div>
+    );
+});
 
 /* ── Main Dashboard ─────────────────────────────── */
 export default function PatientDashboard() {
@@ -301,7 +523,10 @@ export default function PatientDashboard() {
             .limit(1)
             .then(({ data }) => {
                 if (data?.[0]) {
-                    setActiveAppointment(data[0]);
+                    setActiveAppointment(prev => {
+                        if (prev?.id === data[0].id && prev?.status === data[0].status) return prev;
+                        return data[0];
+                    });
                     fetchCurrentServing(data[0]);
                 }
             });
@@ -562,6 +787,10 @@ export default function PatientDashboard() {
 
                 {/* ── Upcoming Appointments Banner ─── */}
                 <AppointmentsBanner key={`${patient.id}-${upcomingRefreshKey}`} patientId={patient.id} refreshKey={upcomingRefreshKey} />
+
+                {/* ── Diagnostic Centers Banner ───── */}
+                <MedicalClinicsBanner />
+                <DiagnosticCentersBanner />
 
                 {/* ── Quick actions grid ────────────── */}
                 <h2 className="text-base font-semibold text-slate-700 mb-4">Quick Actions</h2>

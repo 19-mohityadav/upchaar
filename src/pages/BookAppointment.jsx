@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/supabase.js';
 import { useAuth } from '@/auth/AuthContext.jsx';
+import { getStorageUrl } from '@/lib/uploadImage.js';
 
 // ── Static Data ──────────────────────────────────────
 // Constants will be fetched dynamically
@@ -487,7 +488,7 @@ export default function BookAppointment() {
                                                         <div className="flex items-start gap-4">
                                                             <div className="h-16 w-16 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-500 text-2xl font-bold overflow-hidden border-2 border-white shadow-sm">
                                                                 {doc.avatar_url ? (
-                                                                    <img src={doc.avatar_url} alt={doc.full_name} className="w-full h-full object-cover" />
+                                                                    <img src={getStorageUrl(doc.avatar_url, 'doctor-avtar')} alt={doc.full_name} className="w-full h-full object-cover" />
                                                                 ) : doc.full_name?.[0]}
                                                             </div>
                                                             <div className="flex-1">
@@ -543,7 +544,7 @@ export default function BookAppointment() {
                                         <CardContent className="p-6 text-center space-y-4">
                                             <div className="h-24 w-24 rounded-full bg-slate-100 mx-auto border-4 border-white shadow-md overflow-hidden">
                                                 {selectedDoctor.avatar_url ? (
-                                                    <img src={selectedDoctor.avatar_url} alt={selectedDoctor.full_name} className="w-full h-full object-cover" />
+                                                    <img src={getStorageUrl(selectedDoctor.avatar_url, 'doctor-avtar')} alt={selectedDoctor.full_name} className="w-full h-full object-cover" />
                                                 ) : <div className="h-full w-full flex items-center justify-center text-3xl font-bold text-slate-400">{selectedDoctor.full_name?.[0]}</div>}
                                             </div>
                                             <div>

@@ -51,7 +51,7 @@ export default function MedicalDashboard() {
   const [doctorSecretKey, setDoctorSecretKey] = useState('');
   const [addingDoctor, setAddingDoctor] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [appointments, setAppointments] = useState([]);
+  const [appointments, setAppointments] = useState(null);
   const [patientProfiles, setPatientProfiles] = useState({});
   const [timetables, setTimetables] = useState({});   // { doctorId: slots[] }
   const [expandedDoctor, setExpandedDoctor] = useState(null);
@@ -120,6 +120,7 @@ export default function MedicalDashboard() {
   };
 
   const stats = useMemo(() => {
+    if (!appointments) return { totalDoctors: staffDoctors.length, totalPatients: 0, todayAppointments: 0, totalRevenue: '0' };
     const today = new Date().toISOString().split('T')[0];
     const todayAppointments = appointments.filter(a => a.date?.startsWith(today));
     const totalRev = appointments.reduce((sum, a) => sum + (a.fee || 0), 0);
@@ -334,12 +335,12 @@ export default function MedicalDashboard() {
   }, [profile, profile?.id]);
 
   useEffect(() => {
-    if (profile?.id && appointments.length === 0) {
+    if (profile?.id && appointments === null) {
       fetchStaff();
       fetchMedicals();
       fetchAppointments();
     }
-  }, [profile?.id, fetchStaff, fetchMedicals, fetchAppointments, appointments.length]);
+  }, [profile?.id, fetchStaff, fetchMedicals, fetchAppointments, appointments]);
 
   // Patient avatars (for "Patients" tab)
   useEffect(() => {
@@ -601,7 +602,7 @@ export default function MedicalDashboard() {
                               <div className="relative mb-3">
                                 <div className="w-16 h-16 rounded-full border-4 border-teal-50 overflow-hidden bg-teal-600 flex items-center justify-center text-white text-xl font-bold">
                                   {doc?.avatar_url
-                                    ? <img src={doc.avatar_url} alt={doc.full_name} className="w-full h-full object-cover" />
+                                    ? <img src={getStorageUrl(doc.avatar_url, 'doctor-avtar')} alt={doc.full_name} className="w-full h-full object-cover" />
                                     : docInitial}
                                 </div>
                                 <span className="absolute bottom-1 right-0 w-3.5 h-3.5 rounded-full border-2 border-white bg-green-500" />
@@ -716,7 +717,7 @@ export default function MedicalDashboard() {
                     <span className="material-symbols-outlined text-teal-600">history</span> Activity
                   </h3>
                   <div className="bg-white rounded-2xl p-5 sm:p-6" style={{ boxShadow: '0 4px 6px -1px rgb(0 0 0/0.05)' }}>
-                    {appointments.length > 0 ? (
+                    {appointments && appointments.length > 0 ? (
                       appointments.slice(0, 5).map((item, idx) => (
                         <div key={item.id} className="flex gap-4 mb-6 last:mb-0">
                           <div className="relative flex-shrink-0">
@@ -826,7 +827,7 @@ export default function MedicalDashboard() {
             </div>
           ) : activeNav === 'Patients' ? (() => {
             const patientsMap = {};
-            appointments.forEach(apt => {
+            (appointments || []).forEach(apt => {
               const pid = apt.patient_id || apt.patient_name;
               if (!pid) return;
               if (!patientsMap[pid]) {
@@ -980,7 +981,7 @@ export default function MedicalDashboard() {
                           <div className="relative mb-3">
                             <div className="w-16 h-16 rounded-full border-4 border-teal-50 overflow-hidden bg-teal-600 flex items-center justify-center text-white text-xl font-bold">
                               {doc?.avatar_url
-                                ? <img src={doc.avatar_url} alt={doc.full_name} className="w-full h-full object-cover" />
+                                ? <img src={getStorageUrl(doc.avatar_url, 'doctor-avtar')} alt={doc.full_name} className="w-full h-full object-cover" />
                                 : docInitial}
                             </div>
                             <span className="absolute bottom-1 right-0 w-3.5 h-3.5 rounded-full border-2 border-white bg-green-500" />
