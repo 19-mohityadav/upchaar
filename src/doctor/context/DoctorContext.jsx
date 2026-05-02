@@ -52,8 +52,8 @@ const mapDoctorRecord = (record) => {
         totalRevenue: record.total_revenue || 0,
         totalAppointments: record.total_appointments || 0,
         status: record.status || 'Pending',
-        medicalLicense: record.medical_license || '',
-        nmcRegistration: record.nmc_registration || '',
+        medicalLicense: record.license_no || '',
+        nmcRegistration: record.nmc_no || '',
         secretKey: record.secret_key || '',
     };
 };
@@ -304,8 +304,8 @@ export function DoctorProvider({ children }) {
                 email: email.trim(),
                 phone: phone.trim(),
                 whatsapp_number: (whatsappNumber || '').trim(),
-                medical_license: medicalLicense.trim(),
-                nmc_registration: nmcRegistration.trim(),
+                license_no: medicalLicense.trim(),
+                nmc_no: nmcRegistration.trim(),
                 dob: dob,
                 specialization: specialization || 'General Physician',
                 city: city || '',
@@ -318,7 +318,8 @@ export function DoctorProvider({ children }) {
                 total_revenue: 0,
                 experience: 0,
                 status: 'Pending',
-                secret_key: generatedKey
+                secret_key: generatedKey,
+                avatar_color: '#0d9488'
             }).select().single();
 
             if (doctorError) {
