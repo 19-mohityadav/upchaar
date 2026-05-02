@@ -677,7 +677,7 @@ export default function ClinicDashboard() {
             </div>
           )}
         </div>
-v>
+
       </main>
 
       {/* Link Doctor Modal */}
