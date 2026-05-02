@@ -5,6 +5,8 @@ import { useNavigate } from 'react-router-dom';
 import DoctorAppointmentsModal from '@/components/dashboard/DoctorAppointmentsModal';
 import Skeleton from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
+import ClinicAnalytics from './ClinicAnalytics';
+import { getStorageUrl } from '@/lib/uploadImage.js';
 
 const NAV_ITEMS = [
   { icon: 'dashboard', label: 'Dashboard' },
@@ -38,6 +40,7 @@ export default function ClinicDashboard() {
   const [appointments, setAppointments] = useState([]);
   const [timetables, setTimetables] = useState({});
   const [expandedDoctor, setExpandedDoctor] = useState(null);
+  const [internalOrgId, setInternalOrgId] = useState(null);
   const sidebarRef = useRef(null);
 
   const stats = useMemo(() => {
@@ -109,6 +112,7 @@ export default function ClinicDashboard() {
       if (links.length > 0) {
         const { data: clinicRow } = await supabase.from('clinics').select('id').eq('profile_id', profile?.id).maybeSingle();
         const orgId = clinicRow?.id;
+        setInternalOrgId(orgId);
         
         // Save the orgId to the profile so we can use it for the modal
         if (profile && orgId) {
@@ -250,12 +254,12 @@ export default function ClinicDashboard() {
   }, [profile?.id]);
 
   useEffect(() => { 
-    if (profile?.id) {
+    if (profile?.id && appointments.length === 0) {
       fetchStaff();
       fetchClinics();
       fetchAppointments();
     }
-  }, [profile?.id, fetchStaff, fetchClinics, fetchAppointments]);
+  }, [profile?.id, fetchStaff, fetchClinics, fetchAppointments, appointments.length]);
 
   const handleSignOut = useCallback(async () => {
     if (!window.confirm('Are you sure you want to sign out?')) return;
@@ -366,8 +370,12 @@ export default function ClinicDashboard() {
                 <p className="text-sm font-semibold leading-tight">{displayName}</p>
                 <p className="text-xs text-gray-500">Clinic Admin</p>
               </div>
-              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full border-2 border-teal-100 bg-teal-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-                {displayName.charAt(0).toUpperCase()}
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl aspect-square overflow-hidden border-2 border-teal-100 bg-teal-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                {profile?.avatar_url ? (
+                  <img src={getStorageUrl(profile.avatar_url, 'avatars')} alt="Profile" className="w-full h-full object-cover" />
+                ) : (
+                  displayName.charAt(0).toUpperCase()
+                )}
               </div>
               <span className="material-symbols-outlined text-gray-400 text-xl hidden sm:inline">keyboard_arrow_down</span>
             </div>
@@ -383,281 +391,293 @@ export default function ClinicDashboard() {
               placeholder="Search patients, clinics, or reports..." />
           </div>
         </div>
-
         {/* Page Body */}
         <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8">
-
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
-            {loading ? (
-              Array(4).fill(0).map((_, i) => (
-                <div key={i} className="bg-white p-4 sm:p-6 rounded-2xl border-l-4 border-teal-500 shadow-sm animate-pulse">
-                  <div className="flex items-center gap-3 sm:gap-4">
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gray-100 rounded-xl" />
-                    <div className="flex-1">
-                      <div className="h-3 bg-gray-100 rounded w-16 mb-2" />
-                      <div className="h-6 bg-gray-100 rounded w-12" />
-                    </div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              STAT_CARDS.map((s) => (
-                <div key={s.label}
-                  className={`bg-white p-4 sm:p-6 rounded-2xl border-l-4 border-teal-500 flex items-center gap-3 sm:gap-4`}
-                  style={{ boxShadow: '0 4px 6px -1px rgb(0 0 0/0.05), 0 2px 4px -2px rgb(0 0 0/0.05)' }}>
-                  <div className={`w-10 h-10 sm:w-12 sm:h-12 bg-teal-50 rounded-xl flex items-center justify-center text-teal-600 flex-shrink-0`}>
-                    <span className="material-symbols-outlined text-2xl sm:text-3xl">{s.icon}</span>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs sm:text-sm text-gray-500 font-medium truncate">{s.label}</p>
-                    <h3 className="text-lg sm:text-2xl font-bold truncate">{s.value}</h3>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* Main Grid */}
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 sm:gap-8">
-
-            {/* Staff Doctors */}
-            <div className="xl:col-span-8 space-y-6">
-              <div className="flex items-center justify-between">
-                <h3 className="text-base sm:text-lg font-bold flex items-center gap-2">
-                  <span className="material-symbols-outlined text-teal-600">stethoscope</span> Staff Doctors
-                </h3>
-                <button onClick={() => setIsAddOpen(true)}
-                  className="bg-teal-600 hover:bg-teal-700 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium flex items-center gap-1 sm:gap-2 transition-colors">
-                  <span className="material-symbols-outlined text-sm">add</span> Link Doctor
-                </button>
-              </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
-                  {loading ? (
-                    Array(3).fill(0).map((_, i) => (
-                      <div key={i} className="bg-white p-5 sm:p-6 rounded-2xl text-center flex flex-col items-center shadow-sm">
-                        <div className="w-20 h-20 rounded-full bg-gray-100 mb-4 animate-pulse" />
-                        <div className="h-4 bg-gray-100 rounded w-32 mb-2 animate-pulse" />
-                        <div className="h-3 bg-gray-100 rounded w-24 mb-4 animate-pulse" />
-                        <div className="w-full h-8 bg-gray-50 rounded-lg animate-pulse" />
-                      </div>
-                    ))
-                  ) : staffDoctors.length > 0 ? (
-                    staffDoctors.map((link) => {
-                      const doc = link.doctors;
-                      const isExpanded = expandedDoctor === link.id;
-                      const slots = timetables[doc?.id] || [];
-                      // Group slots by day
-                      const byDay = {};
-                      slots.forEach(s => {
-                        if (!byDay[s.day]) byDay[s.day] = [];
-                        byDay[s.day].push(`${s.time_from} - ${s.time_to}`);
-                      });
-
-                      return (
-                        <div key={link.id}
-                          className="bg-white rounded-2xl flex flex-col group relative transition-all duration-300 hover:shadow-xl border border-gray-100 overflow-hidden"
-                          style={{ boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.05)' }}>
-                          
-                          {/* Unlink button */}
-                          <button
-                            type="button"
-                            onClick={(e) => handleUnlinkDoctor(e, link.id)}
-                            className="absolute top-3 right-3 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all z-20"
-                            title="Unlink Doctor"
-                          >
-                            <span className="material-symbols-outlined text-lg">link_off</span>
-                          </button>
-
-                          {/* Doctor Info */}
-                          <div className="p-5 flex flex-col items-center text-center">
-                            <div className="relative mb-3">
-                              <div className="w-16 h-16 rounded-full border-4 border-teal-50 overflow-hidden bg-teal-600 flex items-center justify-center text-white text-xl font-bold">
-                                {doc?.avatar_url
-                                  ? <img src={doc.avatar_url} alt={doc.full_name} className="w-full h-full object-cover" />
-                                  : (doc?.full_name?.charAt(0).toUpperCase() || 'D')}
-                              </div>
-                              <span className="absolute bottom-1 right-0 w-3.5 h-3.5 rounded-full border-2 border-white bg-green-500" />
-                            </div>
-                            <h4 className="font-bold text-gray-900 text-sm line-clamp-1">{doc?.full_name}</h4>
-                            <p className="text-xs text-teal-600 font-medium">{doc?.specialization}</p>
-                            <p className="text-[11px] text-gray-400 mt-0.5 font-bold uppercase tracking-wide">verified</p>
-                            
-                            <button 
-                              type="button"
-                              onClick={(e) => {
-                                 e.stopPropagation();
-                                 // setSelectedDoctorForAppointments(doc);
-                              }}
-                              className="w-full mt-3 py-2 text-[11px] font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 rounded-xl transition-colors tracking-wide uppercase"
-                            >
-                              View Appointments
-                            </button>
-                          </div>
-
-                          {/* Timetable toggle */}
-                          <div className="border-t border-gray-50">
-                            <button
-                              type="button"
-                              onClick={() => setExpandedDoctor(isExpanded ? null : link.id)}
-                              className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-gray-500 hover:bg-gray-50 transition-colors"
-                            >
-                              <span className="flex items-center gap-1.5">
-                                <span className="material-symbols-outlined text-sm text-teal-500">schedule</span>
-                                {slots.length > 0 ? `${slots.length} slot${slots.length !== 1 ? 's' : ''}` : 'No schedule set'}
-                              </span>
-                              <span className="material-symbols-outlined text-sm">
-                                {isExpanded ? 'expand_less' : 'expand_more'}
-                              </span>
-                            </button>
-
-                            {/* Schedule detail */}
-                            {isExpanded && (
-                              <div className="px-4 pb-4 space-y-1.5">
-                                {Object.keys(byDay).length > 0 ? (
-                                  Object.entries(byDay).map(([day, times]) => (
-                                    <div key={day} className="flex items-start gap-2 text-xs">
-                                      <span className="font-semibold text-slate-600 w-9 shrink-0">{day.slice(0,3)}</span>
-                                      <div className="flex flex-wrap gap-1">
-                                        {times.map((t, i) => (
-                                          <span key={i} className="px-2 py-0.5 bg-teal-50 text-teal-700 rounded-full border border-teal-100 font-medium">
-                                            {t}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  ))
-                                ) : (
-                                  <p className="text-[11px] text-gray-400 italic">Doctor hasn&apos;t set a timetable yet.</p>
-                                )}
-                              </div>
-                            )}
-                          </div>
+          {activeNav === 'Dashboard' ? (
+            <>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+                {loading ? (
+                  Array(4).fill(0).map((_, i) => (
+                    <div key={i} className="bg-white p-4 sm:p-6 rounded-2xl border-l-4 border-teal-500 shadow-sm animate-pulse">
+                      <div className="flex items-center gap-3 sm:gap-4">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gray-100 rounded-xl" />
+                        <div className="flex-1">
+                          <div className="h-3 bg-gray-100 rounded w-16 mb-2" />
+                          <div className="h-6 bg-gray-100 rounded w-12" />
                         </div>
-                      );
-                    })
-                  ) : (
-                    <div className="sm:col-span-2 xl:col-span-3 py-12 text-center bg-gray-50/50 rounded-2xl border-2 border-dashed border-gray-200">
-                      <span className="material-symbols-outlined text-4xl text-gray-300 mb-2">person_add</span>
-                      <p className="text-gray-500 text-sm font-medium">No linked doctors yet</p>
-                      <button onClick={() => setIsAddOpen(true)} className="mt-2 text-teal-600 text-xs font-bold hover:underline">Link your first doctor</button>
-                    </div>
-                  )}
-                </div>
-
-                  <div>
-                    <h3 className="text-base sm:text-lg font-bold flex items-center gap-2 mb-4 text-gray-700">
-                      <span className="material-symbols-outlined text-teal-600">table_view</span> Registered Nodes
-                    </h3>
-                    <div className="bg-white rounded-2xl overflow-x-auto" style={{ boxShadow: '0 4px 6px -1px rgb(0 0 0/0.05)' }}>
-                      <table className="w-full text-sm min-w-[480px]">
-                        <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wider">
-                          <tr>
-                            <th className="px-4 sm:px-6 py-3 text-left font-semibold">Branch</th>
-                            <th className="px-4 sm:px-6 py-3 text-left font-semibold">City</th>
-                            <th className="px-4 sm:px-6 py-3 text-left font-semibold">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                          {clinics.length > 0 ? (
-                            clinics.map((clinic) => (
-                              <tr key={clinic.id} className="hover:bg-gray-50 transition-colors">
-                                <td className="px-4 sm:px-6 py-4">
-                                  <p className="font-semibold text-gray-900">{clinic.name}</p>
-                                  <p className="text-xs text-gray-500">{clinic.email}</p>
-                                </td>
-                                <td className="px-4 sm:px-6 py-4 text-gray-600">{clinic.city || '—'}</td>
-                                <td className="px-4 sm:px-6 py-4">
-                                  <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${
-                                    clinic.status === 'Approved' ? 'bg-teal-50 text-teal-700' :
-                                    clinic.status === 'Rejected' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'
-                                  }`}>{clinic.status}</span>
-                                </td>
-                              </tr>
-                            ))
-                          ) : (
-                            <tr>
-                              <td colSpan="3" className="px-4 sm:px-6 py-8 text-center text-gray-500">
-                                No registered nodes yet.
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-            </div>
-
-            <div className="xl:col-span-4 space-y-6">
-              <h3 className="text-base sm:text-lg font-bold flex items-center gap-2">
-                <span className="material-symbols-outlined text-teal-600">donut_small</span> Patient Distribution
-              </h3>
-              <div className="bg-white rounded-2xl p-6" style={{ boxShadow: '0 4px 6px -1px rgb(0 0 0/0.05)' }}>
-                <div className="flex items-center justify-center relative h-48">
-                  <svg className="w-40 h-40 -rotate-90" viewBox="0 0 128 128">
-                    <circle cx="64" cy="64" r="54" fill="transparent" stroke="#f1f5f9" strokeWidth="12" />
-                    <circle cx="64" cy="64" r="54" fill="transparent" stroke="#14b8a6" strokeWidth="12"
-                      strokeDasharray={`${circumference * 0.65} ${circumference}`} strokeDashoffset="0" strokeLinecap="round" />
-                    <circle cx="64" cy="64" r="54" fill="transparent" stroke="#f87171" strokeWidth="12"
-                      strokeDasharray={`${circumference * 0.20} ${circumference}`} strokeDashoffset={`-${circumference * 0.65}`} strokeLinecap="round" />
-                  </svg>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-2xl font-bold text-gray-800">{stats.patients}</span>
-                    <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Total</span>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4 mt-6 border-t border-gray-50 pt-6">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-teal-500"></div>
-                    <div>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase">Regular</p>
-                      <p className="text-sm font-bold text-gray-800">292 (65%)</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full bg-red-400"></div>
-                    <div>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase">Emergency</p>
-                      <p className="text-sm font-bold text-gray-800">90 (20%)</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <h3 className="text-base sm:text-lg font-bold flex items-center gap-2">
-                  <span className="material-symbols-outlined text-teal-600">history</span> Recent Activity
-                </h3>
-                <a href="#" className="text-xs font-semibold text-teal-600 hover:underline">View All</a>
-              </div>
-              <div className="bg-white rounded-2xl p-5 sm:p-6" style={{ boxShadow: '0 4px 6px -1px rgb(0 0 0/0.05)' }}>
-                {appointments.length > 0 ? (
-                  appointments.slice(0, 5).map((item, idx) => (
-                    <div key={item.id} className="flex gap-4 mb-6 last:mb-0">
-                      <div className="relative flex-shrink-0">
-                        {idx !== appointments.slice(0, 5).length - 1 && <div className="w-0.5 bg-teal-100 absolute left-1.5 top-4 bottom-0" />}
-                        <div className="w-3 h-3 bg-teal-500 rounded-full border-2 border-white relative z-10 mt-0.5" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm font-bold text-gray-800">Visit: {item.patient_name}</p>
-                        <p className="text-[10px] text-gray-500">with Dr. {item.doctor_name}</p>
-                        <p className="text-xs text-teal-600 mt-1">{new Date(item.date).toLocaleDateString()} {item.time_slot}</p>
-                      </div>
-                      <div className="text-right">
-                        <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${
-                          item.status === 'Completed' ? 'bg-teal-50 text-teal-700' : 'bg-blue-50 text-blue-700'
-                        }`}>{item.status}</span>
                       </div>
                     </div>
                   ))
                 ) : (
-                  <p className="text-xs text-gray-500 text-center">No recent activity</p>
+                  STAT_CARDS.map((s) => (
+                    <div key={s.label}
+                      className={`bg-white p-4 sm:p-6 rounded-2xl border-l-4 border-teal-50 flex items-center gap-3 sm:gap-4`}
+                      style={{ boxShadow: '0 4px 6px -1px rgb(0 0 0/0.05), 0 2px 4px -2px rgb(0 0 0/0.05)' }}>
+                      <div className={`w-10 h-10 sm:w-12 sm:h-12 bg-teal-50 rounded-xl flex items-center justify-center text-teal-600 flex-shrink-0`}>
+                        <span className="material-symbols-outlined text-2xl sm:text-3xl">{s.icon}</span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs sm:text-sm text-gray-500 font-medium truncate">{s.label}</p>
+                        <h3 className="text-lg sm:text-2xl font-bold truncate">{s.value}</h3>
+                      </div>
+                    </div>
+                  ))
                 )}
               </div>
 
+              {/* Main Grid */}
+              <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 sm:gap-8">
+                {/* Staff Doctors */}
+                <div className="xl:col-span-8 space-y-6">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-base sm:text-lg font-bold flex items-center gap-2">
+                      <span className="material-symbols-outlined text-teal-600">stethoscope</span> Staff Doctors
+                    </h3>
+                    <button onClick={() => setIsAddOpen(true)}
+                      className="bg-teal-600 hover:bg-teal-700 text-white px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium flex items-center gap-1 sm:gap-2 transition-colors">
+                      <span className="material-symbols-outlined text-sm">add</span> Link Doctor
+                    </button>
+                  </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
+                      {loading ? (
+                        Array(3).fill(0).map((_, i) => (
+                          <div key={i} className="bg-white p-5 sm:p-6 rounded-2xl text-center flex flex-col items-center shadow-sm">
+                            <div className="w-20 h-20 rounded-full bg-gray-100 mb-4 animate-pulse" />
+                            <div className="h-4 bg-gray-100 rounded w-32 mb-2 animate-pulse" />
+                            <div className="h-3 bg-gray-100 rounded w-24 mb-4 animate-pulse" />
+                            <div className="w-full h-8 bg-gray-50 rounded-lg animate-pulse" />
+                          </div>
+                        ))
+                      ) : staffDoctors.length > 0 ? (
+                        staffDoctors.map((link) => {
+                          const doc = link.doctors;
+                          const isExpanded = expandedDoctor === link.id;
+                          const slots = timetables[doc?.id] || [];
+                          // Group slots by day
+                          const byDay = {};
+                          slots.forEach(s => {
+                            if (!byDay[s.day]) byDay[s.day] = [];
+                            byDay[s.day].push(`${s.time_from} - ${s.time_to}`);
+                          });
+
+                          return (
+                            <div key={link.id}
+                              className="bg-white rounded-2xl flex flex-col group relative transition-all duration-300 hover:shadow-xl border border-gray-100 overflow-hidden"
+                              style={{ boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.05)' }}>
+                              
+                              {/* Unlink button */}
+                              <button
+                                type="button"
+                                onClick={(e) => handleUnlinkDoctor(e, link.id)}
+                                className="absolute top-3 right-3 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all z-20"
+                                title="Unlink Doctor"
+                              >
+                                <span className="material-symbols-outlined text-lg">link_off</span>
+                              </button>
+
+                              {/* Doctor Info */}
+                              <div className="p-5 flex flex-col items-center text-center">
+                                <div className="relative mb-3">
+                                  <div className="w-16 h-16 rounded-full border-4 border-teal-50 overflow-hidden bg-teal-600 flex items-center justify-center text-white text-xl font-bold">
+                                    {doc?.avatar_url
+                                      ? <img src={getStorageUrl(doc.avatar_url, 'doctor-avtar')} alt={doc.full_name} className="w-full h-full object-cover" />
+                                      : (doc?.full_name?.charAt(0).toUpperCase() || 'D')}
+                                  </div>
+                                  <span className="absolute bottom-1 right-0 w-3.5 h-3.5 rounded-full border-2 border-white bg-green-500" />
+                                </div>
+                                <h4 className="font-bold text-gray-900 text-sm line-clamp-1">{doc?.full_name}</h4>
+                                <p className="text-xs text-teal-600 font-medium">{doc?.specialization}</p>
+                                <p className="text-[11px] text-gray-400 mt-0.5 font-bold uppercase tracking-wide">verified</p>
+                                
+                                <button 
+                                  type="button"
+                                  onClick={(e) => {
+                                     e.stopPropagation();
+                                     // setSelectedDoctorForAppointments(doc);
+                                  }}
+                                  className="w-full mt-3 py-2 text-[11px] font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 rounded-xl transition-colors tracking-wide uppercase"
+                                >
+                                  View Appointments
+                                </button>
+                              </div>
+
+                              {/* Timetable toggle */}
+                              <div className="border-t border-gray-50">
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedDoctor(isExpanded ? null : link.id)}
+                                  className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-gray-500 hover:bg-gray-50 transition-colors"
+                                >
+                                  <span className="flex items-center gap-1.5">
+                                    <span className="material-symbols-outlined text-sm text-teal-500">schedule</span>
+                                    {slots.length > 0 ? `${slots.length} slot${slots.length !== 1 ? 's' : ''}` : 'No schedule set'}
+                                  </span>
+                                  <span className="material-symbols-outlined text-sm">
+                                    {isExpanded ? 'expand_less' : 'expand_more'}
+                                  </span>
+                                </button>
+
+                                {/* Schedule detail */}
+                                {isExpanded && (
+                                  <div className="px-4 pb-4 space-y-1.5">
+                                    {Object.keys(byDay).length > 0 ? (
+                                      Object.entries(byDay).map(([day, times]) => (
+                                        <div key={day} className="flex items-start gap-2 text-xs">
+                                          <span className="font-semibold text-slate-600 w-9 shrink-0">{day.slice(0,3)}</span>
+                                          <div className="flex flex-wrap gap-1">
+                                            {times.map((t, i) => (
+                                              <span key={i} className="px-2 py-0.5 bg-teal-50 text-teal-700 rounded-full border border-teal-100 font-medium">
+                                                {t}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <p className="text-[11px] text-gray-400 italic">Doctor hasn&apos;t set a timetable yet.</p>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="sm:col-span-2 xl:col-span-3 py-12 text-center bg-gray-50/50 rounded-2xl border-2 border-dashed border-gray-200">
+                          <span className="material-symbols-outlined text-4xl text-gray-300 mb-2">person_add</span>
+                          <p className="text-gray-500 text-sm font-medium">No linked doctors yet</p>
+                          <button onClick={() => setIsAddOpen(true)} className="mt-2 text-teal-600 text-xs font-bold hover:underline">Link your first doctor</button>
+                        </div>
+                      )}
+                    </div>
+
+                      <div>
+                        <h3 className="text-base sm:text-lg font-bold flex items-center gap-2 mb-4 text-gray-700">
+                          <span className="material-symbols-outlined text-teal-600">table_view</span> Registered Nodes
+                        </h3>
+                        <div className="bg-white rounded-2xl overflow-x-auto" style={{ boxShadow: '0 4px 6px -1px rgb(0 0 0/0.05)' }}>
+                          <table className="w-full text-sm min-w-[480px]">
+                            <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wider">
+                              <tr>
+                                <th className="px-4 sm:px-6 py-3 text-left font-semibold">Branch</th>
+                                <th className="px-4 sm:px-6 py-3 text-left font-semibold">City</th>
+                                <th className="px-4 sm:px-6 py-3 text-left font-semibold">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                              {clinics.length > 0 ? (
+                                clinics.map((clinic) => (
+                                  <tr key={clinic.id} className="hover:bg-gray-50 transition-colors">
+                                    <td className="px-4 sm:px-6 py-4">
+                                      <p className="font-semibold text-gray-900">{clinic.name}</p>
+                                      <p className="text-xs text-gray-500">{clinic.email}</p>
+                                    </td>
+                                    <td className="px-4 sm:px-6 py-4 text-gray-600">{clinic.city || '—'}</td>
+                                    <td className="px-4 sm:px-6 py-4">
+                                      <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${
+                                        clinic.status === 'Approved' ? 'bg-teal-50 text-teal-700' :
+                                        clinic.status === 'Rejected' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'
+                                      }`}>{clinic.status}</span>
+                                    </td>
+                                  </tr>
+                                ))
+                              ) : (
+                                <tr>
+                                  <td colSpan="3" className="px-4 sm:px-6 py-8 text-center text-gray-500">
+                                    No registered nodes yet.
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                </div>
+
+                <div className="xl:col-span-4 space-y-6">
+                  <h3 className="text-base sm:text-lg font-bold flex items-center gap-2">
+                    <span className="material-symbols-outlined text-teal-600">donut_small</span> Patient Distribution
+                  </h3>
+                  <div className="bg-white rounded-2xl p-6" style={{ boxShadow: '0 4px 6px -1px rgb(0 0 0/0.05)' }}>
+                    <div className="flex items-center justify-center relative h-48">
+                      <svg className="w-40 h-40 -rotate-90" viewBox="0 0 128 128">
+                        <circle cx="64" cy="64" r="54" fill="transparent" stroke="#f1f5f9" strokeWidth="12" />
+                        <circle cx="64" cy="64" r="54" fill="transparent" stroke="#14b8a6" strokeWidth="12"
+                          strokeDasharray={`${circumference * 0.65} ${circumference}`} strokeDashoffset="0" strokeLinecap="round" />
+                        <circle cx="64" cy="64" r="54" fill="transparent" stroke="#f87171" strokeWidth="12"
+                          strokeDasharray={`${circumference * 0.20} ${circumference}`} strokeDashoffset={`-${circumference * 0.65}`} strokeLinecap="round" />
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="text-2xl font-bold text-gray-800">{stats.patients}</span>
+                        <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Total</span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 mt-6 border-t border-gray-50 pt-6">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-teal-500"></div>
+                        <div>
+                          <p className="text-[10px] font-bold text-gray-400 uppercase">Regular</p>
+                          <p className="text-sm font-bold text-gray-800">292 (65%)</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full bg-red-400"></div>
+                        <div>
+                          <p className="text-[10px] font-bold text-gray-400 uppercase">Emergency</p>
+                          <p className="text-sm font-bold text-gray-800">90 (20%)</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-base sm:text-lg font-bold flex items-center gap-2">
+                      <span className="material-symbols-outlined text-teal-600">history</span> Recent Activity
+                    </h3>
+                    <a href="#" className="text-xs font-semibold text-teal-600 hover:underline">View All</a>
+                  </div>
+                  <div className="bg-white rounded-2xl p-5 sm:p-6" style={{ boxShadow: '0 4px 6px -1px rgb(0 0 0/0.05)' }}>
+                    {appointments.length > 0 ? (
+                      appointments.slice(0, 5).map((item, idx) => (
+                        <div key={item.id} className="flex gap-4 mb-6 last:mb-0">
+                          <div className="relative flex-shrink-0">
+                            {idx !== appointments.slice(0, 5).length - 1 && <div className="w-0.5 bg-teal-100 absolute left-1.5 top-4 bottom-0" />}
+                            <div className="w-3 h-3 bg-teal-500 rounded-full border-2 border-white relative z-10 mt-0.5" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-bold text-gray-800">Visit: {item.patient_name}</p>
+                            <p className="text-[10px] text-gray-500">with Dr. {item.doctor_name}</p>
+                            <p className="text-xs text-teal-600 mt-1">{new Date(item.date).toLocaleDateString()} {item.time_slot}</p>
+                          </div>
+                          <div className="text-right">
+                            <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${
+                              item.status === 'Completed' ? 'bg-teal-50 text-teal-700' : 'bg-blue-50 text-blue-700'
+                            }`}>{item.status}</span>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-xs text-gray-500 text-center">No recent activity</p>
+                    )}
+                  </div>
+
+                </div>
+              </div>
+            </>
+          ) : activeNav === 'Analytics' ? (
+            <ClinicAnalytics orgId={internalOrgId || profile?.id} />
+          ) : (
+            <div className="flex flex-col items-center justify-center py-24 bg-white rounded-3xl border border-gray-100 shadow-sm min-h-[50vh]">
+              <div className="w-20 h-20 bg-teal-50 rounded-full flex items-center justify-center mb-4">
+                <span className="material-symbols-outlined text-4xl text-teal-300">construction</span>
+              </div>
+              <h3 className="text-xl font-bold text-gray-700">{activeNav}</h3>
+              <p className="text-gray-400 mt-2 text-sm max-w-sm text-center">This section is currently under development. Please check back later.</p>
             </div>
-          </div>
+          )}
         </div>
+v>
       </main>
 
       {/* Link Doctor Modal */}

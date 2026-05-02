@@ -62,23 +62,6 @@ export const Footer = () => {
                     ))}
                 </div>
 
-                {/* ── Staff Portal ──────────────────────────────────── */}
-                <div className="mt-10 border-t border-slate-800 pt-6">
-                    <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-                        <span className="flex items-center gap-1.5 text-xs text-slate-500 select-none">
-                            <ShieldCheck size={13} className="text-slate-600" />
-                            Staff Portal:
-                        </span>
-                        <div className="flex items-center gap-2">
-                            <Link
-                                to="/admin/login"
-                                className="text-xs text-slate-500 hover:text-teal-400 transition-colors duration-200 flex items-center gap-1"
-                            >
-                                Admin Login
-                            </Link>
-                        </div>
-                    </div>
-                </div>
 
                 {/* ── Support & Copyright ─────────────────────────────────────── */}
                 <div className="mt-6 border-t border-slate-800 pt-6 flex flex-col md:flex-row items-center justify-between gap-6">

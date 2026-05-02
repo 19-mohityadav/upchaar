@@ -17,7 +17,7 @@ import {
     Hash, Clock, CalendarCheck2, Stethoscope, ChevronLeft, ChevronRight as ChevronRightIcon, Store,
     CheckCircle2
 } from 'lucide-react';
-import { uploadAvatar } from '@/lib/uploadImage.js';
+import { uploadAvatar, getStorageUrl } from '@/lib/uploadImage.js';
 import { supabase } from '@/lib/supabase.js';
 import ChangePasswordModal from '@/components/ChangePasswordModal.jsx';
 import Skeleton from 'react-loading-skeleton';
@@ -456,7 +456,7 @@ export default function PatientDashboard() {
                             <div className="relative flex-shrink-0">
                                 <div className="h-20 w-20 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center text-white text-2xl font-bold overflow-hidden">
                                     {patient.avatar_url
-                                        ? <img src={patient.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                                        ? <img src={getStorageUrl(patient.avatar_url, 'avatars')} alt="Profile" className="w-full h-full object-cover" />
                                         : initials
                                     }
                                 </div>
