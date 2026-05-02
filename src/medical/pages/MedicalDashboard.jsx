@@ -717,7 +717,7 @@ export default function MedicalDashboard() {
                     <span className="material-symbols-outlined text-teal-600">history</span> Activity
                   </h3>
                   <div className="bg-white rounded-2xl p-5 sm:p-6" style={{ boxShadow: '0 4px 6px -1px rgb(0 0 0/0.05)' }}>
-                    {appointments.length > 0 ? (
+                    {appointments && appointments.length > 0 ? (
                       appointments.slice(0, 5).map((item, idx) => (
                         <div key={item.id} className="flex gap-4 mb-6 last:mb-0">
                           <div className="relative flex-shrink-0">
@@ -827,7 +827,7 @@ export default function MedicalDashboard() {
             </div>
           ) : activeNav === 'Patients' ? (() => {
             const patientsMap = {};
-            appointments.forEach(apt => {
+            (appointments || []).forEach(apt => {
               const pid = apt.patient_id || apt.patient_name;
               if (!pid) return;
               if (!patientsMap[pid]) {
