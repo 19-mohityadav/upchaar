@@ -15,6 +15,16 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+    AlertDialog,
+    AlertDialogContent,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogCancel,
+    AlertDialogAction
+} from "@/components/ui/alert-dialog";
 import EditProfileModal from "@/components/EditProfileModal.jsx";
 
 const NAV = [
@@ -32,9 +42,9 @@ export default function AppLayout({ children, hideSidebar = false, hideNavbar = 
     const [collapsed, setCollapsed] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
     const [editProfileOpen, setEditProfileOpen] = useState(false);
+    const [signOutAlertOpen, setSignOutAlertOpen] = useState(false);
 
     const handleSignOut = useCallback(async () => {
-        if (!window.confirm('Are you sure you want to sign out?')) return;
         await signOut();
         navigate('/');
     }, [signOut, navigate]);
@@ -57,10 +67,13 @@ export default function AppLayout({ children, hideSidebar = false, hideNavbar = 
                     </div>
                     <AnimatePresence>
                         {(!collapsed || onClose) && (
-                            <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.12 }}
-                                className="font-bold text-sm text-primary whitespace-nowrap">
-                                Upchar
-                            </motion.span>
+                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.12 }}
+                                className="flex flex-col sm:flex-row sm:gap-1 tracking-tight">
+                                <span className="font-extrabold text-sm text-teal-600 leading-tight whitespace-nowrap">
+                                    Upchar
+                                </span>
+                                <span className="font-bold text-[10px] sm:text-xs text-red-600 whitespace-nowrap">Health</span>
+                            </motion.div>
                         )}
                     </AnimatePresence>
                 </div>
@@ -182,8 +195,8 @@ export default function AppLayout({ children, hideSidebar = false, hideNavbar = 
                         {/* Avatar Dropdown */}
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <button className="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-teal-400 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 outline-none hover:opacity-90 transition">
-                                    {initials}
+                                <button className="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-teal-400 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 outline-none hover:opacity-90 transition overflow-hidden">
+                                    {profile?.avatar_url ? <img src={profile.avatar_url} alt="Profile" className="w-full h-full object-cover" /> : initials}
                                 </button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-48">
@@ -192,7 +205,7 @@ export default function AppLayout({ children, hideSidebar = false, hideNavbar = 
                                     <span>Edit Profile</span>
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
-                                <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer text-red-500 focus:text-red-500 focus:bg-red-50">
+                                <DropdownMenuItem onClick={() => setSignOutAlertOpen(true)} className="cursor-pointer text-red-500 focus:text-red-500 focus:bg-red-50">
                                     <LogOut className="mr-2 h-4 w-4" />
                                     <span>Sign Out</span>
                                 </DropdownMenuItem>
@@ -211,6 +224,20 @@ export default function AppLayout({ children, hideSidebar = false, hideNavbar = 
                 onClose={() => setEditProfileOpen(false)} 
                 profile={profile} 
             />
+            <AlertDialog open={signOutAlertOpen} onOpenChange={setSignOutAlertOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Sign Out</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Are you sure you want to sign out of your account?
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleSignOut} className="bg-red-600 hover:bg-red-700">Sign Out</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

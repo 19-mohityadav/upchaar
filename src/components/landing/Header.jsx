@@ -187,7 +187,7 @@ export const Header = () => {
                         <span className="font-extrabold text-base sm:text-lg lg:text-xl text-teal-600 leading-tight">
                             Upchar
                         </span>
-                        <span className='font-bold text-xs sm:text-lg lg:text-xl text-slate-400 sm:text-red-600 hidden md:block lg:hidden xl:block'>Health</span>
+                        <span className='font-bold text-xs sm:text-lg lg:text-xl text-red-600'>Health</span>
                     </div>
                 </Link>
 

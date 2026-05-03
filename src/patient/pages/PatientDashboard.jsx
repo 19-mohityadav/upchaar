@@ -818,45 +818,7 @@ export default function PatientDashboard() {
                         ))}
                     </div>
 
-                {/* ── Profile info card ─────────────── */}
-                <h2 className="text-base font-semibold text-slate-700 mb-4">Your Profile</h2>
-                    <motion.div
-                        initial={{ opacity: 0, y: 16 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.2, duration: 0.4 }}
-                        className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6"
-                    >
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            {[
-                                { label: 'Full Name', value: patient.full_name || '—' },
-                                { label: 'Email', value: patient.email },
-                                { label: 'Phone', value: patient.phone || '—' },
-                                { label: 'Account Type', value: 'Patient' },
-                                { label: 'Status', value: patient.status ?? 'Active' },
-                                { label: 'Member Since', value: patient.created_at ? new Date(patient.created_at).toLocaleDateString() : '—' },
-                            ].map(({ label, value }) => (
-                                <div key={label} className="p-3 bg-slate-50 rounded-xl">
-                                    <p className="text-xs text-slate-500 mb-1">{label}</p>
-                                    <p className="text-sm font-medium text-slate-800">{value}</p>
-                                </div>
-                            ))}
-                        </div>
 
-                        {/* Change photo hint */}
-                        <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between">
-                            <p className="text-xs text-slate-400">
-                                Click the camera icon on your avatar to change your profile photo.
-                            </p>
-                            <button
-                                onClick={() => fileInputRef.current?.click()}
-                                disabled={uploadingAvatar}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-emerald-600 hover:bg-emerald-50 transition font-medium disabled:opacity-50"
-                            >
-                                {uploadingAvatar ? <Loader2 size={14} className="animate-spin" /> : <Camera size={14} />}
-                                {uploadingAvatar ? 'Uploading…' : 'Upload Photo'}
-                            </button>
-                        </div>
-                    </motion.div>
 
                 {/* ── Old Appointments ─────────────── */}
                 <h2 className="text-base font-semibold text-slate-700 mb-4">Old Appointments</h2>
