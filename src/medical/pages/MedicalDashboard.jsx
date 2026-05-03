@@ -8,7 +8,15 @@ import ChangePasswordModal from '@/components/ChangePasswordModal.jsx';
 import ImageCropperModal from '@/components/ImageCropperModal.jsx';
 import Skeleton from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
-import { uploadAvatar } from '@/lib/uploadImage.js';
+import MedicalAnalytics from './MedicalAnalytics';
+import { uploadAvatar, getStorageUrl } from '@/lib/uploadImage.js';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu';
 
 // Staff doctors will be fetched from database
 
@@ -41,8 +49,9 @@ export default function MedicalDashboard() {
   const [cropImageSrc, setCropImageSrc] = useState(null);
   const [doctorSecretKey, setDoctorSecretKey] = useState('');
   const [addingDoctor, setAddingDoctor] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 1024);
-  const [appointments, setAppointments] = useState([]);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [appointments, setAppointments] = useState(null);
+  const [patientProfiles, setPatientProfiles] = useState({});
   const [timetables, setTimetables] = useState({});   // { doctorId: slots[] }
   const [expandedDoctor, setExpandedDoctor] = useState(null);
   const [selectedDoctorForAppointments, setSelectedDoctorForAppointments] = useState(null);
@@ -110,6 +119,7 @@ export default function MedicalDashboard() {
   };
 
   const stats = useMemo(() => {
+    if (!appointments) return { totalDoctors: staffDoctors.length, totalPatients: 0, todayAppointments: 0, totalRevenue: '0' };
     const today = new Date().toISOString().split('T')[0];
     const todayAppointments = appointments.filter(a => a.date?.startsWith(today));
     const totalRev = appointments.reduce((sum, a) => sum + (a.fee || 0), 0);
@@ -146,8 +156,28 @@ export default function MedicalDashboard() {
 
 
   const fetchStaff = useCallback(async () => {
+    if (!profile?.id) return;
     try {
       setLoading(true);
+
+      // 1. Resolve internal medical ID for this profile
+      const { data: medicalRow } = await supabase
+        .from('medicals')
+        .select('id')
+        .eq('profile_id', profile.id)
+        .maybeSingle();
+      
+      const orgId = medicalRow?.id;
+      setInternalOrgId(orgId);
+      
+      // Save for modal usage
+      if (profile && orgId) {
+        profile.internal_org_id = orgId;
+      }
+
+      // 2. Query staff_links using internal ID (new data) OR profile ID (legacy data)
+      const searchIds = [profile.id, orgId].filter(Boolean);
+
       const { data, error } = await supabase
         .from('staff_links')
         .select(`
@@ -162,43 +192,31 @@ export default function MedicalDashboard() {
             status
           )
         `)
-        .eq('organization_id', profile?.id);
+        .in('organization_id', searchIds);
 
       if (error) throw error;
       const links = data || [];
       setStaffDoctors(links);
 
-      // Fetch timetables for all linked doctors for THIS org
-      if (links.length > 0) {
-        // We need the internal primary ID (not profile_id) for org_id filtering
-        const { data: medicalRow } = await supabase.from('medicals').select('id').eq('profile_id', profile?.id).maybeSingle();
-        const orgId = medicalRow?.id;
+      // 3. Fetch timetables for all linked doctors for THIS org
+      if (links.length > 0 && orgId) {
+        const docIds = links.map(l => l.doctor_id).filter(Boolean);
+        const { data: slots } = await supabase
+          .from('doctor_timetables')
+          .select('*')
+          .in('doctor_id', docIds)
+          .eq('org_id', orgId)
+          .eq('is_active', true)
+          .order('day')
+          .order('time_from');
 
-        // Save the orgId to the profile so we can use it for the modal
-        if (profile && orgId) {
-          profile.internal_org_id = orgId;
-        }
-        setInternalOrgId(orgId);
-
-        if (orgId) {
-          const docIds = links.map(l => l.doctor_id).filter(Boolean);
-          const { data: slots } = await supabase
-            .from('doctor_timetables')
-            .select('*')
-            .in('doctor_id', docIds)
-            .eq('org_id', orgId)
-            .eq('is_active', true)
-            .order('day')
-            .order('time_from');
-
-          // Group by doctor_id
-          const grouped = {};
-          (slots || []).forEach(s => {
-            if (!grouped[s.doctor_id]) grouped[s.doctor_id] = [];
-            grouped[s.doctor_id].push(s);
-          });
-          setTimetables(grouped);
-        }
+        // Group by doctor_id
+        const grouped = {};
+        (slots || []).forEach(s => {
+          if (!grouped[s.doctor_id]) grouped[s.doctor_id] = [];
+          grouped[s.doctor_id].push(s);
+        });
+        setTimetables(grouped);
       }
     } catch (err) {
       console.error('Error fetching staff:', err.message);
@@ -316,12 +334,44 @@ export default function MedicalDashboard() {
   }, [profile, profile?.id]);
 
   useEffect(() => {
-    if (profile?.id) {
+    if (profile?.id && appointments === null) {
       fetchStaff();
       fetchMedicals();
       fetchAppointments();
     }
-  }, [profile?.id, fetchStaff, fetchMedicals, fetchAppointments]);
+  }, [profile?.id, fetchStaff, fetchMedicals, fetchAppointments, appointments]);
+
+  // Patient avatars (for "Patients" tab)
+  useEffect(() => {
+    const fetchPatientAvatars = async () => {
+      const ids = [...new Set((appointments || []).map(a => a.patient_id).filter(Boolean))];
+      if (!ids.length) {
+        setPatientProfiles({});
+        return;
+      }
+
+      // Avoid huge IN clauses in case of many appointments
+      const limited = ids.slice(0, 100);
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, avatar_url')
+        .in('id', limited);
+
+      if (error) {
+        console.error('Failed to load patient avatars:', error.message);
+        return;
+      }
+
+      const map = {};
+      (data || []).forEach(p => { map[p.id] = p; });
+      setPatientProfiles(map);
+    };
+
+    if (appointments && appointments.length > 0) {
+      void fetchPatientAvatars();
+    }
+  }, [appointments, profile?.id]);
 
   const handleSignOut = useCallback(async () => {
     if (!window.confirm('Are you sure you want to sign out?')) return;
@@ -527,7 +577,7 @@ export default function MedicalDashboard() {
                               <div className="relative mb-3">
                                 <div className="w-16 h-16 rounded-full border-4 border-teal-50 overflow-hidden bg-teal-600 flex items-center justify-center text-white text-xl font-bold">
                                   {doc?.avatar_url
-                                    ? <img src={doc.avatar_url} alt={doc.full_name} className="w-full h-full object-cover" />
+                                    ? <img src={getStorageUrl(doc.avatar_url, 'doctor-avtar')} alt={doc.full_name} className="w-full h-full object-cover" />
                                     : docInitial}
                                 </div>
                                 <span className="absolute bottom-1 right-0 w-3.5 h-3.5 rounded-full border-2 border-white bg-green-500" />
@@ -642,7 +692,7 @@ export default function MedicalDashboard() {
                     <span className="material-symbols-outlined text-teal-600">history</span> Activity
                   </h3>
                   <div className="bg-white rounded-2xl p-5 sm:p-6" style={{ boxShadow: '0 4px 6px -1px rgb(0 0 0/0.05)' }}>
-                    {appointments.length > 0 ? (
+                    {appointments && appointments.length > 0 ? (
                       appointments.slice(0, 5).map((item, idx) => (
                         <div key={item.id} className="flex gap-4 mb-6 last:mb-0">
                           <div className="relative flex-shrink-0">
@@ -690,7 +740,7 @@ export default function MedicalDashboard() {
                     <div className="flex flex-col items-center space-y-4">
                       <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl aspect-square border-4 border-teal-50 bg-teal-600 flex items-center justify-center text-white text-4xl font-bold overflow-hidden shadow-sm">
                         {profile?.avatar_url ? (
-                          <img src={profile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                          <img src={getStorageUrl(profile.avatar_url, 'avatars')} alt="Profile" className="w-full h-full object-cover" />
                         ) : (
                           displayName.charAt(0).toUpperCase()
                         )}
@@ -752,13 +802,14 @@ export default function MedicalDashboard() {
             </div>
           ) : activeNav === 'Patients' ? (() => {
             const patientsMap = {};
-            appointments.forEach(apt => {
+            (appointments || []).forEach(apt => {
               const pid = apt.patient_id || apt.patient_name;
               if (!pid) return;
               if (!patientsMap[pid]) {
                 patientsMap[pid] = {
                   id: pid,
                   name: apt.patient_name || 'Unknown Patient',
+                  avatar_url: apt.patient_id ? patientProfiles[apt.patient_id]?.avatar_url || null : null,
                   visits: 0,
                   lastVisit: apt.date,
                   totalSpent: 0,
@@ -806,7 +857,11 @@ export default function MedicalDashboard() {
                             <td className="py-4 px-6">
                               <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center font-bold text-lg flex-shrink-0">
-                                  {p.name.charAt(0).toUpperCase()}
+                                  {p.avatar_url ? (
+                                    <img src={p.avatar_url} alt={p.name} className="h-full w-full object-cover rounded-full" />
+                                  ) : (
+                                    p.name.charAt(0).toUpperCase()
+                                  )}
                                 </div>
                                 <div>
                                   <div className="font-bold text-gray-900">{p.name}</div>
@@ -901,7 +956,7 @@ export default function MedicalDashboard() {
                           <div className="relative mb-3">
                             <div className="w-16 h-16 rounded-full border-4 border-teal-50 overflow-hidden bg-teal-600 flex items-center justify-center text-white text-xl font-bold">
                               {doc?.avatar_url
-                                ? <img src={doc.avatar_url} alt={doc.full_name} className="w-full h-full object-cover" />
+                                ? <img src={getStorageUrl(doc.avatar_url, 'doctor-avtar')} alt={doc.full_name} className="w-full h-full object-cover" />
                                 : docInitial}
                             </div>
                             <span className="absolute bottom-1 right-0 w-3.5 h-3.5 rounded-full border-2 border-white bg-green-500" />
@@ -975,6 +1030,8 @@ export default function MedicalDashboard() {
                 )}
               </div>
             </div>
+          ) : activeNav === 'Analytics' ? (
+            <MedicalAnalytics orgId={internalOrgId || profile?.id} />
           ) : (
             <div className="flex flex-col items-center justify-center py-24 bg-white rounded-3xl border border-gray-100 shadow-sm min-h-[50vh]">
               <div className="w-20 h-20 bg-teal-50 rounded-full flex items-center justify-center mb-4">

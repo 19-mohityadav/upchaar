@@ -101,7 +101,6 @@ export function AuthProvider({ children }) {
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             (event, session) => {
                 if (!mounted) return;
-                console.log('[Auth] event:', event);
 
                 if (event === 'SIGNED_OUT') {
                     clearAuthState();
@@ -111,11 +110,19 @@ export function AuthProvider({ children }) {
                 if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
                     const u = session?.user ?? null;
                     setUser(u);
-                    // ⚡ Never block loading on profile fetch
-                    setLoading(false);
+                    
                     if (u && !isRegistering.current) {
-                        // Fetch profile in background — doesn't block anything
-                        fetchProfile(u.id).then(p => { if (mounted) setProfile(p); });
+                        // Only set loading to true for initial SIGNED_IN, not for background refreshes
+                        if (event === 'SIGNED_IN' && !profile) setLoading(true);
+                        
+                        fetchProfile(u.id).then(p => {
+                            if (mounted) {
+                                setProfile(p);
+                                setLoading(false);
+                            }
+                        });
+                    } else {
+                        setLoading(false);
                     }
                 }
             }

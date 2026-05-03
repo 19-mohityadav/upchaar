@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase.js';
 import { 
-  X, CalendarDays, Clock, Users, ChevronLeft, 
+  X, CalendarDays, Clock, Users,
   ChevronRight, Phone, Stethoscope, CheckCircle,
   Clock3, XCircle, FileText, Bell, Check, X as CloseIcon
 } from 'lucide-react';
@@ -26,6 +26,19 @@ const STATUS_ICONS = {
   Scheduled: <CalendarDays size={14} className="mt-0.5" />,
 };
 
+const normalizeStatus = (status) => String(status || '').trim().toLowerCase();
+
+const getCanonicalStatus = (status) => {
+  const normalized = normalizeStatus(status);
+  if (normalized === 'confirmed') return 'Confirmed';
+  if (normalized === 'pending') return 'Pending';
+  if (normalized === 'completed') return 'Completed';
+  if (normalized === 'cancelled' || normalized === 'canceled') return 'Cancelled';
+  if (normalized === 'in-progress' || normalized === 'in progress') return 'In-Progress';
+  if (normalized === 'scheduled') return 'Scheduled';
+  return status;
+};
+
 export default function DoctorAppointmentsModal({ 
   isOpen, 
   onClose, 
@@ -40,6 +53,19 @@ export default function DoctorAppointmentsModal({
   
   const [loadingAppointments, setLoadingAppointments] = useState(false);
   const [appointments, setAppointments] = useState([]);
+   const [expandedAptId, setExpandedAptId] = useState(null);
+   const [updatingId, setUpdatingId] = useState(null);
+   const [prescriptionText, setPrescriptionText] = useState('');
+   const [diagnosisText, setDiagnosisText] = useState('');
+   const [showPrescriptionForm, setShowPrescriptionForm] = useState(null); // ID of appointment
+   const patientsListRef = useRef(null);
+
+   // Scroll to patients list when a slot is selected on mobile
+   useEffect(() => {
+     if (selectedSlot && patientsListRef.current && window.innerWidth < 768) {
+       patientsListRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+     }
+   }, [selectedSlot]);
 
   const [updatingId, setUpdatingId] = useState(null);
   const [expandedAptId, setExpandedAptId] = useState(null);
@@ -107,73 +133,136 @@ export default function DoctorAppointmentsModal({
     fetchSlots();
   }, [isOpen, doctor, orgId, selectedDate]);
 
-  // Use effect to fetch appointments when slot changes
-  useEffect(() => {
+  const fetchAppointments = useCallback(async () => {
     if (!selectedSlot) {
       setAppointments([]);
       return;
     }
 
-    const fetchAppointments = async () => {
-      setLoadingAppointments(true);
-      try {
-        const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    setLoadingAppointments(true);
+    try {
+      const dateStr = format(selectedDate, 'yyyy-MM-dd');
 
-        // Fetch all appointments for the day/doctor/org
-        let query = supabase
-          .from('appointments')
-          .select('*')
-          .eq('doctor_id', doctor.id)
-          .eq('date', dateStr);
+      // Fetch all appointments for the day/doctor/org
+      let query = supabase
+        .from('appointments')
+        .select('*')
+        .eq('doctor_id', doctor.id)
+        .eq('date', dateStr);
 
-        // Filter by internal org ID (primary) with profile ID fallback for legacy data
-        if (orgId && orgProfileId && orgId !== orgProfileId) {
-          query = query.or(`organization_id.eq.${orgId},organization_id.eq.${orgProfileId}`);
-        } else if (orgId) {
-          query = query.eq('organization_id', orgId);
-        } else if (orgProfileId) {
-          query = query.eq('organization_id', orgProfileId);
-        }
-
-        const { data, error } = await query.order('queue_number', { ascending: true });
-
-        if (error) throw error;
-        
-        // Helper to convert time string (HH:MM or HH:MM AM/PM) to minutes
-        const toMinutes = (t) => {
-          if (!t) return 0;
-          // Check if it has AM/PM
-          const match = t.match(/(\d+):(\d+)\s*(AM|PM)?/i);
-          if (!match) return 0;
-          let [_, h, m, p] = match;
-          h = parseInt(h);
-          m = parseInt(m);
-          if (p) {
-            if (p.toUpperCase() === 'PM' && h < 12) h += 12;
-            if (p.toUpperCase() === 'AM' && h === 12) h = 0;
-          }
-          return h * 60 + m;
-        };
-
-        const rangeStart = toMinutes(selectedSlot.time_from);
-        const rangeEnd = toMinutes(selectedSlot.time_to);
-
-        // Filter appointments that fall within this slot's range
-        const filtered = (data || []).filter(apt => {
-          const aptTime = toMinutes(apt.time_slot);
-          return aptTime >= rangeStart && aptTime < rangeEnd;
-        });
-
-        setAppointments(filtered);
-      } catch (err) {
-        console.error("Error fetching appointments:", err.message);
-      } finally {
-        setLoadingAppointments(false);
+      // Filter by internal org ID (primary) with profile ID fallback for legacy data
+      if (orgId && orgProfileId && orgId !== orgProfileId) {
+        query = query.or(`organization_id.eq.${orgId},organization_id.eq.${orgProfileId}`);
+      } else if (orgId) {
+        query = query.eq('organization_id', orgId);
+      } else if (orgProfileId) {
+        query = query.eq('organization_id', orgProfileId);
       }
-    };
 
-    fetchAppointments();
+      const { data, error } = await query.order('queue_number', { ascending: true });
+
+      if (error) throw error;
+      
+      // Helper to convert time string (HH:MM or HH:MM AM/PM) to minutes
+      const toMinutes = (t) => {
+        if (!t) return 0;
+        const match = t.match(/(\d+):(\d+)\s*(AM|PM)?/i);
+        if (!match) return 0;
+        let [_, h, m, p] = match;
+        h = parseInt(h);
+        m = parseInt(m);
+        if (p) {
+          if (p.toUpperCase() === 'PM' && h < 12) h += 12;
+          if (p.toUpperCase() === 'AM' && h === 12) h = 0;
+        }
+        return h * 60 + m;
+      };
+
+      const rangeStart = toMinutes(selectedSlot.time_from);
+      const rangeEnd = toMinutes(selectedSlot.time_to);
+
+      // Filter appointments that fall within this slot's range
+      const filtered = (data || []).filter(apt => {
+        const aptTime = toMinutes(apt.time_slot);
+        return aptTime >= rangeStart && aptTime < rangeEnd;
+      });
+
+      setAppointments(filtered);
+    } catch (err) {
+      console.error("Error fetching appointments:", err.message);
+    } finally {
+      setLoadingAppointments(false);
+    }
   }, [selectedSlot, selectedDate, doctor?.id, orgId, orgProfileId]);
+
+  const updateAppointmentStatus = async (appointmentId, newStatus) => {
+    setUpdatingId(appointmentId);
+    try {
+      const { error } = await supabase
+        .from('appointments')
+        .update({ status: newStatus })
+        .eq('id', appointmentId);
+
+      if (error) throw error;
+      
+      // Refresh list
+      fetchAppointments();
+      window.alert(`Appointment marked as ${newStatus}`);
+    } catch (err) {
+      console.error("Error updating appointment:", err.message);
+      window.alert("Failed to update status");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleNotifyPatient = async (appointment) => {
+    setUpdatingId(appointment.id);
+    try {
+      // Simulate notification logic
+      // In a real app, this might trigger an Edge Function or update a 'notified' flag
+      await new Promise(resolve => setTimeout(resolve, 800));
+      window.alert(`Notification sent to ${appointment.patient_name || appointment.patient}`);
+    } catch (err) {
+      console.error("Error notifying patient:", err.message);
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleSavePrescription = async (appointmentId) => {
+    if (!diagnosisText && !prescriptionText) return;
+    
+    setUpdatingId(appointmentId);
+    try {
+      const { error } = await supabase
+        .from('appointments')
+        .update({ 
+          diagnosis: diagnosisText,
+          medicines: prescriptionText.split('\n').filter(Boolean),
+          status: 'Completed' // Automatically complete when prescription is saved?
+        })
+        .eq('id', appointmentId);
+
+      if (error) throw error;
+      
+      setShowPrescriptionForm(null);
+      setPrescriptionText('');
+      setDiagnosisText('');
+      fetchAppointments();
+      window.alert("Prescription saved and consultation completed!");
+    } catch (err) {
+      console.error("Error saving prescription:", err.message);
+      window.alert("Failed to save prescription");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  // Use effect to fetch appointments when slot changes
+  useEffect(() => {
+    fetchAppointments();
+  }, [fetchAppointments]);
 
   // Handle closing modal and resetting state
   const handleClose = () => {
@@ -340,7 +429,10 @@ export default function DoctorAppointmentsModal({
             </div>
 
             {/* Patients List Area */}
-            <div className="flex-1 flex flex-col overflow-hidden min-h-[400px]">
+            <div 
+              ref={patientsListRef}
+              className="flex-1 flex flex-col overflow-hidden min-h-[400px]"
+            >
               
               {!selectedSlot ? (
                 <div className="flex-1 flex flex-col items-center justify-center p-10 text-center">
@@ -377,7 +469,10 @@ export default function DoctorAppointmentsModal({
                         <p className="text-sm text-slate-400 mt-1">No patients have booked in this slot yet.</p>
                       </div>
                     ) : (
-                      appointments.map((apt, index) => (
+                      appointments.map((apt, index) => {
+                        const isExpanded = expandedAptId === apt.id;
+                        const canonicalStatus = getCanonicalStatus(apt.status);
+                        return (
                         <div 
                           key={apt.id} 
                           onClick={() => setExpandedAptId(expandedAptId === apt.id ? null : apt.id)}
@@ -473,7 +568,8 @@ export default function DoctorAppointmentsModal({
                             </motion.div>
                           )}
                         </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
                 </>

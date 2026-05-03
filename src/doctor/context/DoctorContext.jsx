@@ -7,10 +7,10 @@ export async function uploadDoctorAvatar(file, doctorId) {
     const ext = file.name.split('.').pop();
     const path = `doctors/${doctorId}/avatar_${Date.now()}.${ext}`;
     const { error: uploadError } = await supabase.storage
-        .from('doctor-docs')
+        .from('doctor-avtar')
         .upload(path, file, { upsert: true, contentType: file.type });
     if (uploadError) throw new Error('Upload failed: ' + uploadError.message);
-    const { data } = supabase.storage.from('doctor-docs').getPublicUrl(path);
+    const { data } = supabase.storage.from('doctor-avtar').getPublicUrl(path);
     return data.publicUrl;
 }
 
@@ -52,8 +52,8 @@ const mapDoctorRecord = (record) => {
         totalRevenue: record.total_revenue || 0,
         totalAppointments: record.total_appointments || 0,
         status: record.status || 'Pending',
-        medicalLicense: record.medical_license || '',
-        nmcRegistration: record.nmc_registration || '',
+        medicalLicense: record.license_no || '',
+        nmcRegistration: record.nmc_no || '',
         secretKey: record.secret_key || '',
     };
 };
@@ -70,6 +70,7 @@ export function DoctorProvider({ children }) {
 
     const fetchDoctorRecord = useCallback(async (userId, email) => {
         try {
+            // First check the approved doctors table
             let { data } = await supabase
                 .from('doctors')
                 .select('*')
@@ -82,6 +83,27 @@ export function DoctorProvider({ children }) {
                     .select('*')
                     .eq('email', email)
                     .maybeSingle());
+            }
+
+            // If not found in approved doctors, check the pending_doctors table
+            if (!data) {
+                let { data: pendingData } = await supabase
+                    .from('pending_doctors')
+                    .select('*')
+                    .eq('profile_id', userId)
+                    .maybeSingle();
+                
+                if (!pendingData && email) {
+                    ({ data: pendingData } = await supabase
+                        .from('pending_doctors')
+                        .select('*')
+                        .eq('email', email)
+                        .maybeSingle());
+                }
+                
+                if (pendingData) {
+                    data = pendingData;
+                }
             }
 
             return data ?? null;
@@ -137,11 +159,15 @@ export function DoctorProvider({ children }) {
                 return;
             }
 
-            if (event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'TOKEN_REFRESHED') {
+            if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+                setLoading(true);
                 void (async () => {
                     await restoreDoctorSession(session);
                     if (mounted) setLoading(false);
                 })();
+            } else if (event === 'USER_UPDATED') {
+                // Background refresh only for metadata updates to avoid full-page spinner
+                void restoreDoctorSession(session);
             }
         });
 
@@ -278,8 +304,8 @@ export function DoctorProvider({ children }) {
                 email: email.trim(),
                 phone: phone.trim(),
                 whatsapp_number: (whatsappNumber || '').trim(),
-                medical_license: medicalLicense.trim(),
-                nmc_registration: nmcRegistration.trim(),
+                license_no: medicalLicense.trim(),
+                nmc_no: nmcRegistration.trim(),
                 dob: dob,
                 specialization: specialization || 'General Physician',
                 city: city || '',
@@ -292,7 +318,8 @@ export function DoctorProvider({ children }) {
                 total_revenue: 0,
                 experience: 0,
                 status: 'Pending',
-                secret_key: generatedKey
+                secret_key: generatedKey,
+                avatar_color: '#0d9488'
             }).select().single();
 
             if (doctorError) {
@@ -360,18 +387,18 @@ export function DoctorProvider({ children }) {
 
         Object.keys(authMetaUpdates).forEach((key) => authMetaUpdates[key] === undefined && delete authMetaUpdates[key]);
 
-        const [{ data: authData, error: authError }, { data: doctorData, error: doctorError }] = await Promise.all([
-            supabase.auth.updateUser({ data: authMetaUpdates }),
-            supabase
-                .from('doctors')
-                .update(doctorUpdates)
-                .eq('id', doctorRecord.id)
-                .select()
-                .single(),
-        ]);
+        // Run DB update first, then Auth metadata to avoid race conditions with auth listeners
+        const { data: doctorData, error: doctorError } = await supabase
+            .from('doctors')
+            .update(doctorUpdates)
+            .eq('id', doctorRecord.id)
+            .select()
+            .single();
 
-        if (authError) throw new Error(authError.message);
         if (doctorError) throw new Error(doctorError.message);
+
+        const { data: authData, error: authError } = await supabase.auth.updateUser({ data: authMetaUpdates });
+        if (authError) throw new Error(authError.message);
 
         setDoctorRecord(doctorData);
         const nextDoctor = buildDoctorState(authData.user, doctorData);
