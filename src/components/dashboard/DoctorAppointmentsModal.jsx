@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase.js';
 import { 
   X, CalendarDays, Clock, Users, ChevronLeft, 
   ChevronRight, Phone, Stethoscope, CheckCircle,
-  Clock3, XCircle, FileText
+  Clock3, XCircle, FileText, Bell, Check, X as CloseIcon
 } from 'lucide-react';
 import { format, addDays, startOfToday } from 'date-fns';
 import Skeleton from 'react-loading-skeleton';
@@ -40,6 +40,30 @@ export default function DoctorAppointmentsModal({
   
   const [loadingAppointments, setLoadingAppointments] = useState(false);
   const [appointments, setAppointments] = useState([]);
+
+  const [updatingId, setUpdatingId] = useState(null);
+  const [expandedAptId, setExpandedAptId] = useState(null);
+
+  const updateAppointmentStatus = async (aptId, newStatus) => {
+    setUpdatingId(aptId);
+    try {
+      const { error } = await supabase
+        .from('appointments')
+        .update({ status: newStatus })
+        .eq('id', aptId);
+      
+      if (error) throw error;
+      
+      setAppointments(prev => prev.map(apt => 
+        apt.id === aptId ? { ...apt, status: newStatus } : apt
+      ));
+    } catch (err) {
+      console.error(`Failed to update status to ${newStatus}:`, err.message);
+      alert(`Failed to update status. Please try again.`);
+    } finally {
+      setUpdatingId(null);
+    }
+  };
 
   // Generate an array of next 14 days for date selection
   const upcomingDates = useMemo(() => {
@@ -159,6 +183,7 @@ export default function DoctorAppointmentsModal({
       setSlots([]);
       setSelectedSlot(null);
       setAppointments([]);
+      setExpandedAptId(null);
     }, 300);
   };
 
@@ -355,49 +380,98 @@ export default function DoctorAppointmentsModal({
                       appointments.map((apt, index) => (
                         <div 
                           key={apt.id} 
-                          className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow flex flex-col sm:flex-row sm:items-center gap-4"
+                          onClick={() => setExpandedAptId(expandedAptId === apt.id ? null : apt.id)}
+                          className={`
+                            bg-white p-4 rounded-2xl border transition-all cursor-pointer flex flex-col gap-4
+                            ${expandedAptId === apt.id ? 'border-teal-300 shadow-md' : 'border-slate-200 shadow-sm hover:shadow-md'}
+                          `}
                         >
-                          <div className="shrink-0 flex items-center justify-center h-16 w-16 bg-gradient-to-br from-teal-50 to-emerald-50 rounded-2xl border border-teal-100/50">
-                            <span className="text-xl font-black text-teal-700/80">
-                              #{apt.queue_number || (index + 1)}
-                            </span>
-                          </div>
-                          
-                          <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-3">
-                            <div className="flex-1">
-                              <h4 className="font-bold text-slate-800 text-lg line-clamp-1">
-                                {apt.patient_name || apt.patient}
-                              </h4>
-                              <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
-                                {apt.patient_phone && (
-                                  <span className="flex items-center gap-1">
-                                    <Phone size={12} className="text-teal-500" /> 
-                                    {apt.patient_phone}
-                                  </span>
-                                )}
-                                {apt.issue && (
-                                  <span className="flex items-center gap-1">
-                                    <Stethoscope size={12} className="text-teal-500" />
-                                    <span className="line-clamp-1">{apt.issue}</span>
-                                  </span>
-                                )}
-                              </div>
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                            <div className="shrink-0 flex items-center justify-center h-16 w-16 bg-gradient-to-br from-teal-50 to-emerald-50 rounded-2xl border border-teal-100/50">
+                              <span className="text-xl font-black text-teal-700/80">
+                                #{apt.queue_number || (index + 1)}
+                              </span>
                             </div>
                             
-                            <div className="flex items-center sm:flex-col sm:items-end justify-between gap-2 mt-2 sm:mt-0">
-                              <span className={`
-                                inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border
-                                ${STATUS_COLORS[apt.status] || STATUS_COLORS.Scheduled}
-                              `}>
-                                {STATUS_ICONS[apt.status] || STATUS_ICONS.Scheduled}
-                                {apt.status}
-                              </span>
+                            <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-3">
+                              <div className="flex-1">
+                                <h4 className="font-bold text-slate-800 text-lg line-clamp-1">
+                                  {apt.patient_name || apt.patient}
+                                </h4>
+                                <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
+                                  {apt.patient_phone && (
+                                    <span className="flex items-center gap-1">
+                                      <Phone size={12} className="text-teal-500" /> 
+                                      {apt.patient_phone}
+                                    </span>
+                                  )}
+                                  {apt.issue && (
+                                    <span className="flex items-center gap-1">
+                                      <Stethoscope size={12} className="text-teal-500" />
+                                      <span className="line-clamp-1">{apt.issue}</span>
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
                               
-                              <p className="text-[11px] font-medium text-slate-400">
-                                Booked via {apt.type || 'App'}
-                              </p>
+                              <div className="flex items-center sm:flex-col sm:items-end justify-between gap-2 mt-2 sm:mt-0">
+                                {apt.status === 'Completed' || apt.status === 'Cancelled' ? (
+                                  <span className={`
+                                    inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border
+                                    ${STATUS_COLORS[apt.status] || STATUS_COLORS.Scheduled}
+                                  `}>
+                                    {STATUS_ICONS[apt.status] || STATUS_ICONS.Scheduled}
+                                    {apt.status}
+                                  </span>
+                                ) : (
+                                  <div className="flex items-center gap-2">
+                                    <button 
+                                      onClick={(e) => { e.stopPropagation(); updateAppointmentStatus(apt.id, 'Completed'); }}
+                                      disabled={updatingId === apt.id}
+                                      className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors border border-emerald-200 text-xs font-bold disabled:opacity-50"
+                                    >
+                                      {updatingId === apt.id ? <Clock3 size={14} className="animate-spin" /> : <Check size={14} />}
+                                      Complete
+                                    </button>
+                                    <button 
+                                      onClick={(e) => { e.stopPropagation(); updateAppointmentStatus(apt.id, 'Cancelled'); }}
+                                      disabled={updatingId === apt.id}
+                                      className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-red-50 text-red-700 hover:bg-red-100 transition-colors border border-red-200 text-xs font-bold disabled:opacity-50"
+                                    >
+                                      <CloseIcon size={14} />
+                                      Cancel
+                                    </button>
+                                  </div>
+                                )}
+                                
+                                <p className="text-[11px] font-medium text-slate-400">
+                                  Booked via {apt.type || 'App'}
+                                </p>
+                              </div>
                             </div>
                           </div>
+
+                          {expandedAptId === apt.id && (
+                            <motion.div 
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                              className="w-full pt-4 mt-2 border-t border-slate-100 flex flex-wrap items-center gap-3"
+                            >
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); alert('Write Prescription functionality coming soon.'); }}
+                                className="flex items-center gap-2 px-4 py-2 bg-teal-50 text-teal-700 hover:bg-teal-100 rounded-xl text-sm font-semibold transition-colors border border-teal-100"
+                              >
+                                <FileText size={16} /> Write Prescription
+                              </button>
+                              <button 
+                                onClick={(e) => { e.stopPropagation(); alert('Notification sent for next appointment.'); }}
+                                className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl text-sm font-semibold transition-colors border border-blue-100"
+                              >
+                                <Bell size={16} /> Notify for Next Appt.
+                              </button>
+                            </motion.div>
+                          )}
                         </div>
                       ))
                     )}

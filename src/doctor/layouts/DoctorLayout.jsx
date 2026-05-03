@@ -71,10 +71,15 @@ export default function DoctorLayout() {
                             {/* Mobile drawer header */}
                             <div className="flex items-center justify-between px-6 py-6 h-20 flex-shrink-0">
                                 <div className="flex items-center gap-3">
-                                    <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-teal-500 to-teal-400 shadow-lg shadow-teal-500/20 flex items-center justify-center">
-                                        <Stethoscope size={20} className="text-white" />
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-full border border-teal-200 bg-white shadow-sm ring-4 ring-teal-50/50 flex-shrink-0">
+                                        <img src="/logo.png" alt="Upchaar Logo" className="w-6 h-6" />
                                     </div>
-                                    <span className="font-bold text-base text-slate-800">Upchaar<span className="text-teal-500">.</span>Doctor</span>
+                                    <div className="flex flex-col sm:flex-row sm:gap-1 tracking-tight">
+                                        <span className="font-extrabold text-base lg:text-lg text-teal-600 leading-tight">
+                                            Upchaar
+                                        </span>
+                                        <span className='font-bold text-base lg:text-lg text-red-500'>Health</span>
+                                    </div>
                                 </div>
                                 <button onClick={() => setMobileOpen(false)}
                                     className="h-8 w-8 rounded-xl flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors">
@@ -145,47 +150,22 @@ export default function DoctorLayout() {
             >
                 {/* Logo */}
                 <div className="flex items-center gap-3 px-6 py-6 h-20 flex-shrink-0">
-                    <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-teal-500 to-teal-400 shadow-lg shadow-teal-500/20 flex-shrink-0 flex items-center justify-center">
-                        <Stethoscope size={20} className="text-white" />
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full border border-teal-200 bg-white shadow-sm ring-4 ring-teal-50/50 flex-shrink-0">
+                        <img src="/logo.png" alt="Upchaar Logo" className="w-6 h-6" />
                     </div>
                     <AnimatePresence>
                         {!collapsed && (
-                            <motion.span initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.15 }}
-                                className="font-bold text-base text-slate-800 whitespace-nowrap tracking-tight">
-                                Upchaar<span className="text-teal-500">.</span> Doctor
-                            </motion.span>
+                            <motion.div initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.15 }}
+                                className="flex flex-col sm:flex-row sm:gap-1 tracking-tight">
+                                <span className="font-extrabold text-base lg:text-lg text-teal-600 leading-tight">
+                                    Upchaar
+                                </span>
+                                <span className='font-bold text-base lg:text-lg text-red-500'>Health</span>
+                            </motion.div>
                         )}
                     </AnimatePresence>
                 </div>
 
-                {/* Doctor indicator */}
-                <div className={cn('px-6 py-3', collapsed && 'flex justify-center px-0')}>
-                    <AnimatePresence>
-                        {!collapsed ? (
-                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                                className="flex items-center gap-3 p-2 bg-white/50 border border-white rounded-2xl shadow-sm">
-                                <div className="h-10 w-10 rounded-xl flex items-center justify-center font-bold text-white text-sm shrink-0 overflow-hidden"
-                                    style={{ backgroundColor: doctor.avatarColor || '#0d9488' }}>
-                                    {doctor.avatarUrl
-                                        ? <img src={doctor.avatarUrl} alt={doctor.fullName} className="w-full h-full object-cover" />
-                                        : initials}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-semibold text-slate-800 truncate">{doctor.fullName}</p>
-                                    <p className="text-[11px] text-slate-500 font-medium">{doctor.specialization || 'Doctor'}</p>
-                                </div>
-                            </motion.div>
-                        ) : (
-                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                                className="h-12 w-12 rounded-2xl flex items-center justify-center font-bold text-white text-base shadow-sm overflow-hidden"
-                                style={{ backgroundColor: doctor.avatarColor || '#0d9488' }}>
-                                {doctor.avatarUrl
-                                    ? <img src={doctor.avatarUrl} alt={doctor.fullName} className="w-full h-full object-cover" />
-                                    : initials}
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-                </div>
 
                 {/* Nav */}
                 <nav className="flex flex-col gap-2 px-4 py-4 flex-1 overflow-y-auto">
@@ -294,6 +274,14 @@ export default function DoctorLayout() {
                             <Bell size={18} />
                             <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
                         </button>
+
+                        {/* Avatar Profile */}
+                        <NavLink to="/doctor/profile" className="h-10 w-10 rounded-xl flex items-center justify-center font-bold text-white text-sm shrink-0 overflow-hidden shadow-sm hover:shadow-md transition-all hover:scale-105"
+                            style={{ backgroundColor: doctor.avatarColor || '#0d9488' }}>
+                            {doctor.avatarUrl
+                                ? <img src={doctor.avatarUrl} alt={doctor.fullName} className="w-full h-full object-cover" />
+                                : initials}
+                        </NavLink>
                     </div>
                 </header>
 
