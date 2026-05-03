@@ -101,7 +101,6 @@ export function AuthProvider({ children }) {
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             (event, session) => {
                 if (!mounted) return;
-                console.log('[Auth] event:', event);
 
                 if (event === 'SIGNED_OUT') {
                     clearAuthState();
