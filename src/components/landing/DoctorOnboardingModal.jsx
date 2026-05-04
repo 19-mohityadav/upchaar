@@ -531,7 +531,10 @@ export function DoctorOnboardingModal({ isOpen, onClose }) {
             .from(bucket)
             .upload(path, file, { upsert: true, contentType: file.type });
         if (error) throw new Error(`Failed to upload ${fieldName} to ${bucket}: ${error.message}`);
-        return path;
+        
+        // Return the full public URL instead of just the path
+        const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(path);
+        return publicUrl;
     };
 
     const savePendingDoctorApplication = async ({ folder, photoPath, govtIdPath, licenseDocPath, degreeCertPath }) => {

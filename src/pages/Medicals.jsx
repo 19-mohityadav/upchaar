@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/lib/supabase.js';
+import { getStorageUrl } from '@/lib/uploadImage.js';
 import Skeleton from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
 
@@ -77,7 +78,12 @@ export default function MedicalsPage() {
                         .select('*')
                         .in('profile_type', ['medical', 'clinic', 'hospital']);
                     if (!error && profileData) {
-                        setMedicals(profileData);
+                        const processed = profileData.map(p => ({
+                            ...p,
+                            avatar_url: getStorageUrl(p.avatar_url, 'avatars'),
+                            full_name: p.full_name || p.name
+                        }));
+                        setMedicals(processed);
                         return;
                     }
                 }
@@ -92,10 +98,13 @@ export default function MedicalsPage() {
 
                 const profilesMap = new Map((profilesData || []).map(p => [p.id, p]));
 
-                const mergedWithAvatars = merged.map((m) => ({
-                    ...m,
-                    avatar_url: m.avatar_url || profilesMap.get(m.profile_id)?.avatar_url || null,
-                }));
+                const mergedWithAvatars = merged.map((m) => {
+                    const profileAvatar = profilesMap.get(m.profile_id)?.avatar_url;
+                    return {
+                        ...m,
+                        avatar_url: getStorageUrl(m.avatar_url || profileAvatar, 'avatars'),
+                    };
+                });
 
                 setMedicals(mergedWithAvatars);
             } catch (err) {
@@ -142,7 +151,13 @@ export default function MedicalsPage() {
                     throw error;
                 }
 
-                const next = (data || []).map(row => row.doctors).filter(Boolean);
+                const next = (data || []).map(row => {
+                    if (!row.doctors) return null;
+                    return {
+                        ...row.doctors,
+                        avatar_url: getStorageUrl(row.doctors.avatar_url, 'doctor-avtar')
+                    };
+                }).filter(Boolean);
                 setLinkedDoctors(next);
             } catch (err) {
                 console.error('Failed to load linked doctors:', err.message);
