@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
     LayoutDashboard, Stethoscope, FlaskConical, Hospital,
-    FileText, LogOut, X, Menu, ChevronLeft, ChevronRight, HeartPulse, User, Store
+    FileText, LogOut, X, Menu, ChevronLeft, ChevronRight, User, Store
 } from 'lucide-react';
 import { useState, useMemo, useCallback } from 'react';
 import { cn } from '@/lib/utils';
@@ -62,8 +62,8 @@ export default function AppLayout({ children, hideSidebar = false, hideNavbar = 
             {/* Logo + close */}
             <div className="flex items-center justify-between px-4 py-5 border-b border-slate-100 h-16 flex-shrink-0">
                 <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-teal-400 flex items-center justify-center flex-shrink-0">
-                        <HeartPulse className="text-white" size={15} />
+                    <div className="h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+                        <img src="/logo.png" alt="Upchar Logo" className="w-full h-full object-contain" />
                     </div>
                     <AnimatePresence>
                         {(!collapsed || onClose) && (

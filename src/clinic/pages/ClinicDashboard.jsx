@@ -5,6 +5,17 @@ import { useNavigate } from 'react-router-dom';
 import DoctorAppointmentsModal from '@/components/dashboard/DoctorAppointmentsModal';
 import Skeleton from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction
+} from "@/components/ui/alert-dialog";
+
 
 const NAV_ITEMS = [
   { icon: 'dashboard', label: 'Dashboard' },
@@ -35,6 +46,7 @@ export default function ClinicDashboard() {
   const [doctorSecretKey, setDoctorSecretKey] = useState('');
   const [addingDoctor, setAddingDoctor] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true); 
+  const [signOutAlertOpen, setSignOutAlertOpen] = useState(false);
   const [appointments, setAppointments] = useState([]);
   const [timetables, setTimetables] = useState({});
   const [expandedDoctor, setExpandedDoctor] = useState(null);
@@ -258,7 +270,6 @@ export default function ClinicDashboard() {
   }, [profile?.id, fetchStaff, fetchClinics, fetchAppointments]);
 
   const handleSignOut = useCallback(async () => {
-    if (!window.confirm('Are you sure you want to sign out?')) return;
     await signOut();
     navigate('/login');
   }, [signOut, navigate]);
@@ -296,14 +307,21 @@ export default function ClinicDashboard() {
           ${sidebarOpen ? 'translate-x-0 w-64 shadow-2xl lg:shadow-none' : '-translate-x-full w-0 lg:w-0'} 
           lg:relative lg:translate-x-0 ${sidebarOpen ? 'lg:min-w-[256px]' : 'lg:min-w-0 lg:border-none overflow-hidden'}`}
       >
-        <div className="p-5 flex items-center justify-between border-b border-gray-100 flex-shrink-0 min-w-[256px]">
-          <h1 className="text-xl font-bold text-teal-700 flex items-center gap-2 truncate">
-            <span className="material-symbols-outlined text-3xl flex-shrink-0">local_hospital</span>
-            Upchaar Clinic
-          </h1>
+        <div className="p-5 flex items-center justify-between border-b border-gray-100 flex-shrink-0 min-w-[256px] h-16">
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+                <img src="/logo.png" alt="Upchar Logo" className="w-full h-full object-contain" />
+            </div>
+            <div className="flex flex-col sm:flex-row sm:gap-1 tracking-tight">
+                <span className="font-extrabold text-sm text-teal-600 leading-tight whitespace-nowrap">
+                    Upchar
+                </span>
+                <span className="font-bold text-[10px] sm:text-xs text-red-600 whitespace-nowrap">Health</span>
+            </div>
+          </div>
           <button 
             onClick={() => setSidebarOpen(false)} 
-            className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-teal-600 transition-all flex items-center justify-center border border-transparent hover:border-gray-200" 
+            className="lg:hidden p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-teal-600 transition-all flex items-center justify-center border border-transparent hover:border-gray-200" 
             title="Close Sidebar"
           >
             <span className="material-symbols-outlined text-2xl font-bold">close</span>
@@ -326,7 +344,7 @@ export default function ClinicDashboard() {
           <button className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg">
             <span className="material-symbols-outlined text-xl">lock</span> Change Password
           </button>
-          <button onClick={handleSignOut} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg">
+          <button onClick={() => setSignOutAlertOpen(true)} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg">
             <span className="material-symbols-outlined text-xl">logout</span> Sign Out
           </button>
         </div>
@@ -340,7 +358,7 @@ export default function ClinicDashboard() {
           <div className="flex items-center gap-3 min-w-0">
             {!sidebarOpen && (
               <button onClick={() => setSidebarOpen(true)}
-                className="p-2 rounded-md text-gray-500 hover:bg-gray-100 transition-colors flex-shrink-0" aria-label="Open sidebar">
+                className="lg:hidden p-2 rounded-md text-gray-500 hover:bg-gray-100 transition-colors flex-shrink-0" aria-label="Open sidebar">
                 <span className="material-symbols-outlined text-2xl">menu</span>
               </button>
             )}
@@ -408,8 +426,8 @@ export default function ClinicDashboard() {
                   <div className={`w-10 h-10 sm:w-12 sm:h-12 bg-teal-50 rounded-xl flex items-center justify-center text-teal-600 flex-shrink-0`}>
                     <span className="material-symbols-outlined text-2xl sm:text-3xl">{s.icon}</span>
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-xs sm:text-sm text-gray-500 font-medium truncate">{s.label}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs sm:text-sm text-gray-500 font-medium leading-tight mb-1">{s.label}</p>
                     <h3 className="text-lg sm:text-2xl font-bold truncate">{s.value}</h3>
                   </div>
                 </div>
@@ -710,6 +728,22 @@ export default function ClinicDashboard() {
           </div>
         </div>
       )}
+
+      {/* Sign Out Confirmation Modal */}
+      <AlertDialog open={signOutAlertOpen} onOpenChange={setSignOutAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sign Out</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to sign out of your account?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleSignOut} className="bg-red-600 hover:bg-red-700">Sign Out</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
