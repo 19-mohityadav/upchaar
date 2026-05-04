@@ -163,8 +163,8 @@ export default function PatientRegister() {
                             transition={{ delay: 0.15 }}
                             className="flex items-center gap-3 mb-4"
                         >
-                            <div className="h-12 w-12 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center">
-                                <Heart size={24} className="text-white" />
+                            <div className="h-12 w-12 rounded-2xl bg-white flex items-center justify-center overflow-hidden p-1">
+                                <img src="/logo.png" alt="Upchar Logo" className="w-full h-full object-contain drop-shadow-sm" />
                             </div>
                             <div>
                                 <p className="text-white/70 text-xs font-medium uppercase tracking-widest">Upchar Health</p>
