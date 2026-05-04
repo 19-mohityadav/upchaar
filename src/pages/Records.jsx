@@ -14,7 +14,6 @@ import {
     TabsList,
     TabsTrigger,
 } from '@/components/ui/tabs';
-import { healthRecords } from '@/lib/data';
 import { 
     Upload, 
     FileText, 
@@ -43,18 +42,8 @@ export default function RecordsPage() {
     const [formattedRecords, setFormattedRecords] = useState([]);
 
     useEffect(() => {
-        setFormattedRecords(
-            healthRecords.map(record => ({
-                ...record,
-                date: new Date(record.date).toLocaleDateString('en-IN', {
-                    day: 'numeric',
-                    month: 'short',
-                    year: 'numeric'
-                }),
-                fullDate: new Date(record.date),
-                fileSize: (Math.random() * (5.0 - 0.5) + 0.5).toFixed(1) + ' MB' // Simulating file size
-            }))
-        );
+        // Mock data removed. Future implementation should fetch real records here.
+        setFormattedRecords([]);
     }, []);
 
     const filteredRecords = formattedRecords.filter(r => 

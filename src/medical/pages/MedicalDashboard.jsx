@@ -8,7 +8,8 @@ import ChangePasswordModal from '@/components/ChangePasswordModal.jsx';
 import ImageCropperModal from '@/components/ImageCropperModal.jsx';
 import Skeleton from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
-import { uploadAvatar } from '@/lib/uploadImage.js';
+import MedicalAnalytics from './MedicalAnalytics';
+import { uploadAvatar, getStorageUrl } from '@/lib/uploadImage.js';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,7 +41,6 @@ const NAV_ITEMS = [
   { icon: 'dashboard', label: 'Dashboard' },
   { icon: 'medical_information', label: 'Doctors' },
   { icon: 'person', label: 'Patients' },
-  { icon: 'notifications', label: 'Notifications' },
   { icon: 'analytics', label: 'Analytics' },
   { icon: 'settings', label: 'Settings' },
 ];
@@ -62,7 +62,7 @@ export default function MedicalDashboard() {
   const [doctorSecretKey, setDoctorSecretKey] = useState('');
   const [addingDoctor, setAddingDoctor] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [appointments, setAppointments] = useState([]);
+  const [appointments, setAppointments] = useState(null);
   const [patientProfiles, setPatientProfiles] = useState({});
   const [timetables, setTimetables] = useState({});   // { doctorId: slots[] }
   const [expandedDoctor, setExpandedDoctor] = useState(null);
@@ -131,6 +131,7 @@ export default function MedicalDashboard() {
   };
 
   const stats = useMemo(() => {
+    if (!appointments) return { totalDoctors: staffDoctors.length, totalPatients: 0, todayAppointments: 0, totalRevenue: '0' };
     const today = new Date().toISOString().split('T')[0];
     const todayAppointments = appointments.filter(a => a.date?.startsWith(today));
     const totalRev = appointments.reduce((sum, a) => sum + (a.fee || 0), 0);
@@ -345,12 +346,12 @@ export default function MedicalDashboard() {
   }, [profile, profile?.id]);
 
   useEffect(() => {
-    if (profile?.id) {
+    if (profile?.id && appointments === null) {
       fetchStaff();
       fetchMedicals();
       fetchAppointments();
     }
-  }, [profile?.id, fetchStaff, fetchMedicals, fetchAppointments]);
+  }, [profile?.id, fetchStaff, fetchMedicals, fetchAppointments, appointments]);
 
   // Patient avatars (for "Patients" tab)
   useEffect(() => {
@@ -419,9 +420,10 @@ export default function MedicalDashboard() {
       <aside
         ref={sidebarRef}
         className={`fixed top-0 left-0 h-full z-40 bg-white border-r border-gray-200 flex flex-col transition-all duration-300 ease-in-out
-          ${sidebarOpen ? 'translate-x-0 w-64 shadow-2xl lg:shadow-none' : '-translate-x-full w-0 lg:w-0'} 
-          lg:relative lg:translate-x-0 ${sidebarOpen ? 'lg:min-w-[256px]' : 'lg:min-w-0 lg:border-none overflow-hidden'}`}
+          ${sidebarOpen ? 'translate-x-0 w-64 shadow-2xl' : '-translate-x-full w-0'} 
+          lg:relative lg:translate-x-0 ${sidebarOpen ? 'lg:w-64 lg:min-w-[256px]' : 'lg:w-20 lg:min-w-[80px]'} lg:shadow-none overflow-hidden`}
       >
+
         <div className="p-5 flex items-center justify-between border-b border-gray-100 flex-shrink-0 min-w-[256px] h-16">
           <div className="flex items-center gap-2">
             <div className="h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
@@ -438,18 +440,40 @@ export default function MedicalDashboard() {
             onClick={() => setSidebarOpen(false)}
             className="lg:hidden p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-teal-600 transition-all flex items-center justify-center border border-transparent hover:border-gray-200"
             title="Close Sidebar"
+
+        <div className={`p-5 flex items-center border-b border-gray-100 flex-shrink-0 transition-all duration-300 ${sidebarOpen ? 'justify-between' : 'lg:justify-center justify-between'}`}>
+          <h1 className={`text-xl font-bold flex items-center truncate transition-all duration-300 ${sidebarOpen ? 'opacity-100 w-auto' : 'lg:opacity-0 lg:w-0 lg:hidden opacity-100 w-auto'}`}>
+            <span className="text-teal-700">Upchaar</span>
+            <span className="text-red-500 ml-1.5">Health</span>
+          </h1>
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-teal-600 transition-all flex items-center justify-center border border-transparent hover:border-gray-200 flex-shrink-0"
+            title="Toggle Sidebar"
+
           >
-            <span className="material-symbols-outlined text-2xl font-bold">close</span>
+            <span className="material-symbols-outlined text-2xl font-bold">menu</span>
           </button>
         </div>
 
-        <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto min-w-[256px]">
+        <nav className="flex-1 py-4 space-y-2 overflow-y-auto overflow-x-hidden">
           {NAV_ITEMS.map((item) => (
             <button key={item.label} onClick={() => handleNavClick(item.label)}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg text-left transition-colors ${activeNav === item.label ? 'border-r-4 border-teal-500 bg-teal-50 text-teal-700' : 'text-gray-600 hover:bg-gray-50'
-                }`}>
-              <span className="material-symbols-outlined text-xl">{item.icon}</span>
-              {item.label}
+              className={`w-full flex items-center py-3 text-sm font-medium transition-colors duration-200 relative group
+                ${activeNav === item.label ? 'bg-teal-50 text-teal-700' : 'text-gray-600 hover:bg-gray-50'}
+                ${sidebarOpen ? 'px-8 gap-3' : 'lg:justify-center lg:px-0 px-8 gap-3'}
+              `}
+              title={!sidebarOpen ? item.label : undefined}
+            >
+              {activeNav === item.label && (
+                <div className="absolute left-0 top-0 h-full w-1 bg-teal-500 rounded-r-md transition-all duration-300" />
+              )}
+              <span className={`material-symbols-outlined text-xl flex-shrink-0 transition-colors ${activeNav === item.label ? 'text-teal-600' : 'text-gray-400 group-hover:text-gray-600'}`}>
+                {item.icon}
+              </span>
+              <span className={`whitespace-nowrap transition-all duration-300 ${sidebarOpen ? 'opacity-100 w-auto' : 'lg:opacity-0 lg:w-0 lg:hidden opacity-100 w-auto'}`}>
+                {item.label}
+              </span>
             </button>
           ))}
         </nav>
@@ -460,6 +484,7 @@ export default function MedicalDashboard() {
       <main className="flex-1 flex flex-col overflow-y-auto min-w-0">
 
         {/* Header */}
+
         <header className="bg-white border-b border-gray-200 flex items-center justify-between px-4 sm:px-6 h-16 sticky top-0 z-20 flex-shrink-0 gap-3">
           <div className="flex items-center gap-3 min-w-0">
             {!sidebarOpen && (
@@ -525,7 +550,39 @@ export default function MedicalDashboard() {
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
+
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center gap-3 px-4 sm:px-6 sticky top-0 z-20 flex-shrink-0">
+          {!sidebarOpen && (
+            <button onClick={() => setSidebarOpen(true)}
+              className="lg:hidden h-9 w-9 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 transition-colors flex-shrink-0" aria-label="Open sidebar">
+              <span className="material-symbols-outlined text-[20px]">menu</span>
+            </button>
+          )}
+
+          {/* Search */}
+          <div className="relative flex-1 max-w-xs hidden sm:block">
+            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-slate-400">search</span>
+            <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search…"
+              className="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-500 transition" />
+
           </div>
+
+          <div className="flex-1" />
+
+          {/* Bell */}
+          <button onClick={() => setActiveNav('Notifications')} className="relative h-9 w-9 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors flex-shrink-0">
+            <span className="material-symbols-outlined text-[20px]">notifications</span>
+            <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 bg-red-500 rounded-full" />
+          </button>
+
+          {/* Avatar */}
+          <button onClick={() => setActiveNav('Settings')} className="h-9 w-9 rounded-full bg-gradient-to-br from-teal-500 to-emerald-400 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 outline-none hover:opacity-90 transition overflow-hidden shadow-sm" title="Profile Settings">
+            {profile?.avatar_url ? (
+              <img src={profile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+            ) : (
+              displayName.charAt(0).toUpperCase()
+            )}
+          </button>
         </header>
 
         {/* Page Body */}
@@ -533,7 +590,7 @@ export default function MedicalDashboard() {
           {activeNav === 'Dashboard' ? (
             <>
               {/* Stats */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
                 {loading ? (
                   Array(4).fill(0).map((_, i) => (
                     <div key={i} className="bg-white p-4 sm:p-6 rounded-2xl border-l-4 border-teal-500 shadow-sm animate-pulse">
@@ -618,7 +675,7 @@ export default function MedicalDashboard() {
                               <div className="relative mb-3">
                                 <div className="w-16 h-16 rounded-full border-4 border-teal-50 overflow-hidden bg-teal-600 flex items-center justify-center text-white text-xl font-bold">
                                   {doc?.avatar_url
-                                    ? <img src={doc.avatar_url} alt={doc.full_name} className="w-full h-full object-cover" />
+                                    ? <img src={getStorageUrl(doc.avatar_url, 'doctor-avtar')} alt={doc.full_name} className="w-full h-full object-cover" />
                                     : docInitial}
                                 </div>
                                 <span className="absolute bottom-1 right-0 w-3.5 h-3.5 rounded-full border-2 border-white bg-green-500" />
@@ -733,7 +790,7 @@ export default function MedicalDashboard() {
                     <span className="material-symbols-outlined text-teal-600">history</span> Activity
                   </h3>
                   <div className="bg-white rounded-2xl p-5 sm:p-6" style={{ boxShadow: '0 4px 6px -1px rgb(0 0 0/0.05)' }}>
-                    {appointments.length > 0 ? (
+                    {appointments && appointments.length > 0 ? (
                       appointments.slice(0, 5).map((item, idx) => (
                         <div key={item.id} className="flex gap-4 mb-6 last:mb-0">
                           <div className="relative flex-shrink-0">
@@ -781,7 +838,7 @@ export default function MedicalDashboard() {
                     <div className="flex flex-col items-center space-y-4">
                       <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl aspect-square border-4 border-teal-50 bg-teal-600 flex items-center justify-center text-white text-4xl font-bold overflow-hidden shadow-sm">
                         {profile?.avatar_url ? (
-                          <img src={profile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                          <img src={getStorageUrl(profile.avatar_url, 'avatars')} alt="Profile" className="w-full h-full object-cover" />
                         ) : (
                           displayName.charAt(0).toUpperCase()
                         )}
@@ -843,7 +900,7 @@ export default function MedicalDashboard() {
             </div>
           ) : activeNav === 'Patients' ? (() => {
             const patientsMap = {};
-            appointments.forEach(apt => {
+            (appointments || []).forEach(apt => {
               const pid = apt.patient_id || apt.patient_name;
               if (!pid) return;
               if (!patientsMap[pid]) {
@@ -997,7 +1054,7 @@ export default function MedicalDashboard() {
                           <div className="relative mb-3">
                             <div className="w-16 h-16 rounded-full border-4 border-teal-50 overflow-hidden bg-teal-600 flex items-center justify-center text-white text-xl font-bold">
                               {doc?.avatar_url
-                                ? <img src={doc.avatar_url} alt={doc.full_name} className="w-full h-full object-cover" />
+                                ? <img src={getStorageUrl(doc.avatar_url, 'doctor-avtar')} alt={doc.full_name} className="w-full h-full object-cover" />
                                 : docInitial}
                             </div>
                             <span className="absolute bottom-1 right-0 w-3.5 h-3.5 rounded-full border-2 border-white bg-green-500" />
@@ -1071,6 +1128,8 @@ export default function MedicalDashboard() {
                 )}
               </div>
             </div>
+          ) : activeNav === 'Analytics' ? (
+            <MedicalAnalytics orgId={internalOrgId || profile?.id} />
           ) : (
             <div className="flex flex-col items-center justify-center py-24 bg-white rounded-3xl border border-gray-100 shadow-sm min-h-[50vh]">
               <div className="w-20 h-20 bg-teal-50 rounded-full flex items-center justify-center mb-4">

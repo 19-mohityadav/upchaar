@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase.js';
-import { 
+import {
   X, CalendarDays, Clock, Users,
   ChevronRight, Phone, Stethoscope, CheckCircle,
-  Clock3, XCircle, FileText
+  Clock3, XCircle, FileText, Bell, Check, X as CloseIcon
 } from 'lucide-react';
 import { format, addDays, startOfToday } from 'date-fns';
 import Skeleton from 'react-loading-skeleton';
@@ -39,10 +39,10 @@ const getCanonicalStatus = (status) => {
   return status;
 };
 
-export default function DoctorAppointmentsModal({ 
-  isOpen, 
-  onClose, 
-  doctor, 
+export default function DoctorAppointmentsModal({
+  isOpen,
+  onClose,
+  doctor,
   orgId,
   orgProfileId
 }) {
@@ -50,22 +50,44 @@ export default function DoctorAppointmentsModal({
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [slots, setSlots] = useState([]);
   const [selectedSlot, setSelectedSlot] = useState(null);
-  
+
   const [loadingAppointments, setLoadingAppointments] = useState(false);
   const [appointments, setAppointments] = useState([]);
-   const [expandedAptId, setExpandedAptId] = useState(null);
-   const [updatingId, setUpdatingId] = useState(null);
-   const [prescriptionText, setPrescriptionText] = useState('');
-   const [diagnosisText, setDiagnosisText] = useState('');
-   const [showPrescriptionForm, setShowPrescriptionForm] = useState(null); // ID of appointment
-   const patientsListRef = useRef(null);
+  const [expandedAptId, setExpandedAptId] = useState(null);
+  const [updatingId, setUpdatingId] = useState(null);
+  const [prescriptionText, setPrescriptionText] = useState('');
+  const [diagnosisText, setDiagnosisText] = useState('');
+  const [showPrescriptionForm, setShowPrescriptionForm] = useState(null); // ID of appointment
+  const patientsListRef = useRef(null);
 
-   // Scroll to patients list when a slot is selected on mobile
-   useEffect(() => {
-     if (selectedSlot && patientsListRef.current && window.innerWidth < 768) {
-       patientsListRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-     }
-   }, [selectedSlot]);
+  // Scroll to patients list when a slot is selected on mobile
+  useEffect(() => {
+    if (selectedSlot && patientsListRef.current && window.innerWidth < 768) {
+      patientsListRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [selectedSlot]);
+
+
+  const updateAppointmentStatus = async (aptId, newStatus) => {
+    setUpdatingId(aptId);
+    try {
+      const { error } = await supabase
+        .from('appointments')
+        .update({ status: newStatus })
+        .eq('id', aptId);
+
+      if (error) throw error;
+
+      setAppointments(prev => prev.map(apt =>
+        apt.id === aptId ? { ...apt, status: newStatus } : apt
+      ));
+    } catch (err) {
+      console.error(`Failed to update status to ${newStatus}:`, err.message);
+      alert(`Failed to update status. Please try again.`);
+    } finally {
+      setUpdatingId(null);
+    }
+  };
 
   // Generate an array of next 14 days for date selection
   const upcomingDates = useMemo(() => {
@@ -138,7 +160,7 @@ export default function DoctorAppointmentsModal({
       const { data, error } = await query.order('queue_number', { ascending: true });
 
       if (error) throw error;
-      
+
       // Helper to convert time string (HH:MM or HH:MM AM/PM) to minutes
       const toMinutes = (t) => {
         if (!t) return 0;
@@ -171,26 +193,7 @@ export default function DoctorAppointmentsModal({
     }
   }, [selectedSlot, selectedDate, doctor?.id, orgId, orgProfileId]);
 
-  const updateAppointmentStatus = async (appointmentId, newStatus) => {
-    setUpdatingId(appointmentId);
-    try {
-      const { error } = await supabase
-        .from('appointments')
-        .update({ status: newStatus })
-        .eq('id', appointmentId);
 
-      if (error) throw error;
-      
-      // Refresh list
-      fetchAppointments();
-      window.alert(`Appointment marked as ${newStatus}`);
-    } catch (err) {
-      console.error("Error updating appointment:", err.message);
-      window.alert("Failed to update status");
-    } finally {
-      setUpdatingId(null);
-    }
-  };
 
   const handleNotifyPatient = async (appointment) => {
     setUpdatingId(appointment.id);
@@ -208,12 +211,12 @@ export default function DoctorAppointmentsModal({
 
   const handleSavePrescription = async (appointmentId) => {
     if (!diagnosisText && !prescriptionText) return;
-    
+
     setUpdatingId(appointmentId);
     try {
       const { error } = await supabase
         .from('appointments')
-        .update({ 
+        .update({
           diagnosis: diagnosisText,
           medicines: prescriptionText.split('\n').filter(Boolean),
           status: 'Completed' // Automatically complete when prescription is saved?
@@ -221,7 +224,7 @@ export default function DoctorAppointmentsModal({
         .eq('id', appointmentId);
 
       if (error) throw error;
-      
+
       setShowPrescriptionForm(null);
       setPrescriptionText('');
       setDiagnosisText('');
@@ -248,6 +251,7 @@ export default function DoctorAppointmentsModal({
       setSlots([]);
       setSelectedSlot(null);
       setAppointments([]);
+      setExpandedAptId(null);
     }, 300);
   };
 
@@ -256,14 +260,14 @@ export default function DoctorAppointmentsModal({
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 sm:px-0">
-        <motion.div 
-          initial={{ opacity: 0 }} 
-          animate={{ opacity: 1 }} 
-          exit={{ opacity: 0 }} 
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
           className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
           onClick={handleClose}
         />
-        
+
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -287,8 +291,8 @@ export default function DoctorAppointmentsModal({
                 <p className="text-xs font-medium text-teal-600">{doctor?.specialization || 'Doctor'}</p>
               </div>
             </div>
-            
-            <button 
+
+            <button
               onClick={handleClose}
               className="h-9 w-9 rounded-full bg-slate-50 hover:bg-red-50 text-slate-400 hover:text-red-500 flex items-center justify-center transition-colors"
             >
@@ -297,29 +301,29 @@ export default function DoctorAppointmentsModal({
           </div>
 
           <div className="flex flex-col md:flex-row flex-1 overflow-hidden min-h-0 bg-slate-50/50">
-            
+
             {/* Sidebar Data/Slot Picker */}
             <div className="w-full md:w-80 border-r border-slate-200 bg-white flex flex-col shrink-0">
-              
+
               {/* Date Selection */}
               <div className="p-5 border-b border-slate-100">
                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
                   Select Date
                 </h4>
-                
+
                 <div className="flex overflow-x-auto gap-2 pb-2 -mx-2 px-2 snap-x scrollbar-hide">
                   {upcomingDates.map((date, idx) => {
                     const isSelected = format(date, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd');
                     const isToday = idx === 0;
-                    
+
                     return (
                       <button
                         key={date.toISOString()}
                         onClick={() => setSelectedDate(date)}
                         className={`
                           snap-start shrink-0 flex flex-col items-center justify-center rounded-2xl border transition-all p-3 min-w-[72px]
-                          ${isSelected 
-                            ? 'bg-teal-500 text-white border-teal-500 shadow-md shadow-teal-500/20' 
+                          ${isSelected
+                            ? 'bg-teal-500 text-white border-teal-500 shadow-md shadow-teal-500/20'
                             : 'bg-white text-slate-600 border-slate-200 hover:border-teal-300 hover:bg-teal-50'
                           }
                         `}
@@ -347,7 +351,7 @@ export default function DoctorAppointmentsModal({
                     {format(selectedDate, 'EEEE')}
                   </span>
                 </h4>
-                
+
                 {loadingSlots ? (
                   <div className="space-y-3">
                     <Skeleton height={60} borderRadius={16} />
@@ -393,7 +397,7 @@ export default function DoctorAppointmentsModal({
                               )}
                             </div>
                           </div>
-                          
+
                           <ChevronRight size={18} className={isSelected ? 'text-teal-500' : 'text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity'} />
                         </button>
                       )
@@ -404,11 +408,11 @@ export default function DoctorAppointmentsModal({
             </div>
 
             {/* Patients List Area */}
-            <div 
+            <div
               ref={patientsListRef}
               className="flex-1 flex flex-col overflow-hidden min-h-[400px]"
             >
-              
+
               {!selectedSlot ? (
                 <div className="flex-1 flex flex-col items-center justify-center p-10 text-center">
                   <div className="h-20 w-20 bg-white rounded-full flex items-center justify-center mb-4 shadow-sm border border-slate-100">
@@ -433,7 +437,7 @@ export default function DoctorAppointmentsModal({
                       </p>
                     </div>
                   </div>
-                  
+
                   <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
                     {loadingAppointments ? (
                       [1, 2, 3].map(i => <Skeleton key={i} height={88} borderRadius={16} />)
@@ -448,171 +452,101 @@ export default function DoctorAppointmentsModal({
                         const isExpanded = expandedAptId === apt.id;
                         const canonicalStatus = getCanonicalStatus(apt.status);
                         return (
-                        <div 
-                          key={apt.id} 
-                          className={`
-                            bg-white rounded-2xl border transition-all flex flex-col overflow-hidden
-                            ${isExpanded ? 'border-teal-400 shadow-md ring-1 ring-teal-400/20' : 'border-slate-200 shadow-sm hover:border-slate-300'}
+                          <div
+                            key={apt.id}
+                            onClick={() => setExpandedAptId(expandedAptId === apt.id ? null : apt.id)}
+                            className={`
+                            bg-white p-4 rounded-2xl border transition-all cursor-pointer flex flex-col gap-4
+                            ${expandedAptId === apt.id ? 'border-teal-300 shadow-md' : 'border-slate-200 shadow-sm hover:shadow-md'}
                           `}
-                        >
-                          <div 
-                            className="p-4 flex flex-col sm:flex-row sm:items-center gap-4 cursor-pointer"
-                            onClick={() => setExpandedAptId(isExpanded ? null : apt.id)}
                           >
-                          <div className="shrink-0 flex items-center justify-center h-16 w-16 bg-gradient-to-br from-teal-50 to-emerald-50 rounded-2xl border border-teal-100/50">
-                            <span className="text-xl font-black text-teal-700/80">
-                              #{apt.queue_number || (index + 1)}
-                            </span>
-                          </div>
-                          
-                          <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-3">
-                            <div className="flex-1">
-                              <h4 className="font-bold text-slate-800 text-lg line-clamp-1">
-                                {apt.patient_name || apt.patient}
-                              </h4>
-                              <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
-                                {apt.patient_phone && (
-                                  <span className="flex items-center gap-1">
-                                    <Phone size={12} className="text-teal-500" /> 
-                                    {apt.patient_phone}
-                                  </span>
-                                )}
-                                {apt.issue && (
-                                  <span className="flex items-center gap-1">
-                                    <Stethoscope size={12} className="text-teal-500" />
-                                    <span className="line-clamp-1">{apt.issue}</span>
-                                  </span>
-                                )}
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                              <div className="shrink-0 flex items-center justify-center h-16 w-16 bg-gradient-to-br from-teal-50 to-emerald-50 rounded-2xl border border-teal-100/50">
+                                <span className="text-xl font-black text-teal-700/80">
+                                  #{apt.queue_number || (index + 1)}
+                                </span>
                               </div>
-                            </div>
-                            
-                            <div className="flex items-center sm:flex-row sm:items-center justify-between gap-3 mt-2 sm:mt-0">
-                              <span
-                                className={`
-                                  inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border
-                                  ${STATUS_COLORS[canonicalStatus] || STATUS_COLORS.Scheduled}
-                                `}
-                              >
-                                {STATUS_ICONS[canonicalStatus] || STATUS_ICONS.Scheduled}
-                                {canonicalStatus}
-                              </span>
-                              
-                              <p className="text-[11px] font-medium text-slate-400 hidden sm:block">
-                                via {apt.type || 'App'}
-                              </p>
-                            </div>
-                          </div>
 
-                          <AnimatePresence>
-                            {isExpanded && (
-                              <motion.div
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                className="px-4 pb-4 pt-2 border-t border-slate-50 bg-slate-50/30"
-                              >
-                                <div className="space-y-4">
-                                  <div className="flex flex-wrap gap-2">
-                                    <button 
-                                      onClick={() => handleNotifyPatient(apt)}
-                                      disabled={updatingId === apt.id}
-                                      className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 text-xs font-bold hover:bg-amber-100 transition-colors disabled:opacity-50"
-                                    >
-                                      <Phone size={14} /> Notify Next
-                                    </button>
-
-                                    {(canonicalStatus === 'Scheduled' || canonicalStatus === 'Confirmed' || canonicalStatus === 'Pending') && (
-                                      <button 
-                                        onClick={() => updateAppointmentStatus(apt.id, 'In-Progress')}
-                                        disabled={updatingId === apt.id}
-                                        className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-teal-50 text-teal-700 border border-teal-200 text-xs font-bold hover:bg-teal-100 transition-colors disabled:opacity-50"
-                                      >
-                                        <Clock size={14} /> Start
-                                      </button>
+                              <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-3">
+                                <div className="flex-1">
+                                  <h4 className="font-bold text-slate-800 text-lg line-clamp-1">
+                                    {apt.patient_name || apt.patient}
+                                  </h4>
+                                  <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
+                                    {apt.patient_phone && (
+                                      <span className="flex items-center gap-1">
+                                        <Phone size={12} className="text-teal-500" />
+                                        {apt.patient_phone}
+                                      </span>
                                     )}
-                                    
-                                    <button 
-                                      onClick={() => {
-                                        setShowPrescriptionForm(apt.id);
-                                        setDiagnosisText(apt.diagnosis || '');
-                                        setPrescriptionText((apt.medicines || []).join('\n'));
-                                      }}
-                                      className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold hover:bg-blue-100 transition-colors"
-                                    >
-                                      <FileText size={14} /> Write Prescription
-                                    </button>
-
-                                    {canonicalStatus !== 'Completed' && (
-                                      <button 
-                                        onClick={() => updateAppointmentStatus(apt.id, 'Completed')}
-                                        disabled={updatingId === apt.id}
-                                        className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold hover:bg-emerald-100 transition-colors disabled:opacity-50"
-                                      >
-                                        <CheckCircle size={14} /> Complete
-                                      </button>
-                                    )}
-
-                                    {canonicalStatus !== 'Cancelled' && (
-                                      <button 
-                                        onClick={() => {
-                                          if(window.confirm('Cancel this appointment?')) updateAppointmentStatus(apt.id, 'Cancelled');
-                                        }}
-                                        disabled={updatingId === apt.id}
-                                        className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-red-50 text-red-700 border border-red-200 text-xs font-bold hover:bg-red-100 transition-colors disabled:opacity-50"
-                                      >
-                                        <XCircle size={14} /> Cancel
-                                      </button>
+                                    {apt.issue && (
+                                      <span className="flex items-center gap-1">
+                                        <Stethoscope size={12} className="text-teal-500" />
+                                        <span className="line-clamp-1">{apt.issue}</span>
+                                      </span>
                                     )}
                                   </div>
-
-                                  {showPrescriptionForm === apt.id && (
-                                    <motion.div 
-                                      initial={{ opacity: 0, y: 10 }}
-                                      animate={{ opacity: 1, y: 0 }}
-                                      className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3"
-                                    >
-                                      <div>
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Diagnosis</label>
-                                        <input 
-                                          value={diagnosisText}
-                                          onChange={(e) => setDiagnosisText(e.target.value)}
-                                          placeholder="Enter diagnosis..."
-                                          className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20"
-                                        />
-                                      </div>
-                                      <div>
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Medicines (one per line)</label>
-                                        <textarea 
-                                          value={prescriptionText}
-                                          onChange={(e) => setPrescriptionText(e.target.value)}
-                                          placeholder="Paracetamol 500mg - 1-0-1&#10;Amoxicillin 250mg - after food"
-                                          rows={3}
-                                          className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20"
-                                        />
-                                      </div>
-                                      <div className="flex justify-end gap-2">
-                                        <button 
-                                          onClick={() => setShowPrescriptionForm(null)}
-                                          className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-700"
-                                        >
-                                          Cancel
-                                        </button>
-                                        <button 
-                                          onClick={() => handleSavePrescription(apt.id)}
-                                          disabled={updatingId === apt.id}
-                                          className="px-4 py-1.5 rounded-xl bg-teal-600 text-white text-xs font-bold hover:bg-teal-700 transition-colors disabled:opacity-50"
-                                        >
-                                          {updatingId === apt.id ? 'Saving...' : 'Save & Complete'}
-                                        </button>
-                                      </div>
-                                    </motion.div>
-                                  )}
                                 </div>
+
+                                <div className="flex items-center sm:flex-col sm:items-end justify-between gap-2 mt-2 sm:mt-0">
+                                  {apt.status === 'Completed' || apt.status === 'Cancelled' ? (
+                                    <span className={`
+                                    inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border
+                                    ${STATUS_COLORS[apt.status] || STATUS_COLORS.Scheduled}
+                                  `}>
+                                      {STATUS_ICONS[apt.status] || STATUS_ICONS.Scheduled}
+                                      {apt.status}
+                                    </span>
+                                  ) : (
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); updateAppointmentStatus(apt.id, 'Completed'); }}
+                                        disabled={updatingId === apt.id}
+                                        className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors border border-emerald-200 text-xs font-bold disabled:opacity-50"
+                                      >
+                                        {updatingId === apt.id ? <Clock3 size={14} className="animate-spin" /> : <Check size={14} />}
+                                        Complete
+                                      </button>
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); updateAppointmentStatus(apt.id, 'Cancelled'); }}
+                                        disabled={updatingId === apt.id}
+                                        className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-red-50 text-red-700 hover:bg-red-100 transition-colors border border-red-200 text-xs font-bold disabled:opacity-50"
+                                      >
+                                        <CloseIcon size={14} />
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  )}
+
+                                  <p className="text-[11px] font-medium text-slate-400">
+                                    Booked via {apt.type || 'App'}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+
+                            {expandedAptId === apt.id && (
+                              <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                className="w-full pt-4 mt-2 border-t border-slate-100 flex flex-wrap items-center gap-3"
+                              >
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); alert('Write Prescription functionality coming soon.'); }}
+                                  className="flex items-center gap-2 px-4 py-2 bg-teal-50 text-teal-700 hover:bg-teal-100 rounded-xl text-sm font-semibold transition-colors border border-teal-100"
+                                >
+                                  <FileText size={16} /> Write Prescription
+                                </button>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); alert('Notification sent for next appointment.'); }}
+                                  className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl text-sm font-semibold transition-colors border border-blue-100"
+                                >
+                                  <Bell size={16} /> Notify for Next Appt.
+                                </button>
                               </motion.div>
                             )}
-                          </AnimatePresence>
                           </div>
-                        </div>
                         );
                       })
                     )}
@@ -620,7 +554,7 @@ export default function DoctorAppointmentsModal({
                 </>
               )}
             </div>
-            
+
           </div>
         </motion.div>
       </div>

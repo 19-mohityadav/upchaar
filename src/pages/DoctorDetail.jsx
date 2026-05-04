@@ -24,6 +24,7 @@ import {
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase.js';
 import { usePatient } from '@/patient/context/PatientContext.jsx';
+import { getStorageUrl } from '@/lib/uploadImage.js';
 import { motion, AnimatePresence } from 'framer-motion';
 
 /* ── helpers ─────────────────────────────────────── */
@@ -427,7 +428,7 @@ export default function DoctorDetailPage() {
                                     <div className="relative shrink-0">
                                         <div className="h-32 w-32 md:h-40 md:w-40 rounded-2xl p-1 bg-gradient-to-br from-teal-400 to-emerald-500 shadow-md">
                                             {doctor.avatar ? (
-                                                <img src={doctor.avatar} alt={doctor.name}
+                                                <img src={getStorageUrl(doctor.avatar, 'doctor-avtar')} alt={doctor.name}
                                                     className="h-full w-full rounded-xl object-cover border-4 border-white bg-white" />
                                             ) : (
                                                 <div className="h-full w-full rounded-xl border-4 border-white bg-white flex items-center justify-center text-4xl font-bold text-teal-600">

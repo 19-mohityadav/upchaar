@@ -112,7 +112,9 @@ export function AuthProvider({ children }) {
                     setUser(u);
                     
                     if (u && !isRegistering.current) {
-                        setLoading(true);
+                        // Only set loading to true for initial SIGNED_IN, not for background refreshes
+                        if (event === 'SIGNED_IN' && !profile) setLoading(true);
+                        
                         fetchProfile(u.id).then(p => {
                             if (mounted) {
                                 setProfile(p);
