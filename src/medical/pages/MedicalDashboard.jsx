@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '@/auth/AuthContext.jsx';
+
 import { supabase } from '@/lib/supabase.js';
 import { useNavigate } from 'react-router-dom';
 import DoctorAppointmentsModal from '@/components/dashboard/DoctorAppointmentsModal';
 import EditProfileModal from '@/components/EditProfileModal.jsx';
 import ChangePasswordModal from '@/components/ChangePasswordModal.jsx';
 import ImageCropperModal from '@/components/ImageCropperModal.jsx';
-import Skeleton from 'react-loading-skeleton';
-import 'react-loading-skeleton/dist/skeleton.css';
+import { toast, Toaster } from 'sonner';
 import MedicalAnalytics from './MedicalAnalytics';
 import { uploadAvatar, getStorageUrl } from '@/lib/uploadImage.js';
 import {
@@ -17,6 +17,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction
+} from "@/components/ui/alert-dialog";
+
 
 // Staff doctors will be fetched from database
 
@@ -45,6 +56,9 @@ export default function MedicalDashboard() {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [signOutAlertOpen, setSignOutAlertOpen] = useState(false);
+  const [unlinkDoctorId, setUnlinkDoctorId] = useState(null);
+  const [removeAvatarAlertOpen, setRemoveAvatarAlertOpen] = useState(false);
   const [cropperOpen, setCropperOpen] = useState(false);
   const [cropImageSrc, setCropImageSrc] = useState(null);
   const [doctorSecretKey, setDoctorSecretKey] = useState('');
@@ -63,7 +77,7 @@ export default function MedicalDashboard() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 10 * 1024 * 1024) {
-      alert("Image must be less than 10MB");
+      toast.error("Image must be less than 10MB");
       return;
     }
     const reader = new FileReader();
@@ -91,14 +105,13 @@ export default function MedicalDashboard() {
       if (dbErr) throw dbErr;
       window.location.reload();
     } catch (err) {
-      alert(err.message || 'Error updating profile picture');
+      toast.error(err.message || 'Error updating profile picture');
     } finally {
       setLoading(false);
     }
   };
 
   const handleRemoveAvatar = async () => {
-    if (!window.confirm('Remove profile picture?')) return;
     try {
       setLoading(true);
       const { error: authErr } = await supabase.auth.updateUser({
@@ -112,7 +125,7 @@ export default function MedicalDashboard() {
       if (dbErr) throw dbErr;
       window.location.reload();
     } catch (err) {
-      alert(err.message || 'Error removing picture');
+      toast.error(err.message || 'Error removing picture');
     } finally {
       setLoading(false);
     }
@@ -130,7 +143,7 @@ export default function MedicalDashboard() {
       totalRevenue: totalRev.toLocaleString()
     };
   }, [staffDoctors.length, appointments]);
-  const circumference = useMemo(() => 2 * Math.PI * 54, []);
+
 
   // Handle mobile resize
   useEffect(() => {
@@ -223,7 +236,7 @@ export default function MedicalDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [profile, profile?.id]);
+  }, [profile]);
 
   const fetchMedicals = useCallback(async () => {
     if (!profile?.id) return;
@@ -238,7 +251,7 @@ export default function MedicalDashboard() {
     } catch (err) {
       console.error('Error fetching medicals:', err.message);
     }
-  }, [profile, profile?.id]);
+  }, [profile]);
 
   const handleAddDoctor = useCallback(async (e) => {
     e.preventDefault();
@@ -275,32 +288,33 @@ export default function MedicalDashboard() {
         throw linkError;
       }
 
-      alert(`${doctor.full_name} is successfully added in your medical center`);
+      toast.success(`${doctor.full_name} is successfully added in your medical center`);
       setIsAddOpen(false);
       setDoctorSecretKey('');
       fetchStaff();
     } catch (err) {
-      alert(err.message);
+      toast.error(err.message);
     } finally {
       setAddingDoctor(false);
     }
-  }, [doctorSecretKey, profile, profile?.id, fetchStaff]);
+  }, [doctorSecretKey, profile, fetchStaff]);
 
-  const handleUnlinkDoctor = useCallback(async (e, linkId) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!window.confirm('Warning: This doctor will be removed from your clinic staff and patients will no longer be able to see this doctor linked with your medical center. Do you want to continue?')) return;
+  const handleUnlinkDoctor = useCallback(async () => {
+    if (!unlinkDoctorId) return;
     try {
       const { error } = await supabase
         .from('staff_links')
         .delete()
-        .eq('id', linkId);
+        .eq('id', unlinkDoctorId);
       if (error) throw error;
+      toast.success('Doctor unlinked successfully');
       fetchStaff();
     } catch (err) {
-      alert(err.message);
+      toast.error(err.message);
+    } finally {
+      setUnlinkDoctorId(null);
     }
-  }, [fetchStaff]);
+  }, [unlinkDoctorId, fetchStaff]);
 
   const fetchAppointments = useCallback(async () => {
     if (!profile?.id) return;
@@ -331,7 +345,7 @@ export default function MedicalDashboard() {
     } catch (err) {
       console.error('Error fetching appointments:', err.message);
     }
-  }, [profile, profile?.id]);
+  }, [profile]);
 
   useEffect(() => {
     if (profile?.id && appointments === null) {
@@ -374,7 +388,6 @@ export default function MedicalDashboard() {
   }, [appointments, profile?.id]);
 
   const handleSignOut = useCallback(async () => {
-    if (!window.confirm('Are you sure you want to sign out?')) return;
     await signOut();
     navigate('/login');
   }, [signOut, navigate]);
@@ -412,11 +425,19 @@ export default function MedicalDashboard() {
           ${sidebarOpen ? 'translate-x-0 w-64 shadow-2xl' : '-translate-x-full w-0'} 
           lg:relative lg:translate-x-0 ${sidebarOpen ? 'lg:w-64 lg:min-w-[256px]' : 'lg:w-20 lg:min-w-[80px]'} lg:shadow-none overflow-hidden`}
       >
+
         <div className={`p-5 flex items-center border-b border-gray-100 flex-shrink-0 transition-all duration-300 ${sidebarOpen ? 'justify-between' : 'lg:justify-center justify-between'}`}>
-          <h1 className={`text-xl font-bold flex items-center truncate transition-all duration-300 ${sidebarOpen ? 'opacity-100 w-auto' : 'lg:opacity-0 lg:w-0 lg:hidden opacity-100 w-auto'}`}>
-            <span className="text-teal-700">Upchaar</span>
-            <span className="text-red-500 ml-1.5">Health</span>
-          </h1>
+          <div className={`flex items-center gap-2 transition-all duration-300 ${sidebarOpen ? 'opacity-100 w-auto' : 'lg:opacity-0 lg:w-0 lg:hidden opacity-100 w-auto'}`}>
+            <div className="h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+                <img src="/logo.png" alt="Upchar Logo" className="w-full h-full object-contain" />
+            </div>
+            <div className="flex flex-col sm:flex-row sm:gap-1 tracking-tight">
+                <span className="font-extrabold text-sm text-teal-600 leading-tight whitespace-nowrap">
+                    Upchar
+                </span>
+                <span className="font-bold text-[10px] sm:text-xs text-red-600 whitespace-nowrap">Health</span>
+            </div>
+          </div>
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-teal-600 transition-all flex items-center justify-center border border-transparent hover:border-gray-200 flex-shrink-0"
@@ -454,37 +475,73 @@ export default function MedicalDashboard() {
       <main className="flex-1 flex flex-col overflow-y-auto min-w-0">
 
         {/* Header */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center gap-3 px-4 sm:px-6 sticky top-0 z-20 flex-shrink-0">
-          {!sidebarOpen && (
-            <button onClick={() => setSidebarOpen(true)}
-              className="lg:hidden h-9 w-9 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 transition-colors flex-shrink-0" aria-label="Open sidebar">
-              <span className="material-symbols-outlined text-[20px]">menu</span>
-            </button>
-          )}
 
-          {/* Search */}
-          <div className="relative flex-1 max-w-xs hidden sm:block">
-            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-slate-400">search</span>
-            <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search…"
-              className="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/30 focus:border-teal-500 transition" />
+        <header className="bg-white border-b border-gray-200 flex items-center justify-between px-4 sm:px-6 h-16 sticky top-0 z-20 flex-shrink-0 gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            {!sidebarOpen && (
+              <button onClick={() => setSidebarOpen(true)}
+                className="lg:hidden p-2 rounded-md text-gray-500 hover:bg-gray-100 transition-colors flex-shrink-0" aria-label="Open sidebar">
+                <span className="material-symbols-outlined text-2xl">menu</span>
+              </button>
+            )}
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-lg font-bold text-gray-800 truncate">Good Morning, {displayName.split(' ')[0]}</h2>
+              <p className="text-[10px] text-gray-500 uppercase font-semibold tracking-wide hidden sm:block">{today}</p>
+            </div>
           </div>
 
-          <div className="flex-1" />
-
-          {/* Bell */}
-          <button onClick={() => setActiveNav('Notifications')} className="relative h-9 w-9 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors flex-shrink-0">
-            <span className="material-symbols-outlined text-[20px]">notifications</span>
-            <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 bg-red-500 rounded-full" />
-          </button>
-
-          {/* Avatar */}
-          <button onClick={() => setActiveNav('Settings')} className="h-9 w-9 rounded-full bg-gradient-to-br from-teal-500 to-emerald-400 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 outline-none hover:opacity-90 transition overflow-hidden shadow-sm" title="Profile Settings">
-            {profile?.avatar_url ? (
-              <img src={profile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
-            ) : (
-              displayName.charAt(0).toUpperCase()
-            )}
-          </button>
+          <div className="flex items-center gap-2 sm:gap-4">
+            <div className="relative hidden sm:block w-44 md:w-64 lg:w-72">
+              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xl">search</span>
+              <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-gray-100 border-none rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                placeholder="Search..." />
+            </div>
+            <button className="relative p-2 text-gray-500 hover:bg-gray-100 rounded-full flex-shrink-0">
+              <span className="material-symbols-outlined">notifications</span>
+              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
+            </button>
+            <div className="flex items-center gap-2 pl-2 sm:pl-4 border-l border-gray-200">
+              <div className="text-right hidden md:block">
+                <p className="text-sm font-semibold leading-tight">{displayName}</p>
+                <p className="text-xs text-gray-500">Medical</p>
+              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl aspect-square overflow-hidden border-2 border-teal-100 bg-teal-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+                    aria-label="Profile menu"
+                  >
+                    {profile?.avatar_url ? (
+                      <img src={profile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                    ) : (
+                      displayName.charAt(0).toUpperCase()
+                    )}
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44">
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setActiveNav('Settings');
+                    }}
+                    className="cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined mr-2 text-[18px]">settings</span>
+                    Settings
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => setSignOutAlertOpen(true)}
+                    className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50"
+                  >
+                    <span className="material-symbols-outlined mr-2 text-[18px]">logout</span>
+                    Sign Out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
         </header>
 
         {/* Page Body */}
@@ -513,8 +570,8 @@ export default function MedicalDashboard() {
                       <div className={`w-10 h-10 sm:w-12 sm:h-12 bg-teal-50 rounded-xl flex items-center justify-center text-teal-600 flex-shrink-0`}>
                         <span className="material-symbols-outlined text-2xl sm:text-3xl">{s.icon}</span>
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-xs sm:text-sm text-gray-500 font-medium truncate">{s.label}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs sm:text-sm text-gray-500 font-medium leading-tight mb-1">{s.label}</p>
                         <h3 className="text-lg sm:text-2xl font-bold truncate">{s.value}</h3>
                       </div>
                     </div>
@@ -565,7 +622,11 @@ export default function MedicalDashboard() {
                             {/* Unlink button */}
                             <button
                               type="button"
-                              onClick={(e) => handleUnlinkDoctor(e, link.id)}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setUnlinkDoctorId(link.id);
+                              }}
                               className="absolute top-3 right-3 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all z-20"
                               title="Unlink Doctor"
                             >
@@ -751,7 +812,7 @@ export default function MedicalDashboard() {
                           Change Picture
                         </button>
                         {profile?.avatar_url && (
-                          <button onClick={handleRemoveAvatar} className="text-[11px] font-bold text-red-600 hover:bg-red-50 px-4 py-2 rounded-xl transition-colors uppercase tracking-wide">
+                          <button onClick={() => setRemoveAvatarAlertOpen(true)} className="text-[11px] font-bold text-red-600 hover:bg-red-50 px-4 py-2 rounded-xl transition-colors uppercase tracking-wide">
                             Remove
                           </button>
                         )}
@@ -793,7 +854,7 @@ export default function MedicalDashboard() {
                     <button onClick={() => setIsChangePasswordOpen(true)} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 rounded-xl transition-colors">
                       <span className="material-symbols-outlined text-[18px]">lock</span> Change Password
                     </button>
-                    <button onClick={handleSignOut} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-red-500 hover:bg-red-600 rounded-xl transition-colors shadow-sm">
+                    <button onClick={() => setSignOutAlertOpen(true)} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-red-500 hover:bg-red-600 rounded-xl transition-colors shadow-sm">
                       <span className="material-symbols-outlined text-[18px]">logout</span> Sign Out
                     </button>
                   </div>
@@ -944,7 +1005,11 @@ export default function MedicalDashboard() {
                         {/* Unlink button */}
                         <button
                           type="button"
-                          onClick={(e) => handleUnlinkDoctor(e, link.id)}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setUnlinkDoctorId(link.id);
+                          }}
                           className="absolute top-3 right-3 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all z-20"
                           title="Unlink Doctor"
                         >
@@ -1113,6 +1178,59 @@ export default function MedicalDashboard() {
           </div>
         </div>
       )}
+
+      {/* Sign Out Confirmation Modal */}
+      <AlertDialog open={signOutAlertOpen} onOpenChange={setSignOutAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sign Out</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to sign out of your account?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleSignOut} className="bg-red-600 hover:bg-red-700">Sign Out</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Remove Avatar Confirmation Modal */}
+      <AlertDialog open={removeAvatarAlertOpen} onOpenChange={setRemoveAvatarAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Profile Picture</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove your profile picture? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => {
+              handleRemoveAvatar();
+              setRemoveAvatarAlertOpen(false);
+            }} className="bg-red-600 hover:bg-red-700">Remove</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Unlink Doctor Confirmation Modal */}
+      <AlertDialog open={!!unlinkDoctorId} onOpenChange={(open) => !open && setUnlinkDoctorId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unlink Doctor</AlertDialogTitle>
+            <AlertDialogDescription>
+              Warning: This doctor will be removed from your clinic staff and patients will no longer be able to see this doctor linked with your medical center. Do you want to continue?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleUnlinkDoctor} className="bg-red-600 hover:bg-red-700">Unlink</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Toaster position="bottom-right" richColors />
     </div>
   );
 }
