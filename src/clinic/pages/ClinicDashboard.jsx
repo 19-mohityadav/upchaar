@@ -20,7 +20,7 @@ import {
   AlertDialogAction
 } from "@/components/ui/alert-dialog";
 
-=======
+
 import ClinicAnalytics from './ClinicAnalytics';
 import { uploadAvatar, getStorageUrl } from '@/lib/uploadImage.js';
 import {
@@ -69,8 +69,6 @@ export default function ClinicDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(true); 
 
   const [signOutAlertOpen, setSignOutAlertOpen] = useState(false);
-  const [appointments, setAppointments] = useState([]);
-
   const [appointments, setAppointments] = useState(null);
   const [patientProfiles, setPatientProfiles] = useState({});
 
@@ -598,27 +596,6 @@ export default function ClinicDashboard() {
                     <button onClick={() => setActiveNav('Doctors')}
                       className="text-teal-600 text-xs font-bold hover:underline">View All</button>
                   </div>
-
-                </div>
-              ))
-            ) : (
-              STAT_CARDS.map((s) => (
-                <div key={s.label}
-                  className={`bg-white p-4 sm:p-6 rounded-2xl border-l-4 border-teal-500 flex items-center gap-3 sm:gap-4`}
-                  style={{ boxShadow: '0 4px 6px -1px rgb(0 0 0/0.05), 0 2px 4px -2px rgb(0 0 0/0.05)' }}>
-                  <div className={`w-10 h-10 sm:w-12 sm:h-12 bg-teal-50 rounded-xl flex items-center justify-center text-teal-600 flex-shrink-0`}>
-                    <span className="material-symbols-outlined text-2xl sm:text-3xl">{s.icon}</span>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs sm:text-sm text-gray-500 font-medium leading-tight mb-1">{s.label}</p>
-                    <h3 className="text-lg sm:text-2xl font-bold truncate">{s.value}</h3>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-
-
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                       {loading ? (
                         Array(2).fill(0).map((_, i) => (
