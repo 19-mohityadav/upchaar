@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '@/auth/AuthContext.jsx';
+
 import { supabase } from '@/lib/supabase.js';
 import { useNavigate } from 'react-router-dom';
 import DoctorAppointmentsModal from '@/components/dashboard/DoctorAppointmentsModal';
 import EditProfileModal from '@/components/EditProfileModal.jsx';
 import ChangePasswordModal from '@/components/ChangePasswordModal.jsx';
 import ImageCropperModal from '@/components/ImageCropperModal.jsx';
-import Skeleton from 'react-loading-skeleton';
-import 'react-loading-skeleton/dist/skeleton.css';
+import { toast, Toaster } from 'sonner';
 import { uploadAvatar } from '@/lib/uploadImage.js';
 import {
   DropdownMenu,
@@ -57,6 +57,8 @@ export default function MedicalDashboard() {
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [signOutAlertOpen, setSignOutAlertOpen] = useState(false);
+  const [unlinkDoctorId, setUnlinkDoctorId] = useState(null);
+  const [removeAvatarAlertOpen, setRemoveAvatarAlertOpen] = useState(false);
   const [cropperOpen, setCropperOpen] = useState(false);
   const [cropImageSrc, setCropImageSrc] = useState(null);
   const [doctorSecretKey, setDoctorSecretKey] = useState('');
@@ -75,7 +77,7 @@ export default function MedicalDashboard() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 10 * 1024 * 1024) {
-      alert("Image must be less than 10MB");
+      toast.error("Image must be less than 10MB");
       return;
     }
     const reader = new FileReader();
@@ -103,14 +105,13 @@ export default function MedicalDashboard() {
       if (dbErr) throw dbErr;
       window.location.reload();
     } catch (err) {
-      alert(err.message || 'Error updating profile picture');
+      toast.error(err.message || 'Error updating profile picture');
     } finally {
       setLoading(false);
     }
   };
 
   const handleRemoveAvatar = async () => {
-    if (!window.confirm('Remove profile picture?')) return;
     try {
       setLoading(true);
       const { error: authErr } = await supabase.auth.updateUser({
@@ -124,7 +125,7 @@ export default function MedicalDashboard() {
       if (dbErr) throw dbErr;
       window.location.reload();
     } catch (err) {
-      alert(err.message || 'Error removing picture');
+      toast.error(err.message || 'Error removing picture');
     } finally {
       setLoading(false);
     }
@@ -141,7 +142,7 @@ export default function MedicalDashboard() {
       totalRevenue: totalRev.toLocaleString()
     };
   }, [staffDoctors.length, appointments]);
-  const circumference = useMemo(() => 2 * Math.PI * 54, []);
+
 
   // Handle mobile resize
   useEffect(() => {
@@ -234,7 +235,7 @@ export default function MedicalDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [profile, profile?.id]);
+  }, [profile]);
 
   const fetchMedicals = useCallback(async () => {
     if (!profile?.id) return;
@@ -249,7 +250,7 @@ export default function MedicalDashboard() {
     } catch (err) {
       console.error('Error fetching medicals:', err.message);
     }
-  }, [profile, profile?.id]);
+  }, [profile]);
 
   const handleAddDoctor = useCallback(async (e) => {
     e.preventDefault();
@@ -286,32 +287,33 @@ export default function MedicalDashboard() {
         throw linkError;
       }
 
-      alert(`${doctor.full_name} is successfully added in your medical center`);
+      toast.success(`${doctor.full_name} is successfully added in your medical center`);
       setIsAddOpen(false);
       setDoctorSecretKey('');
       fetchStaff();
     } catch (err) {
-      alert(err.message);
+      toast.error(err.message);
     } finally {
       setAddingDoctor(false);
     }
-  }, [doctorSecretKey, profile, profile?.id, fetchStaff]);
+  }, [doctorSecretKey, profile, fetchStaff]);
 
-  const handleUnlinkDoctor = useCallback(async (e, linkId) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!window.confirm('Warning: This doctor will be removed from your clinic staff and patients will no longer be able to see this doctor linked with your medical center. Do you want to continue?')) return;
+  const handleUnlinkDoctor = useCallback(async () => {
+    if (!unlinkDoctorId) return;
     try {
       const { error } = await supabase
         .from('staff_links')
         .delete()
-        .eq('id', linkId);
+        .eq('id', unlinkDoctorId);
       if (error) throw error;
+      toast.success('Doctor unlinked successfully');
       fetchStaff();
     } catch (err) {
-      alert(err.message);
+      toast.error(err.message);
+    } finally {
+      setUnlinkDoctorId(null);
     }
-  }, [fetchStaff]);
+  }, [unlinkDoctorId, fetchStaff]);
 
   const fetchAppointments = useCallback(async () => {
     if (!profile?.id) return;
@@ -342,7 +344,7 @@ export default function MedicalDashboard() {
     } catch (err) {
       console.error('Error fetching appointments:', err.message);
     }
-  }, [profile, profile?.id]);
+  }, [profile]);
 
   useEffect(() => {
     if (profile?.id) {
@@ -606,7 +608,11 @@ export default function MedicalDashboard() {
                             {/* Unlink button */}
                             <button
                               type="button"
-                              onClick={(e) => handleUnlinkDoctor(e, link.id)}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setUnlinkDoctorId(link.id);
+                              }}
                               className="absolute top-3 right-3 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all z-20"
                               title="Unlink Doctor"
                             >
@@ -792,7 +798,7 @@ export default function MedicalDashboard() {
                           Change Picture
                         </button>
                         {profile?.avatar_url && (
-                          <button onClick={handleRemoveAvatar} className="text-[11px] font-bold text-red-600 hover:bg-red-50 px-4 py-2 rounded-xl transition-colors uppercase tracking-wide">
+                          <button onClick={() => setRemoveAvatarAlertOpen(true)} className="text-[11px] font-bold text-red-600 hover:bg-red-50 px-4 py-2 rounded-xl transition-colors uppercase tracking-wide">
                             Remove
                           </button>
                         )}
@@ -834,7 +840,7 @@ export default function MedicalDashboard() {
                     <button onClick={() => setIsChangePasswordOpen(true)} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 rounded-xl transition-colors">
                       <span className="material-symbols-outlined text-[18px]">lock</span> Change Password
                     </button>
-                    <button onClick={handleSignOut} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-red-500 hover:bg-red-600 rounded-xl transition-colors shadow-sm">
+                    <button onClick={() => setSignOutAlertOpen(true)} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-red-500 hover:bg-red-600 rounded-xl transition-colors shadow-sm">
                       <span className="material-symbols-outlined text-[18px]">logout</span> Sign Out
                     </button>
                   </div>
@@ -985,7 +991,11 @@ export default function MedicalDashboard() {
                         {/* Unlink button */}
                         <button
                           type="button"
-                          onClick={(e) => handleUnlinkDoctor(e, link.id)}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setUnlinkDoctorId(link.id);
+                          }}
                           className="absolute top-3 right-3 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all z-20"
                           title="Unlink Doctor"
                         >
@@ -1168,6 +1178,43 @@ export default function MedicalDashboard() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Remove Avatar Confirmation Modal */}
+      <AlertDialog open={removeAvatarAlertOpen} onOpenChange={setRemoveAvatarAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Profile Picture</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove your profile picture? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => {
+              handleRemoveAvatar();
+              setRemoveAvatarAlertOpen(false);
+            }} className="bg-red-600 hover:bg-red-700">Remove</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Unlink Doctor Confirmation Modal */}
+      <AlertDialog open={!!unlinkDoctorId} onOpenChange={(open) => !open && setUnlinkDoctorId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unlink Doctor</AlertDialogTitle>
+            <AlertDialogDescription>
+              Warning: This doctor will be removed from your clinic staff and patients will no longer be able to see this doctor linked with your medical center. Do you want to continue?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleUnlinkDoctor} className="bg-red-600 hover:bg-red-700">Unlink</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Toaster position="bottom-right" richColors />
     </div>
   );
 }
