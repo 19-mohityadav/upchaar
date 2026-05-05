@@ -23,14 +23,16 @@ export default function BookAppointmentQueued() {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const { user, loading: authLoading } = useAuth();
+    const doctorIdParam = searchParams.get('doctorId');
     const clinicIdParam = searchParams.get('clinicId');
     
     useEffect(() => {
         if (!authLoading && !user) {
-            navigate('/login', { state: { from: '/book-appointment-queued' } });
+            const returnTo = `/book-appointment-queued${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
+            navigate('/login', { state: { from: returnTo } });
             toast.error("You must be logged in to book a queued appointment.");
         }
-    }, [user, authLoading, navigate]);
+    }, [user, authLoading, navigate, searchParams]);
 
     // ── Search & Filter State ────────────────────────
     const [selectedState, setSelectedState] = useState('');
@@ -52,7 +54,7 @@ export default function BookAppointmentQueued() {
     const [availableScheduleDays, setAvailableScheduleDays] = useState([]);
     
     // ── UI Flow State ────────────────────────────────
-    const [step, setStep] = useState(1); // 1: Search, 2: Clinic/Slot, 3: Details & OTP, 4: Payment, 5: Confirmation
+    const [step, setStep] = useState(doctorIdParam ? 2 : 1); // 1: Search, 2: Clinic/Slot, 3: Details & OTP, 4: Payment, 5: Confirmation
     const [bookingLoading, setBookingLoading] = useState(false);
     const [bookingSuccess, setBookingSuccess] = useState(false);
 
@@ -418,6 +420,19 @@ export default function BookAppointmentQueued() {
         }));
     }, [selectedClinic, doctorTimetables]);
 
+    const showDeepLinkLoader = authLoading || (doctorIdParam && !selectedDoctor && loading);
+
+    if (showDeepLinkLoader) {
+        return (
+            <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
+                <div className="flex flex-col items-center gap-3 text-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-teal-500" />
+                    <p className="text-sm font-semibold text-slate-600">Preparing appointment slots...</p>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="min-h-screen bg-slate-50 py-12 px-4 sm:px-8">
                 <div className="max-w-6xl mx-auto space-y-8">
@@ -429,7 +444,11 @@ export default function BookAppointmentQueued() {
                                 if (step === 2) {
                                     navigate('/doctors');
                                 } else {
-                                    setStep(step - 1);
+                                    if (step === 4 && user) {
+                                        setStep(2);
+                                    } else {
+                                        setStep(step - 1);
+                                    }
                                 }
                             }}>
                                 <ChevronLeft className="h-6 w-6" />

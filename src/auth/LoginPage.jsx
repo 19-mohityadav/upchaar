@@ -280,8 +280,8 @@ export default function LoginPage() {
                     {/* Brand banner */}
                     <div className="bg-gradient-to-r from-teal-600 to-emerald-500 px-8 pt-8 pb-6">
                         <div className="flex items-center gap-3 mb-2">
-                            <div className="h-11 w-11 rounded-xl bg-white/20 flex items-center justify-center">
-                                <Heart size={22} className="text-white" />
+                            <div className="h-11 w-11 rounded-xl bg-white flex items-center justify-center overflow-hidden p-1">
+                                <img src="/logo.png" alt="Upchar Logo" className="w-full h-full object-contain drop-shadow-sm" />
                             </div>
                             <div>
                                 <p className="text-white/70 text-xs uppercase tracking-widest font-medium">Upchar Health</p>
