@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { ClipboardList, Plus, Eye, Loader2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { supabase } from '@/lib/supabase.js';
 import { useDoctor } from '../context/DoctorContext.jsx';
 
@@ -92,6 +93,7 @@ export default function DoctorPrescriptions() {
 
                     return {
                         id: `RX-${apt.id}`,
+                        rawId: apt.id,
                         patient,
                         date: formatDate(apt.date),
                         diagnosis,
@@ -167,9 +169,12 @@ export default function DoctorPrescriptions() {
                                     <p className="font-semibold text-slate-800">{rx.patient}</p>
                                     <p className="text-xs text-slate-400">{rx.id} · {rx.date}</p>
                                 </div>
-                                <button className="h-8 w-8 flex items-center justify-center rounded-lg bg-slate-100 text-slate-500 hover:bg-primary hover:text-white transition-all">
+                                <Link 
+                                    to={`/prescription/${rx.rawId}`}
+                                    className="h-8 w-8 flex items-center justify-center rounded-lg bg-slate-100 text-slate-500 hover:bg-primary hover:text-white transition-all"
+                                >
                                     <Eye size={14} />
-                                </button>
+                                </Link>
                             </div>
                             <div className="mb-3 p-3 rounded-xl bg-teal-50">
                                 <p className="text-xs font-semibold text-teal-700 mb-1">Diagnosis</p>

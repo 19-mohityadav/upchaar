@@ -760,11 +760,19 @@ export default function MedicalDashboard() {
                             {idx !== appointments.slice(0, 5).length - 1 && <div className="w-0.5 bg-teal-100 absolute left-1.5 top-4 bottom-0" />}
                             <div className="w-3 h-3 bg-teal-500 rounded-full border-2 border-white relative z-10 mt-0.5" />
                           </div>
-                          <div>
-                            <p className="text-sm font-bold text-gray-800">Appt: {item.patient_name}</p>
+                          <div className="flex-1">
+                            <p className="text-sm font-bold text-gray-800">Appt: {item.patient_name || item.patient}</p>
                             <p className="text-[10px] text-gray-500">with Dr. {item.doctor_name}</p>
                             <p className="text-xs text-teal-600 mt-1">{new Date(item.date).toLocaleDateString()} {item.time_slot}</p>
                           </div>
+                          {item.status === 'Completed' && (
+                              <button 
+                                onClick={() => navigate(`/prescription/${item.id}`)}
+                                className="h-8 px-3 rounded-lg bg-teal-50 text-teal-700 text-xs font-bold hover:bg-teal-100 transition-colors flex items-center justify-center shrink-0 self-center"
+                              >
+                                View Rx
+                              </button>
+                          )}
                         </div>
                       ))
                     ) : (
