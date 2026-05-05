@@ -424,7 +424,11 @@ export default function BookAppointmentQueued() {
                                 if (step === 2) {
                                     navigate('/doctors');
                                 } else {
-                                    setStep(step - 1);
+                                    if (step === 4 && user) {
+                                        setStep(2);
+                                    } else {
+                                        setStep(step - 1);
+                                    }
                                 }
                             }}>
                                 <ChevronLeft className="h-6 w-6" />
