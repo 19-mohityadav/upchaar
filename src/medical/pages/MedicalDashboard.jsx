@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '@/auth/AuthContext.jsx';
+
 import { supabase } from '@/lib/supabase.js';
 import { useNavigate } from 'react-router-dom';
 import DoctorAppointmentsModal from '@/components/dashboard/DoctorAppointmentsModal';
 import EditProfileModal from '@/components/EditProfileModal.jsx';
 import ChangePasswordModal from '@/components/ChangePasswordModal.jsx';
 import ImageCropperModal from '@/components/ImageCropperModal.jsx';
-import Skeleton from 'react-loading-skeleton';
-import 'react-loading-skeleton/dist/skeleton.css';
+import { toast, Toaster } from 'sonner';
 import MedicalAnalytics from './MedicalAnalytics';
 import { uploadAvatar, getStorageUrl } from '@/lib/uploadImage.js';
 import {
@@ -17,6 +17,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction
+} from "@/components/ui/alert-dialog";
+
 
 // Staff doctors will be fetched from database
 
@@ -30,7 +41,6 @@ const NAV_ITEMS = [
   { icon: 'dashboard', label: 'Dashboard' },
   { icon: 'medical_information', label: 'Doctors' },
   { icon: 'person', label: 'Patients' },
-  { icon: 'notifications', label: 'Notifications' },
   { icon: 'analytics', label: 'Analytics' },
   { icon: 'settings', label: 'Settings' },
 ];
@@ -46,6 +56,9 @@ export default function MedicalDashboard() {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [signOutAlertOpen, setSignOutAlertOpen] = useState(false);
+  const [unlinkDoctorId, setUnlinkDoctorId] = useState(null);
+  const [removeAvatarAlertOpen, setRemoveAvatarAlertOpen] = useState(false);
   const [cropperOpen, setCropperOpen] = useState(false);
   const [cropImageSrc, setCropImageSrc] = useState(null);
   const [doctorSecretKey, setDoctorSecretKey] = useState('');
@@ -64,7 +77,7 @@ export default function MedicalDashboard() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 10 * 1024 * 1024) {
-      alert("Image must be less than 10MB");
+      toast.error("Image must be less than 10MB");
       return;
     }
     const reader = new FileReader();
@@ -92,14 +105,13 @@ export default function MedicalDashboard() {
       if (dbErr) throw dbErr;
       window.location.reload();
     } catch (err) {
-      alert(err.message || 'Error updating profile picture');
+      toast.error(err.message || 'Error updating profile picture');
     } finally {
       setLoading(false);
     }
   };
 
   const handleRemoveAvatar = async () => {
-    if (!window.confirm('Remove profile picture?')) return;
     try {
       setLoading(true);
       const { error: authErr } = await supabase.auth.updateUser({
@@ -113,7 +125,7 @@ export default function MedicalDashboard() {
       if (dbErr) throw dbErr;
       window.location.reload();
     } catch (err) {
-      alert(err.message || 'Error removing picture');
+      toast.error(err.message || 'Error removing picture');
     } finally {
       setLoading(false);
     }
@@ -131,7 +143,7 @@ export default function MedicalDashboard() {
       totalRevenue: totalRev.toLocaleString()
     };
   }, [staffDoctors.length, appointments]);
-  const circumference = useMemo(() => 2 * Math.PI * 54, []);
+
 
   // Handle mobile resize
   useEffect(() => {
@@ -224,7 +236,7 @@ export default function MedicalDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [profile, profile?.id]);
+  }, [profile]);
 
   const fetchMedicals = useCallback(async () => {
     if (!profile?.id) return;
@@ -239,7 +251,7 @@ export default function MedicalDashboard() {
     } catch (err) {
       console.error('Error fetching medicals:', err.message);
     }
-  }, [profile, profile?.id]);
+  }, [profile]);
 
   const handleAddDoctor = useCallback(async (e) => {
     e.preventDefault();
@@ -276,32 +288,33 @@ export default function MedicalDashboard() {
         throw linkError;
       }
 
-      alert(`${doctor.full_name} is successfully added in your medical center`);
+      toast.success(`${doctor.full_name} is successfully added in your medical center`);
       setIsAddOpen(false);
       setDoctorSecretKey('');
       fetchStaff();
     } catch (err) {
-      alert(err.message);
+      toast.error(err.message);
     } finally {
       setAddingDoctor(false);
     }
-  }, [doctorSecretKey, profile, profile?.id, fetchStaff]);
+  }, [doctorSecretKey, profile, fetchStaff]);
 
-  const handleUnlinkDoctor = useCallback(async (e, linkId) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!window.confirm('Warning: This doctor will be removed from your clinic staff and patients will no longer be able to see this doctor linked with your medical center. Do you want to continue?')) return;
+  const handleUnlinkDoctor = useCallback(async () => {
+    if (!unlinkDoctorId) return;
     try {
       const { error } = await supabase
         .from('staff_links')
         .delete()
-        .eq('id', linkId);
+        .eq('id', unlinkDoctorId);
       if (error) throw error;
+      toast.success('Doctor unlinked successfully');
       fetchStaff();
     } catch (err) {
-      alert(err.message);
+      toast.error(err.message);
+    } finally {
+      setUnlinkDoctorId(null);
     }
-  }, [fetchStaff]);
+  }, [unlinkDoctorId, fetchStaff]);
 
   const fetchAppointments = useCallback(async () => {
     if (!profile?.id) return;
@@ -332,7 +345,7 @@ export default function MedicalDashboard() {
     } catch (err) {
       console.error('Error fetching appointments:', err.message);
     }
-  }, [profile, profile?.id]);
+  }, [profile]);
 
   useEffect(() => {
     if (profile?.id && appointments === null) {
@@ -375,7 +388,6 @@ export default function MedicalDashboard() {
   }, [appointments, profile?.id]);
 
   const handleSignOut = useCallback(async () => {
-    if (!window.confirm('Are you sure you want to sign out?')) return;
     await signOut();
     navigate('/login');
   }, [signOut, navigate]);
@@ -390,7 +402,7 @@ export default function MedicalDashboard() {
   const STAT_CARDS = useMemo(() => [
     { color: 'teal', icon: 'groups', label: 'Total Doctors', value: stats.totalDoctors },
     { color: 'cyan', icon: 'personal_injury', label: 'Total Patients', value: stats.totalPatients.toLocaleString() },
-    { color: 'emerald', icon: 'event_available', label: "Today's Appts", value: stats.todayAppointments },
+    { color: 'emerald', icon: 'event_available', label: "Today's Appointments", value: stats.todayAppointments },
     { color: 'amber', icon: 'payments', label: 'Total Revenue', value: `Rs. ${stats.totalRevenue}` },
   ], [stats]);
 
@@ -410,30 +422,49 @@ export default function MedicalDashboard() {
       <aside
         ref={sidebarRef}
         className={`fixed top-0 left-0 h-full z-40 bg-white border-r border-gray-200 flex flex-col transition-all duration-300 ease-in-out
-          ${sidebarOpen ? 'translate-x-0 w-64 shadow-2xl lg:shadow-none' : '-translate-x-full w-0 lg:w-0'} 
-          lg:relative lg:translate-x-0 ${sidebarOpen ? 'lg:min-w-[256px]' : 'lg:min-w-0 lg:border-none overflow-hidden'}`}
+          ${sidebarOpen ? 'translate-x-0 w-64 shadow-2xl' : '-translate-x-full w-0'} 
+          lg:relative lg:translate-x-0 ${sidebarOpen ? 'lg:w-64 lg:min-w-[256px]' : 'lg:w-20 lg:min-w-[80px]'} lg:shadow-none overflow-hidden`}
       >
-        <div className="p-5 flex items-center justify-between border-b border-gray-100 flex-shrink-0 min-w-[256px]">
-          <h1 className="text-xl font-bold text-teal-700 flex items-center gap-2 truncate">
-            <span className="material-symbols-outlined text-3xl flex-shrink-0">medical_services</span>
-            Upchaar Health
-          </h1>
+
+        <div className={`p-5 flex items-center border-b border-gray-100 flex-shrink-0 transition-all duration-300 ${sidebarOpen ? 'justify-between' : 'lg:justify-center justify-between'}`}>
+          <div className={`flex items-center gap-2 transition-all duration-300 ${sidebarOpen ? 'opacity-100 w-auto' : 'lg:opacity-0 lg:w-0 lg:hidden opacity-100 w-auto'}`}>
+            <div className="h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+                <img src="/logo.png" alt="Upchar Logo" className="w-full h-full object-contain" />
+            </div>
+            <div className="flex flex-col sm:flex-row sm:gap-1 tracking-tight">
+                <span className="font-extrabold text-sm text-teal-600 leading-tight whitespace-nowrap">
+                    Upchar
+                </span>
+                <span className="font-bold text-[10px] sm:text-xs text-red-600 whitespace-nowrap">Health</span>
+            </div>
+          </div>
           <button
-            onClick={() => setSidebarOpen(false)}
-            className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-teal-600 transition-all flex items-center justify-center border border-transparent hover:border-gray-200"
-            title="Close Sidebar"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-teal-600 transition-all flex items-center justify-center border border-transparent hover:border-gray-200 flex-shrink-0"
+            title="Toggle Sidebar"
           >
-            <span className="material-symbols-outlined text-2xl font-bold">close</span>
+            <span className="material-symbols-outlined text-2xl font-bold">menu</span>
           </button>
         </div>
 
-        <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto min-w-[256px]">
+        <nav className="flex-1 py-4 space-y-2 overflow-y-auto overflow-x-hidden">
           {NAV_ITEMS.map((item) => (
             <button key={item.label} onClick={() => handleNavClick(item.label)}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg text-left transition-colors ${activeNav === item.label ? 'border-r-4 border-teal-500 bg-teal-50 text-teal-700' : 'text-gray-600 hover:bg-gray-50'
-                }`}>
-              <span className="material-symbols-outlined text-xl">{item.icon}</span>
-              {item.label}
+              className={`w-full flex items-center py-3 text-sm font-medium transition-colors duration-200 relative group
+                ${activeNav === item.label ? 'bg-teal-50 text-teal-700' : 'text-gray-600 hover:bg-gray-50'}
+                ${sidebarOpen ? 'px-8 gap-3' : 'lg:justify-center lg:px-0 px-8 gap-3'}
+              `}
+              title={!sidebarOpen ? item.label : undefined}
+            >
+              {activeNav === item.label && (
+                <div className="absolute left-0 top-0 h-full w-1 bg-teal-500 rounded-r-md transition-all duration-300" />
+              )}
+              <span className={`material-symbols-outlined text-xl flex-shrink-0 transition-colors ${activeNav === item.label ? 'text-teal-600' : 'text-gray-400 group-hover:text-gray-600'}`}>
+                {item.icon}
+              </span>
+              <span className={`whitespace-nowrap transition-all duration-300 ${sidebarOpen ? 'opacity-100 w-auto' : 'lg:opacity-0 lg:w-0 lg:hidden opacity-100 w-auto'}`}>
+                {item.label}
+              </span>
             </button>
           ))}
         </nav>
@@ -444,11 +475,12 @@ export default function MedicalDashboard() {
       <main className="flex-1 flex flex-col overflow-y-auto min-w-0">
 
         {/* Header */}
+
         <header className="bg-white border-b border-gray-200 flex items-center justify-between px-4 sm:px-6 h-16 sticky top-0 z-20 flex-shrink-0 gap-3">
           <div className="flex items-center gap-3 min-w-0">
             {!sidebarOpen && (
               <button onClick={() => setSidebarOpen(true)}
-                className="p-2 rounded-md text-gray-500 hover:bg-gray-100 transition-colors flex-shrink-0" aria-label="Open sidebar">
+                className="lg:hidden p-2 rounded-md text-gray-500 hover:bg-gray-100 transition-colors flex-shrink-0" aria-label="Open sidebar">
                 <span className="material-symbols-outlined text-2xl">menu</span>
               </button>
             )}
@@ -482,7 +514,7 @@ export default function MedicalDashboard() {
                     aria-label="Profile menu"
                   >
                     {profile?.avatar_url ? (
-                      <img src={getStorageUrl(profile.avatar_url, 'avatars')} alt="Profile" className="w-full h-full object-cover" />
+                      <img src={profile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
                     ) : (
                       displayName.charAt(0).toUpperCase()
                     )}
@@ -500,7 +532,7 @@ export default function MedicalDashboard() {
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
-                    onClick={handleSignOut}
+                    onClick={() => setSignOutAlertOpen(true)}
                     className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50"
                   >
                     <span className="material-symbols-outlined mr-2 text-[18px]">logout</span>
@@ -517,7 +549,7 @@ export default function MedicalDashboard() {
           {activeNav === 'Dashboard' ? (
             <>
               {/* Stats */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
                 {loading ? (
                   Array(4).fill(0).map((_, i) => (
                     <div key={i} className="bg-white p-4 sm:p-6 rounded-2xl border-l-4 border-teal-500 shadow-sm animate-pulse">
@@ -538,8 +570,8 @@ export default function MedicalDashboard() {
                       <div className={`w-10 h-10 sm:w-12 sm:h-12 bg-teal-50 rounded-xl flex items-center justify-center text-teal-600 flex-shrink-0`}>
                         <span className="material-symbols-outlined text-2xl sm:text-3xl">{s.icon}</span>
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-xs sm:text-sm text-gray-500 font-medium truncate">{s.label}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs sm:text-sm text-gray-500 font-medium leading-tight mb-1">{s.label}</p>
                         <h3 className="text-lg sm:text-2xl font-bold truncate">{s.value}</h3>
                       </div>
                     </div>
@@ -590,7 +622,11 @@ export default function MedicalDashboard() {
                             {/* Unlink button */}
                             <button
                               type="button"
-                              onClick={(e) => handleUnlinkDoctor(e, link.id)}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setUnlinkDoctorId(link.id);
+                              }}
                               className="absolute top-3 right-3 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all z-20"
                               title="Unlink Doctor"
                             >
@@ -784,7 +820,7 @@ export default function MedicalDashboard() {
                           Change Picture
                         </button>
                         {profile?.avatar_url && (
-                          <button onClick={handleRemoveAvatar} className="text-[11px] font-bold text-red-600 hover:bg-red-50 px-4 py-2 rounded-xl transition-colors uppercase tracking-wide">
+                          <button onClick={() => setRemoveAvatarAlertOpen(true)} className="text-[11px] font-bold text-red-600 hover:bg-red-50 px-4 py-2 rounded-xl transition-colors uppercase tracking-wide">
                             Remove
                           </button>
                         )}
@@ -826,7 +862,7 @@ export default function MedicalDashboard() {
                     <button onClick={() => setIsChangePasswordOpen(true)} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 hover:bg-gray-50 rounded-xl transition-colors">
                       <span className="material-symbols-outlined text-[18px]">lock</span> Change Password
                     </button>
-                    <button onClick={handleSignOut} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-red-500 hover:bg-red-600 rounded-xl transition-colors shadow-sm">
+                    <button onClick={() => setSignOutAlertOpen(true)} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-bold text-white bg-red-500 hover:bg-red-600 rounded-xl transition-colors shadow-sm">
                       <span className="material-symbols-outlined text-[18px]">logout</span> Sign Out
                     </button>
                   </div>
@@ -977,7 +1013,11 @@ export default function MedicalDashboard() {
                         {/* Unlink button */}
                         <button
                           type="button"
-                          onClick={(e) => handleUnlinkDoctor(e, link.id)}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setUnlinkDoctorId(link.id);
+                          }}
                           className="absolute top-3 right-3 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all z-20"
                           title="Unlink Doctor"
                         >
@@ -1146,6 +1186,59 @@ export default function MedicalDashboard() {
           </div>
         </div>
       )}
+
+      {/* Sign Out Confirmation Modal */}
+      <AlertDialog open={signOutAlertOpen} onOpenChange={setSignOutAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sign Out</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to sign out of your account?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleSignOut} className="bg-red-600 hover:bg-red-700">Sign Out</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Remove Avatar Confirmation Modal */}
+      <AlertDialog open={removeAvatarAlertOpen} onOpenChange={setRemoveAvatarAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Profile Picture</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove your profile picture? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => {
+              handleRemoveAvatar();
+              setRemoveAvatarAlertOpen(false);
+            }} className="bg-red-600 hover:bg-red-700">Remove</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Unlink Doctor Confirmation Modal */}
+      <AlertDialog open={!!unlinkDoctorId} onOpenChange={(open) => !open && setUnlinkDoctorId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unlink Doctor</AlertDialogTitle>
+            <AlertDialogDescription>
+              Warning: This doctor will be removed from your clinic staff and patients will no longer be able to see this doctor linked with your medical center. Do you want to continue?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleUnlinkDoctor} className="bg-red-600 hover:bg-red-700">Unlink</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Toaster position="bottom-right" richColors />
     </div>
   );
 }

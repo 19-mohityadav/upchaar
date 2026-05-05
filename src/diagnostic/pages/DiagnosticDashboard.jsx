@@ -1,9 +1,9 @@
 import { useAuth } from '@/auth/AuthContext.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-    Activity, Clock, DollarSign, Users, LogOut, CheckCircle, XCircle, 
-    Search, Edit, LayoutDashboard, TestTubes, FileText, Settings, 
-    ChevronLeft, ChevronRight, Menu, Plus, X, Filter, Trash2 
+import {
+    Activity, Clock, DollarSign, Users, LogOut, CheckCircle, XCircle,
+    Search, Edit, LayoutDashboard, TestTubes, FileText, Settings,
+    ChevronLeft, ChevronRight, Menu, Plus, X, Filter, Trash2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
@@ -75,16 +75,16 @@ export default function DiagnosticDashboard() {
             alert('Please provide at least a Test Name and Price.');
             return;
         }
-        
+
         const newId = tests.length > 0 ? Math.max(...tests.map(t => t.id)) + 1 : 1;
-        setTests([...tests, { 
-            id: newId, 
-            name: newTest.name, 
-            price: `₹${newTest.price}`, 
-            category: newTest.category, 
-            status: newTest.status 
+        setTests([...tests, {
+            id: newId,
+            name: newTest.name,
+            price: `₹${newTest.price}`,
+            category: newTest.category,
+            status: newTest.status
         }]);
-        
+
         setNewTest({ name: '', price: '', category: 'Blood Test', description: '', status: 'Active' });
         setIsAddTestModalOpen(false);
     };
@@ -100,7 +100,7 @@ export default function DiagnosticDashboard() {
     return (
         <div className="h-screen bg-slate-50 flex overflow-hidden">
             {/* Sidebar */}
-            <motion.div 
+            <motion.div
                 animate={{ width: isSidebarOpen ? 260 : 80 }}
                 className="bg-white border-r border-slate-200 h-full flex flex-col shadow-sm relative z-20 flex-shrink-0 transition-all duration-300"
             >
@@ -127,7 +127,7 @@ export default function DiagnosticDashboard() {
                 </div>
 
                 {/* Sidebar Toggle Button */}
-                <button 
+                <button
                     onClick={() => setIsSidebarOpen(!isSidebarOpen)}
                     className="absolute -right-3 top-24 w-6 h-6 bg-white border border-slate-200 rounded-full flex items-center justify-center text-slate-500 hover:text-teal-600 hover:border-teal-200 shadow-sm z-30 transition-colors"
                 >
@@ -142,16 +142,15 @@ export default function DiagnosticDashboard() {
                             <button
                                 key={item.name}
                                 onClick={() => setActiveTab(item.name)}
-                                className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 group ${
-                                    isActive 
-                                    ? 'bg-teal-50 text-teal-700 font-medium' 
-                                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                                }`}
+                                className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 group ${isActive
+                                        ? 'bg-teal-50 text-teal-700 font-medium'
+                                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                                    }`}
                                 title={!isSidebarOpen ? item.name : ''}
                             >
-                                <item.icon 
-                                    size={20} 
-                                    className={`min-w-[20px] transition-colors ${isActive ? 'text-teal-600' : 'text-slate-400 group-hover:text-slate-600'}`} 
+                                <item.icon
+                                    size={20}
+                                    className={`min-w-[20px] transition-colors ${isActive ? 'text-teal-600' : 'text-slate-400 group-hover:text-slate-600'}`}
                                 />
                                 <AnimatePresence>
                                     {isSidebarOpen && (
@@ -166,7 +165,7 @@ export default function DiagnosticDashboard() {
                                     )}
                                 </AnimatePresence>
                                 {isActive && isSidebarOpen && (
-                                    <motion.div 
+                                    <motion.div
                                         layoutId="sidebar-active-indicator"
                                         className="ml-auto w-1.5 h-1.5 rounded-full bg-teal-600"
                                     />
@@ -205,7 +204,7 @@ export default function DiagnosticDashboard() {
                 {/* Topbar */}
                 <div className="bg-white border-b border-slate-200 h-20 px-8 flex items-center justify-between shadow-sm flex-shrink-0">
                     <div className="flex items-center gap-4">
-                        <button 
+                        <button
                             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
                             className="lg:hidden p-2 text-slate-500 hover:bg-slate-100 rounded-lg"
                         >
@@ -229,7 +228,7 @@ export default function DiagnosticDashboard() {
                 {/* Scrollable Content Area */}
                 <div className="flex-1 overflow-y-auto p-6 sm:p-10 w-full">
                     <div className="max-w-7xl mx-auto w-full">
-                        
+
                         {activeTab === 'Dashboard' && (
                             <motion.div
                                 initial={{ opacity: 0, y: 10 }}
@@ -263,7 +262,7 @@ export default function DiagnosticDashboard() {
                         )}
 
                         {(activeTab === 'Dashboard' || activeTab === 'Available Tests') && (
-                            <motion.div 
+                            <motion.div
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: 0.1 }}
@@ -277,7 +276,7 @@ export default function DiagnosticDashboard() {
                                     <div className="flex flex-wrap items-center gap-3">
                                         <div className="relative">
                                             <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                            <select 
+                                            <select
                                                 value={filterCategory}
                                                 onChange={(e) => setFilterCategory(e.target.value)}
                                                 className="pl-10 pr-8 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white appearance-none cursor-pointer"
@@ -292,7 +291,7 @@ export default function DiagnosticDashboard() {
                                         </div>
                                         <div className="relative">
                                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                            <input 
+                                            <input
                                                 type="text"
                                                 placeholder="Search tests..."
                                                 value={searchTerm}
@@ -300,7 +299,7 @@ export default function DiagnosticDashboard() {
                                                 className="pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent w-full sm:w-64"
                                             />
                                         </div>
-                                        <button 
+                                        <button
                                             onClick={() => setIsAddTestModalOpen(true)}
                                             className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 transition-colors shadow-sm whitespace-nowrap ml-auto"
                                         >
@@ -309,7 +308,7 @@ export default function DiagnosticDashboard() {
                                         </button>
                                     </div>
                                 </div>
-                                
+
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-left border-collapse">
                                         <thead>
@@ -331,7 +330,7 @@ export default function DiagnosticDashboard() {
                                                             </div>
                                                             <h3 className="text-lg font-bold text-slate-700 mb-1">No tests available yet</h3>
                                                             <p className="text-slate-500 mb-4 max-w-sm">You haven't added any diagnostic tests to your catalogue. Click 'Add Test' to get started.</p>
-                                                            <button 
+                                                            <button
                                                                 onClick={() => setIsAddTestModalOpen(true)}
                                                                 className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 transition-colors shadow-sm"
                                                             >
@@ -356,11 +355,10 @@ export default function DiagnosticDashboard() {
                                                             {test.price}
                                                         </td>
                                                         <td className="px-6 py-4">
-                                                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${
-                                                                test.status === 'Active' 
-                                                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                                                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${test.status === 'Active'
+                                                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                                                     : 'bg-rose-50 text-rose-700 border border-rose-200'
-                                                            }`}>
+                                                                }`}>
                                                                 {test.status === 'Active' ? <CheckCircle size={12} /> : <XCircle size={12} />}
                                                                 {test.status}
                                                             </span>
@@ -372,23 +370,23 @@ export default function DiagnosticDashboard() {
                                                                         {test.status === 'Active' ? 'On' : 'Off'}
                                                                     </span>
                                                                     <label className="relative inline-flex items-center cursor-pointer">
-                                                                        <input 
-                                                                            type="checkbox" 
-                                                                            className="sr-only peer" 
-                                                                            checked={test.status === 'Active'} 
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            className="sr-only peer"
+                                                                            checked={test.status === 'Active'}
                                                                             onChange={() => handleToggleStatus(test.id)}
                                                                         />
                                                                         <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-teal-500"></div>
                                                                     </label>
                                                                 </div>
-                                                                <button 
+                                                                <button
                                                                     onClick={() => setEditingTest(test)}
                                                                     className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
                                                                     title="Edit Test"
                                                                 >
                                                                     <Edit size={18} />
                                                                 </button>
-                                                                <button 
+                                                                <button
                                                                     onClick={() => setTestToDelete(test)}
                                                                     className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                                                                     title="Delete Test"
@@ -413,7 +411,7 @@ export default function DiagnosticDashboard() {
                         )}
 
                         {['Patients', 'Reports', 'Settings'].includes(activeTab) && (
-                            <motion.div 
+                            <motion.div
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 className="bg-white rounded-2xl border border-dashed border-slate-300 flex flex-col items-center justify-center p-16 text-center mt-10"
@@ -427,7 +425,7 @@ export default function DiagnosticDashboard() {
                                 <p className="text-slate-500 max-w-sm">This section is currently under development. Check back later for updates.</p>
                             </motion.div>
                         )}
-                        
+
                     </div>
                 </div>
             </div>
@@ -436,14 +434,14 @@ export default function DiagnosticDashboard() {
             <AnimatePresence>
                 {isAddTestModalOpen && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-0">
-                        <motion.div 
+                        <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
                             onClick={() => setIsAddTestModalOpen(false)}
                             className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm"
                         />
-                        <motion.div 
+                        <motion.div
                             initial={{ opacity: 0, scale: 0.95, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -451,43 +449,43 @@ export default function DiagnosticDashboard() {
                         >
                             <div className="flex items-center justify-between p-6 border-b border-slate-100">
                                 <h3 className="text-xl font-bold text-slate-800">Add New Test</h3>
-                                <button 
+                                <button
                                     onClick={() => setIsAddTestModalOpen(false)}
                                     className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors"
                                 >
                                     <X size={18} />
                                 </button>
                             </div>
-                            
+
                             <div className="p-6 overflow-y-auto flex-1">
                                 <form className="space-y-5">
                                     <div>
                                         <label className="block text-sm font-medium text-slate-700 mb-1">Test Name</label>
-                                        <input 
-                                            type="text" 
+                                        <input
+                                            type="text"
                                             value={newTest.name}
-                                            onChange={(e) => setNewTest({...newTest, name: e.target.value})}
-                                            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all" 
-                                            placeholder="e.g. Complete Blood Count" 
+                                            onChange={(e) => setNewTest({ ...newTest, name: e.target.value })}
+                                            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all"
+                                            placeholder="e.g. Complete Blood Count"
                                         />
                                     </div>
-                                    
+
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
                                             <label className="block text-sm font-medium text-slate-700 mb-1">Price (₹)</label>
-                                            <input 
-                                                type="number" 
+                                            <input
+                                                type="number"
                                                 value={newTest.price}
-                                                onChange={(e) => setNewTest({...newTest, price: e.target.value})}
-                                                className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all" 
-                                                placeholder="500" 
+                                                onChange={(e) => setNewTest({ ...newTest, price: e.target.value })}
+                                                className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all"
+                                                placeholder="500"
                                             />
                                         </div>
                                         <div>
                                             <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
-                                            <select 
+                                            <select
                                                 value={newTest.category}
-                                                onChange={(e) => setNewTest({...newTest, category: e.target.value})}
+                                                onChange={(e) => setNewTest({ ...newTest, category: e.target.value })}
                                                 className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all bg-white"
                                             >
                                                 <option>Blood Test</option>
@@ -501,43 +499,43 @@ export default function DiagnosticDashboard() {
 
                                     <div>
                                         <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
-                                        <textarea 
-                                            rows="3" 
+                                        <textarea
+                                            rows="3"
                                             value={newTest.description}
-                                            onChange={(e) => setNewTest({...newTest, description: e.target.value})}
-                                            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all resize-none" 
+                                            onChange={(e) => setNewTest({ ...newTest, description: e.target.value })}
+                                            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all resize-none"
                                             placeholder="Brief description about the test..."
                                         ></textarea>
                                     </div>
-                                    
+
                                     <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
                                         <div>
                                             <p className="font-medium text-slate-800">Status</p>
                                             <p className="text-xs text-slate-500">Determine if this test is currently available</p>
                                         </div>
                                         <label className="relative inline-flex items-center cursor-pointer">
-                                            <input 
-                                                type="checkbox" 
-                                                className="sr-only peer" 
+                                            <input
+                                                type="checkbox"
+                                                className="sr-only peer"
                                                 checked={newTest.status === 'Active'}
-                                                onChange={(e) => setNewTest({...newTest, status: e.target.checked ? 'Active' : 'Inactive'})}
+                                                onChange={(e) => setNewTest({ ...newTest, status: e.target.checked ? 'Active' : 'Inactive' })}
                                             />
                                             <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-teal-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
                                         </label>
                                     </div>
                                 </form>
                             </div>
-                            
+
                             <div className="p-6 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-3 rounded-b-2xl">
-                                <button 
+                                <button
                                     onClick={() => setIsAddTestModalOpen(false)}
                                     type="button"
                                     className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-200 bg-slate-100 rounded-lg transition-colors"
                                 >
                                     Cancel
                                 </button>
-                                <button 
-                                    type="button" 
+                                <button
+                                    type="button"
                                     onClick={handleSaveNewTest}
                                     className="px-5 py-2.5 text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 rounded-lg transition-colors shadow-sm"
                                 >
@@ -553,14 +551,14 @@ export default function DiagnosticDashboard() {
             <AnimatePresence>
                 {editingTest && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-0">
-                        <motion.div 
+                        <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
                             onClick={() => setEditingTest(null)}
                             className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm"
                         />
-                        <motion.div 
+                        <motion.div
                             initial={{ opacity: 0, scale: 0.95, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -568,21 +566,21 @@ export default function DiagnosticDashboard() {
                         >
                             <div className="flex items-center justify-between p-6 border-b border-slate-100">
                                 <h3 className="text-xl font-bold text-slate-800">Edit Test</h3>
-                                <button 
+                                <button
                                     onClick={() => setEditingTest(null)}
                                     className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors"
                                 >
                                     <X size={18} />
                                 </button>
                             </div>
-                            
+
                             <div className="p-6 overflow-y-auto flex-1">
                                 <form className="space-y-5">
                                     <div>
                                         <label className="block text-sm font-medium text-slate-700 mb-1">Test Name</label>
                                         <input type="text" defaultValue={editingTest.name} className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all" />
                                     </div>
-                                    
+
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
                                             <label className="block text-sm font-medium text-slate-700 mb-1">Price</label>
@@ -599,26 +597,26 @@ export default function DiagnosticDashboard() {
                                             </select>
                                         </div>
                                     </div>
-                                    
+
                                     <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
                                         <div>
                                             <p className="font-medium text-slate-800">Status</p>
                                             <p className="text-xs text-slate-500">Determine if this test is currently available</p>
                                         </div>
                                         <label className="relative inline-flex items-center cursor-pointer">
-                                            <input 
-                                                type="checkbox" 
-                                                className="sr-only peer" 
-                                                defaultChecked={editingTest.status === 'Active'} 
+                                            <input
+                                                type="checkbox"
+                                                className="sr-only peer"
+                                                defaultChecked={editingTest.status === 'Active'}
                                             />
                                             <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-teal-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
                                         </label>
                                     </div>
                                 </form>
                             </div>
-                            
+
                             <div className="p-6 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-3 rounded-b-2xl">
-                                <button 
+                                <button
                                     onClick={() => setEditingTest(null)}
                                     type="button"
                                     className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-200 bg-slate-100 rounded-lg transition-colors"
@@ -638,14 +636,14 @@ export default function DiagnosticDashboard() {
             <AnimatePresence>
                 {testToDelete && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-0">
-                        <motion.div 
+                        <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
                             onClick={() => setTestToDelete(null)}
                             className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm"
                         />
-                        <motion.div 
+                        <motion.div
                             initial={{ opacity: 0, scale: 0.95, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -657,15 +655,15 @@ export default function DiagnosticDashboard() {
                                 </div>
                                 <h3 className="text-xl font-bold text-slate-800 mb-2">Delete Test</h3>
                                 <p className="text-slate-500 mb-6">Are you sure you want to delete <span className="font-semibold text-slate-700">{testToDelete.name}</span>? This action cannot be undone.</p>
-                                
+
                                 <div className="flex gap-3">
-                                    <button 
+                                    <button
                                         onClick={() => setTestToDelete(null)}
                                         className="flex-1 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 bg-slate-50 rounded-lg transition-colors border border-slate-200"
                                     >
                                         Cancel
                                     </button>
-                                    <button 
+                                    <button
                                         onClick={handleDeleteTest}
                                         className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-colors shadow-sm"
                                     >
