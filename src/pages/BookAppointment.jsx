@@ -24,6 +24,7 @@ export default function BookAppointment() {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const { user } = useAuth();
+    const doctorIdParam = searchParams.get('doctorId');
     const clinicIdParam = searchParams.get('clinicId');
     
     // ── Search & Filter State ────────────────────────
@@ -45,7 +46,7 @@ export default function BookAppointment() {
     const [doctorTimetables, setDoctorTimetables] = useState([]);
     
     // ── UI Flow State ────────────────────────────────
-    const [step, setStep] = useState(1); // 1: Search, 2: Clinic/Slot, 3: Details & OTP, 4: Payment, 5: Confirmation
+    const [step, setStep] = useState(doctorIdParam ? 2 : 1); // 1: Search, 2: Clinic/Slot, 3: Details & OTP, 4: Payment, 5: Confirmation
     const [bookingLoading, setBookingLoading] = useState(false);
     const [bookingSuccess, setBookingSuccess] = useState(false);
 
@@ -364,6 +365,19 @@ export default function BookAppointment() {
             return t.day.substring(0, 3);
         }));
     }, [selectedClinic, doctorTimetables]);
+
+    const showDeepLinkLoader = doctorIdParam && !selectedDoctor && loading;
+
+    if (showDeepLinkLoader) {
+        return (
+            <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
+                <div className="flex flex-col items-center gap-3 text-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-teal-500" />
+                    <p className="text-sm font-semibold text-slate-600">Preparing appointment slots...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-slate-50 py-12 px-4 sm:px-8">
