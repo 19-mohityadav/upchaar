@@ -15,7 +15,7 @@ import {
     User, Calendar, FileText, Pill,
     MapPin, ChevronRight, Activity, Camera, Loader2,
     Hash, Clock, CalendarCheck2, Stethoscope, ChevronLeft, ChevronRight as ChevronRightIcon, Store,
-    CheckCircle2, FlaskConical
+    CheckCircle2, FlaskConical, XCircle, AlertTriangle
 } from 'lucide-react';
 import { uploadAvatar, getStorageUrl } from '@/lib/uploadImage.js';
 import { supabase } from '@/lib/supabase.js';
@@ -98,6 +98,56 @@ const AppointmentBannerCard = React.memo(function AppointmentBannerCard({ appt, 
                         ✓ {appt.status || 'Confirmed'}
                     </span>
                 </div>
+            </div>
+        </motion.div>
+    );
+});
+
+/* ── Cancelled Appointment Card ── */
+const CancelledByDoctorCard = React.memo(function CancelledByDoctorCard({ appt, index }) {
+    return (
+        <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: index * 0.06, duration: 0.35 }}
+            className="flex-shrink-0 w-72 sm:w-80 bg-gradient-to-br from-red-500 to-rose-600 rounded-2xl p-5 shadow-lg shadow-red-500/30 relative overflow-hidden"
+        >
+            <div className="absolute -top-6 -right-6 h-24 w-24 rounded-full bg-white/10" />
+            <div className="absolute -bottom-8 -left-4 h-20 w-20 rounded-full bg-white/10" />
+
+            <div className="relative z-10">
+                {/* Cancelled badge */}
+                <div className="flex items-center justify-between mb-3">
+                    <span className="inline-flex items-center gap-1.5 bg-white/20 text-white text-xs font-bold px-2.5 py-1 rounded-full backdrop-blur-sm">
+                        <XCircle size={11} /> Cancelled by Doctor
+                    </span>
+                </div>
+
+                <p className="text-white font-bold text-base leading-tight line-clamp-1 mb-1">
+                    {appt.doctor_name || 'Doctor'}
+                </p>
+                {appt.specialization && (
+                    <p className="text-white/70 text-xs mb-3">{appt.specialization}</p>
+                )}
+
+                <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-white text-xs">
+                        <CalendarCheck2 size={13} className="text-white/70" />
+                        <span className="font-medium">
+                            {appt.date && isToday(appt.date.split('T')[0])
+                                ? '📅 Today'
+                                : formatDate(appt.date ? appt.date.split('T')[0] : '')}
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-white text-xs">
+                        <Clock size={13} className="text-white/70" />
+                        <span className="font-medium">{appt.time_slot}</span>
+                    </div>
+                </div>
+
+                <p className="mt-4 text-white/80 text-[11px] leading-snug bg-white/10 rounded-xl px-3 py-2">
+                    ⚠ Your doctor has cancelled this appointment. Please rebook or contact the clinic.
+                </p>
             </div>
         </motion.div>
     );
@@ -191,6 +241,64 @@ const AppointmentsBanner = React.memo(function AppointmentsBanner({ patientId, r
             >
                 {appointments.map((appt, i) => (
                     <AppointmentBannerCard key={appt.id} appt={appt} index={i} />
+                ))}
+            </div>
+        </div>
+    );
+});
+
+/* ── Cancelled Appointments Section ── */
+const CancelledAppointmentsBanner = React.memo(function CancelledAppointmentsBanner({ patientId, refreshKey }) {
+    const [cancelled, setCancelled] = useState([]);
+    const [loading, setLoading]     = useState(true);
+    const scrollRef = useRef(null);
+
+    useEffect(() => {
+        if (!patientId) return;
+        // Show cancellations from the last 7 days so they're visible but not permanent
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        supabase
+            .from('appointments')
+            .select('*')
+            .eq('patient_id', patientId)
+            .eq('status', 'Cancelled')
+            .gte('updated_at', sevenDaysAgo)
+            .order('updated_at', { ascending: false })
+            .limit(5)
+            .then(({ data, error }) => {
+                if (!error && data) setCancelled(data);
+                setLoading(false);
+            });
+    }, [patientId, refreshKey]);
+
+    const scroll = useCallback((dir) => {
+        scrollRef.current?.scrollBy({ left: dir === 'left' ? -300 : 300, behavior: 'smooth' });
+    }, []);
+
+    if (loading || cancelled.length === 0) return null;
+
+    return (
+        <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base font-semibold text-slate-700 flex items-center gap-2">
+                    <AlertTriangle size={16} className="text-red-500" />
+                    Cancelled Appointments
+                    <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-600 text-[10px] font-bold">
+                        {cancelled.length}
+                    </span>
+                </h2>
+                <div className="flex gap-1.5">
+                    <button onClick={() => scroll('left')} className="h-8 w-8 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-500 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition">
+                        <ChevronLeft size={15} />
+                    </button>
+                    <button onClick={() => scroll('right')} className="h-8 w-8 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-500 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition">
+                        <ChevronRightIcon size={15} />
+                    </button>
+                </div>
+            </div>
+            <div ref={scrollRef} className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                {cancelled.map((appt, i) => (
+                    <CancelledByDoctorCard key={appt.id} appt={appt} index={i} />
                 ))}
             </div>
         </div>
@@ -433,8 +541,10 @@ export default function PatientDashboard() {
     const [oldAppointments, setOldAppointments] = useState([]);
     const [loadingOldAppointments, setLoadingOldAppointments] = useState(true);
     const [completionNotice, setCompletionNotice] = useState(null);
+    const [cancellationNotice, setCancellationNotice] = useState(null);
     const [upcomingRefreshKey, setUpcomingRefreshKey] = useState(0);
     const completionNoticeTimerRef = useRef(null);
+    const cancellationNoticeTimerRef = useRef(null);
 
     // Fetch the currently serving queue number for a slot
     const fetchCurrentServing = useCallback(async (appt) => {
@@ -575,9 +685,13 @@ export default function PatientDashboard() {
                                 setUpcomingRefreshKey(prev => prev + 1);
                                 void fetchOldAppointments();
                             } else if (payload.new.status === 'Cancelled') {
-                                toast.error('Appointment Cancelled', {
-                                    description: 'Your appointment has been cancelled.',
+                                toast.error('Appointment Cancelled by Doctor', {
+                                    description: `Your appointment with ${payload.new.doctor_name || 'the doctor'} has been cancelled. Please rebook.`,
+                                    duration: 8000,
                                 });
+                                setCancellationNotice(payload.new);
+                                if (cancellationNoticeTimerRef.current) clearTimeout(cancellationNoticeTimerRef.current);
+                                cancellationNoticeTimerRef.current = setTimeout(() => setCancellationNotice(null), 12000);
                                 setActiveAppointment(null);
                                 setUpcomingRefreshKey(prev => prev + 1);
                             }
@@ -594,9 +708,8 @@ export default function PatientDashboard() {
 
     useEffect(() => {
         return () => {
-            if (completionNoticeTimerRef.current) {
-                clearTimeout(completionNoticeTimerRef.current);
-            }
+            if (completionNoticeTimerRef.current) clearTimeout(completionNoticeTimerRef.current);
+            if (cancellationNoticeTimerRef.current) clearTimeout(cancellationNoticeTimerRef.current);
         };
     }, []);
 
@@ -758,10 +871,40 @@ export default function PatientDashboard() {
                                     </div>
                                 </div>
                                 <button 
-                                    onClick={() => navigate('/records')}
+                                    onClick={() => navigate(`/prescription/${completionNotice.id}`)}
                                     className="px-6 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition shadow-md shadow-emerald-200"
                                 >
                                     View Prescription
+                                </button>
+                            </div>
+                        </motion.div>
+                    ) : cancellationNotice ? (
+                        <motion.div
+                            key="cancellation-notice"
+                            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                            className="mb-8"
+                        >
+                            <div className="rounded-3xl border border-red-100 bg-red-50/60 p-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+                                <div className="flex items-center gap-4 text-center sm:text-left">
+                                    <div className="h-14 w-14 rounded-2xl bg-red-100 flex items-center justify-center text-red-500 shadow-inner">
+                                        <XCircle size={28} />
+                                    </div>
+                                    <div>
+                                        <p className="text-lg font-bold text-red-700">Appointment Cancelled by Doctor</p>
+                                        <p className="text-sm text-red-500 mt-0.5">
+                                            {cancellationNotice.doctor_name || 'Your doctor'} cancelled your appointment
+                                            {cancellationNotice.time_slot ? ` at ${cancellationNotice.time_slot}` : ''}.
+                                        </p>
+                                        <p className="text-xs text-red-400 mt-1">Please rebook or contact the clinic for assistance.</p>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={() => navigate('/doctors')}
+                                    className="px-6 py-2.5 rounded-xl bg-red-500 text-white text-sm font-bold hover:bg-red-600 transition shadow-md shadow-red-200 shrink-0"
+                                >
+                                    Rebook Appointment
                                 </button>
                             </div>
                         </motion.div>
@@ -787,6 +930,9 @@ export default function PatientDashboard() {
 
                 {/* ── Upcoming Appointments Banner ─── */}
                 <AppointmentsBanner key={`${patient.id}-${upcomingRefreshKey}`} patientId={patient.id} refreshKey={upcomingRefreshKey} />
+
+                {/* ── Cancelled Appointments (last 7 days) ─── */}
+                <CancelledAppointmentsBanner key={`cancelled-${patient.id}-${upcomingRefreshKey}`} patientId={patient.id} refreshKey={upcomingRefreshKey} />
 
                 {/* ── Diagnostic Centers Banner ───── */}
                 <MedicalClinicsBanner />
@@ -880,7 +1026,7 @@ export default function PatientDashboard() {
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <Link 
-                                            to="/records"
+                                            to={`/prescription/${apt.id}`}
                                             className="h-9 w-9 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center hover:bg-blue-200 transition"
                                             title="View Prescription"
                                         >

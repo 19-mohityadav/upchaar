@@ -1,93 +1,41 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase.js';
-import { 
-  X, CalendarDays, Clock, Users,
-  ChevronRight, Phone, Stethoscope, CheckCircle,
-  Clock3, XCircle, FileText
-} from 'lucide-react';
+import { X, CalendarDays, Clock, ChevronRight } from 'lucide-react';
 import { format, addDays, startOfToday } from 'date-fns';
 import Skeleton from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
 
-const STATUS_COLORS = {
-  Confirmed: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  Pending: 'bg-amber-50 text-amber-700 border-amber-200',
-  Completed: 'bg-blue-50 text-blue-700 border-blue-200',
-  Cancelled: 'bg-red-50 text-red-700 border-red-200',
-  Scheduled: 'bg-slate-50 text-slate-700 border-slate-200',
-};
-
-const STATUS_ICONS = {
-  Confirmed: <CheckCircle size={14} className="mt-0.5" />,
-  Pending: <Clock3 size={14} className="mt-0.5" />,
-  Completed: <CheckCircle size={14} className="mt-0.5" />,
-  Cancelled: <XCircle size={14} className="mt-0.5" />,
-  Scheduled: <CalendarDays size={14} className="mt-0.5" />,
-};
-
-const normalizeStatus = (status) => String(status || '').trim().toLowerCase();
-
-const getCanonicalStatus = (status) => {
-  const normalized = normalizeStatus(status);
-  if (normalized === 'confirmed') return 'Confirmed';
-  if (normalized === 'pending') return 'Pending';
-  if (normalized === 'completed') return 'Completed';
-  if (normalized === 'cancelled' || normalized === 'canceled') return 'Cancelled';
-  if (normalized === 'in-progress' || normalized === 'in progress') return 'In-Progress';
-  if (normalized === 'scheduled') return 'Scheduled';
-  return status;
-};
-
-export default function DoctorAppointmentsModal({ 
-  isOpen, 
-  onClose, 
-  doctor, 
+export default function DoctorAppointmentsModal({
+  isOpen,
+  onClose,
+  doctor,
   orgId,
-  orgProfileId
+  orgProfileId,
+  orgName,
 }) {
+  const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState(startOfToday());
-  const [loadingSlots, setLoadingSlots] = useState(false);
-  const [slots, setSlots] = useState([]);
-  const [selectedSlot, setSelectedSlot] = useState(null);
-  
-  const [loadingAppointments, setLoadingAppointments] = useState(false);
-  const [appointments, setAppointments] = useState([]);
-   const [expandedAptId, setExpandedAptId] = useState(null);
-   const [updatingId, setUpdatingId] = useState(null);
-   const [prescriptionText, setPrescriptionText] = useState('');
-   const [diagnosisText, setDiagnosisText] = useState('');
-   const [showPrescriptionForm, setShowPrescriptionForm] = useState(null); // ID of appointment
-   const patientsListRef = useRef(null);
+  const [loadingSlots, setLoadingSlots]  = useState(false);
+  const [slots, setSlots]                = useState([]);
 
-   // Scroll to patients list when a slot is selected on mobile
-   useEffect(() => {
-     if (selectedSlot && patientsListRef.current && window.innerWidth < 768) {
-       patientsListRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-     }
-   }, [selectedSlot]);
-
-  // Generate an array of next 14 days for date selection
+  // 14-day date strip
   const upcomingDates = useMemo(() => {
     const dates = [];
-    for (let i = 0; i < 14; i++) {
-      dates.push(addDays(startOfToday(), i));
-    }
+    for (let i = 0; i < 14; i++) dates.push(addDays(startOfToday(), i));
     return dates;
   }, []);
 
-  // Use effect to fetch slots when doctor or date changes
+  // Fetch timetable slots for selected date
   useEffect(() => {
     if (!isOpen || !doctor || !orgId) return;
 
     const fetchSlots = async () => {
       setLoadingSlots(true);
       setSlots([]);
-      setSelectedSlot(null);
-      setAppointments([]);
-
       try {
-        const dayOfWeek = format(selectedDate, 'EEEE'); // 'Monday' format
+        const dayOfWeek = format(selectedDate, 'EEEE');
         const { data, error } = await supabase
           .from('doctor_timetables')
           .select('*')
@@ -96,11 +44,10 @@ export default function DoctorAppointmentsModal({
           .eq('day', dayOfWeek)
           .eq('is_active', true)
           .order('time_from');
-
         if (error) throw error;
         setSlots(data || []);
       } catch (err) {
-        console.error("Error fetching slots:", err.message);
+        console.error('Error fetching slots:', err.message);
       } finally {
         setLoadingSlots(false);
       }
@@ -109,519 +56,153 @@ export default function DoctorAppointmentsModal({
     fetchSlots();
   }, [isOpen, doctor, orgId, selectedDate]);
 
-  const fetchAppointments = useCallback(async () => {
-    if (!selectedSlot) {
-      setAppointments([]);
-      return;
-    }
-
-    setLoadingAppointments(true);
-    try {
-      const dateStr = format(selectedDate, 'yyyy-MM-dd');
-
-      // Fetch all appointments for the day/doctor/org
-      let query = supabase
-        .from('appointments')
-        .select('*')
-        .eq('doctor_id', doctor.id)
-        .eq('date', dateStr);
-
-      // Filter by internal org ID (primary) with profile ID fallback for legacy data
-      if (orgId && orgProfileId && orgId !== orgProfileId) {
-        query = query.or(`organization_id.eq.${orgId},organization_id.eq.${orgProfileId}`);
-      } else if (orgId) {
-        query = query.eq('organization_id', orgId);
-      } else if (orgProfileId) {
-        query = query.eq('organization_id', orgProfileId);
-      }
-
-      const { data, error } = await query.order('queue_number', { ascending: true });
-
-      if (error) throw error;
-      
-      // Helper to convert time string (HH:MM or HH:MM AM/PM) to minutes
-      const toMinutes = (t) => {
-        if (!t) return 0;
-        const match = t.match(/(\d+):(\d+)\s*(AM|PM)?/i);
-        if (!match) return 0;
-        let [_, h, m, p] = match;
-        h = parseInt(h);
-        m = parseInt(m);
-        if (p) {
-          if (p.toUpperCase() === 'PM' && h < 12) h += 12;
-          if (p.toUpperCase() === 'AM' && h === 12) h = 0;
-        }
-        return h * 60 + m;
-      };
-
-      const rangeStart = toMinutes(selectedSlot.time_from);
-      const rangeEnd = toMinutes(selectedSlot.time_to);
-
-      // Filter appointments that fall within this slot's range
-      const filtered = (data || []).filter(apt => {
-        const aptTime = toMinutes(apt.time_slot);
-        return aptTime >= rangeStart && aptTime < rangeEnd;
-      });
-
-      setAppointments(filtered);
-    } catch (err) {
-      console.error("Error fetching appointments:", err.message);
-    } finally {
-      setLoadingAppointments(false);
-    }
-  }, [selectedSlot, selectedDate, doctor?.id, orgId, orgProfileId]);
-
-  const updateAppointmentStatus = async (appointmentId, newStatus) => {
-    setUpdatingId(appointmentId);
-    try {
-      const { error } = await supabase
-        .from('appointments')
-        .update({ status: newStatus })
-        .eq('id', appointmentId);
-
-      if (error) throw error;
-      
-      // Refresh list
-      fetchAppointments();
-      window.alert(`Appointment marked as ${newStatus}`);
-    } catch (err) {
-      console.error("Error updating appointment:", err.message);
-      window.alert("Failed to update status");
-    } finally {
-      setUpdatingId(null);
-    }
-  };
-
-  const handleNotifyPatient = async (appointment) => {
-    setUpdatingId(appointment.id);
-    try {
-      // Simulate notification logic
-      // In a real app, this might trigger an Edge Function or update a 'notified' flag
-      await new Promise(resolve => setTimeout(resolve, 800));
-      window.alert(`Notification sent to ${appointment.patient_name || appointment.patient}`);
-    } catch (err) {
-      console.error("Error notifying patient:", err.message);
-    } finally {
-      setUpdatingId(null);
-    }
-  };
-
-  const handleSavePrescription = async (appointmentId) => {
-    if (!diagnosisText && !prescriptionText) return;
-    
-    setUpdatingId(appointmentId);
-    try {
-      const { error } = await supabase
-        .from('appointments')
-        .update({ 
-          diagnosis: diagnosisText,
-          medicines: prescriptionText.split('\n').filter(Boolean),
-          status: 'Completed' // Automatically complete when prescription is saved?
-        })
-        .eq('id', appointmentId);
-
-      if (error) throw error;
-      
-      setShowPrescriptionForm(null);
-      setPrescriptionText('');
-      setDiagnosisText('');
-      fetchAppointments();
-      window.alert("Prescription saved and consultation completed!");
-    } catch (err) {
-      console.error("Error saving prescription:", err.message);
-      window.alert("Failed to save prescription");
-    } finally {
-      setUpdatingId(null);
-    }
-  };
-
-  // Use effect to fetch appointments when slot changes
-  useEffect(() => {
-    fetchAppointments();
-  }, [fetchAppointments]);
-
-  // Handle closing modal and resetting state
   const handleClose = () => {
     onClose();
     setTimeout(() => {
       setSelectedDate(startOfToday());
       setSlots([]);
-      setSelectedSlot(null);
-      setAppointments([]);
     }, 300);
+  };
+
+  // Navigate to dedicated full-page patient list for this slot
+  const handleSlotClick = (slot) => {
+    const p = new URLSearchParams({
+      doctorId:     doctor?.id ?? '',
+      orgId:        orgId ?? '',
+      orgProfileId: orgProfileId ?? '',
+      date:         format(selectedDate, 'yyyy-MM-dd'),
+      timeFrom:     slot.time_from,
+      timeTo:       slot.time_to,
+      orgName:      orgName || doctor?.clinic_name || doctor?.full_name || 'Clinic',
+    });
+    handleClose();
+    navigate(`/doctor/slot-patients?${p.toString()}`);
   };
 
   if (!isOpen) return null;
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 sm:px-0">
-        <motion.div 
-          initial={{ opacity: 0 }} 
-          animate={{ opacity: 1 }} 
-          exit={{ opacity: 0 }} 
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+        {/* Backdrop */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
           className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
           onClick={handleClose}
         />
-        
+
+        {/* Modal card */}
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
-          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="relative w-full max-w-4xl bg-white shadow-2xl rounded-3xl overflow-hidden flex flex-col max-h-[90vh] md:max-h-[85vh]"
-          style={{ boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}
+          transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+          className="relative w-full max-w-md bg-white shadow-2xl rounded-3xl overflow-hidden flex flex-col max-h-[90vh]"
+          style={{ boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}
         >
-          {/* Header */}
-          <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 bg-white z-10 shrink-0">
-            <div className="flex items-center gap-4">
-              <div className="h-12 w-12 rounded-2xl bg-teal-50 border border-teal-100 flex items-center justify-center overflow-hidden">
+          {/* ── Header ── */}
+          <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="h-11 w-11 rounded-2xl bg-teal-50 border border-teal-100 flex items-center justify-center overflow-hidden shrink-0">
                 {doctor?.avatar_url ? (
                   <img src={doctor.avatar_url} alt={doctor.full_name} className="h-full w-full object-cover" />
                 ) : (
-                  <span className="text-teal-600 font-bold text-xl">{doctor?.full_name?.charAt(0)}</span>
+                  <span className="text-teal-600 font-bold text-lg">{doctor?.full_name?.charAt(0)}</span>
                 )}
               </div>
               <div>
-                <h3 className="text-lg font-bold text-slate-800 line-clamp-1">{doctor?.full_name}</h3>
+                <h3 className="font-bold text-slate-800 line-clamp-1">{doctor?.full_name}</h3>
                 <p className="text-xs font-medium text-teal-600">{doctor?.specialization || 'Doctor'}</p>
               </div>
             </div>
-            
-            <button 
+            <button
               onClick={handleClose}
-              className="h-9 w-9 rounded-full bg-slate-50 hover:bg-red-50 text-slate-400 hover:text-red-500 flex items-center justify-center transition-colors"
+              className="h-9 w-9 rounded-full bg-slate-100 hover:bg-red-50 text-slate-400 hover:text-red-500 flex items-center justify-center transition-colors"
             >
-              <X size={18} />
+              <X size={17} />
             </button>
           </div>
 
-          <div className="flex flex-col md:flex-row flex-1 overflow-hidden min-h-0 bg-slate-50/50">
-            
-            {/* Sidebar Data/Slot Picker */}
-            <div className="w-full md:w-80 border-r border-slate-200 bg-white flex flex-col shrink-0">
-              
-              {/* Date Selection */}
-              <div className="p-5 border-b border-slate-100">
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
-                  Select Date
-                </h4>
-                
-                <div className="flex overflow-x-auto gap-2 pb-2 -mx-2 px-2 snap-x scrollbar-hide">
-                  {upcomingDates.map((date, idx) => {
-                    const isSelected = format(date, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd');
-                    const isToday = idx === 0;
-                    
-                    return (
-                      <button
-                        key={date.toISOString()}
-                        onClick={() => setSelectedDate(date)}
-                        className={`
-                          snap-start shrink-0 flex flex-col items-center justify-center rounded-2xl border transition-all p-3 min-w-[72px]
-                          ${isSelected 
-                            ? 'bg-teal-500 text-white border-teal-500 shadow-md shadow-teal-500/20' 
-                            : 'bg-white text-slate-600 border-slate-200 hover:border-teal-300 hover:bg-teal-50'
-                          }
-                        `}
-                      >
-                        <span className={`text-[10px] font-bold uppercase tracking-wide opacity-80 ${isSelected ? 'text-teal-50' : 'text-slate-400'}`}>
-                          {format(date, 'EEE')}
-                        </span>
-                        <span className="text-lg font-bold my-0.5">
-                          {format(date, 'dd')}
-                        </span>
-                        <span className={`text-[10px] font-medium ${isSelected ? 'text-teal-100' : 'text-slate-500'}`}>
-                          {isToday ? 'Today' : format(date, 'MMM')}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              {/* Slot Selection */}
-              <div className="p-5 flex-1 overflow-y-auto">
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center justify-between">
-                  Available Slots
-                  <span className="text-[10px] font-medium px-2 py-0.5 bg-slate-100 rounded-full text-slate-500 capitalize">
-                    {format(selectedDate, 'EEEE')}
-                  </span>
-                </h4>
-                
-                {loadingSlots ? (
-                  <div className="space-y-3">
-                    <Skeleton height={60} borderRadius={16} />
-                    <Skeleton height={60} borderRadius={16} />
-                  </div>
-                ) : slots.length === 0 ? (
-                  <div className="text-center py-10 px-4 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                    <CalendarDays className="mx-auto text-slate-300 mb-2 h-8 w-8" />
-                    <p className="text-sm font-semibold text-slate-600">No Schedule</p>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Doctor has no active schedule for this day.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {slots.map((slot) => {
-                      const isSelected = selectedSlot?.id === slot.id;
-                      return (
-                        <button
-                          key={slot.id}
-                          onClick={() => setSelectedSlot(slot)}
-                          className={`
-                            w-full flex items-center justify-between p-4 rounded-2xl border transition-all text-left group
-                            ${isSelected
-                              ? 'bg-teal-50 border-teal-500 shadow-sm'
-                              : 'bg-white border-slate-200 hover:border-teal-300 hover:shadow-sm'
-                            }
-                          `}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className={`
-                              h-10 w-10 rounded-full flex items-center justify-center transition-colors
-                              ${isSelected ? 'bg-teal-100 text-teal-600' : 'bg-slate-50 text-slate-400 group-hover:bg-teal-50 group-hover:text-teal-500'}
-                            `}>
-                              <Clock size={18} />
-                            </div>
-                            <div>
-                              <p className={`font-bold ${isSelected ? 'text-teal-800' : 'text-slate-700'}`}>
-                                {slot.time_from} - {slot.time_to}
-                              </p>
-                              {slot.notes && (
-                                <p className="text-xs text-slate-400 line-clamp-1 mt-0.5">{slot.notes}</p>
-                              )}
-                            </div>
-                          </div>
-                          
-                          <ChevronRight size={18} className={isSelected ? 'text-teal-500' : 'text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity'} />
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
+          {/* ── Date strip ── */}
+          <div className="px-5 pt-5 pb-4 border-b border-slate-100 shrink-0">
+            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Select Date</h4>
+            <div className="flex overflow-x-auto gap-2 pb-1 -mx-1 px-1 snap-x scrollbar-hide">
+              {upcomingDates.map((date, idx) => {
+                const isSelected = format(date, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd');
+                return (
+                  <button
+                    key={date.toISOString()}
+                    onClick={() => setSelectedDate(date)}
+                    className={`snap-start shrink-0 flex flex-col items-center rounded-2xl border transition-all px-3 py-2.5 min-w-[62px]
+                      ${isSelected
+                        ? 'bg-teal-500 border-teal-500 text-white shadow-md shadow-teal-400/25'
+                        : 'bg-white border-slate-200 text-slate-600 hover:border-teal-300 hover:bg-teal-50'
+                      }`}
+                  >
+                    <span className={`text-[9px] font-bold uppercase tracking-wide ${isSelected ? 'text-teal-100' : 'text-slate-400'}`}>
+                      {format(date, 'EEE')}
+                    </span>
+                    <span className="text-base font-bold leading-tight my-0.5">{format(date, 'dd')}</span>
+                    <span className={`text-[9px] font-medium ${isSelected ? 'text-teal-100' : 'text-slate-400'}`}>
+                      {idx === 0 ? 'Today' : format(date, 'MMM')}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
-
-            {/* Patients List Area */}
-            <div 
-              ref={patientsListRef}
-              className="flex-1 flex flex-col overflow-hidden min-h-[400px]"
-            >
-              
-              {!selectedSlot ? (
-                <div className="flex-1 flex flex-col items-center justify-center p-10 text-center">
-                  <div className="h-20 w-20 bg-white rounded-full flex items-center justify-center mb-4 shadow-sm border border-slate-100">
-                    <Users className="h-8 w-8 text-teal-400" />
-                  </div>
-                  <h3 className="text-lg font-bold text-slate-800">No Slot Selected</h3>
-                  <p className="text-sm text-slate-500 mt-2 max-w-xs">
-                    Select a time slot from the left pane to view patients booked for that schedule.
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <div className="px-6 py-4 bg-white border-b border-slate-200 flex items-center justify-between shrink-0">
-                    <div>
-                      <h4 className="font-bold text-slate-800 flex items-center gap-2">
-                        {loadingAppointments ? 'Loading Patients...' : `${appointments.length} Patients Booked`}
-                      </h4>
-                      <p className="text-xs text-slate-500 flex items-center gap-1.5 mt-0.5">
-                        <CalendarDays size={12} /> {format(selectedDate, 'PP')}
-                        <span className="mx-1 text-slate-300">|</span>
-                        <Clock size={12} /> {selectedSlot.time_from} - {selectedSlot.time_to}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
-                    {loadingAppointments ? (
-                      [1, 2, 3].map(i => <Skeleton key={i} height={88} borderRadius={16} />)
-                    ) : appointments.length === 0 ? (
-                      <div className="py-16 text-center">
-                        <FileText className="mx-auto h-12 w-12 text-slate-200 mb-3" />
-                        <p className="font-medium text-slate-500">No appointments</p>
-                        <p className="text-sm text-slate-400 mt-1">No patients have booked in this slot yet.</p>
-                      </div>
-                    ) : (
-                      appointments.map((apt, index) => {
-                        const isExpanded = expandedAptId === apt.id;
-                        const canonicalStatus = getCanonicalStatus(apt.status);
-                        return (
-                        <div 
-                          key={apt.id} 
-                          className={`
-                            bg-white rounded-2xl border transition-all flex flex-col overflow-hidden
-                            ${isExpanded ? 'border-teal-400 shadow-md ring-1 ring-teal-400/20' : 'border-slate-200 shadow-sm hover:border-slate-300'}
-                          `}
-                        >
-                          <div 
-                            className="p-4 flex flex-col sm:flex-row sm:items-center gap-4 cursor-pointer"
-                            onClick={() => setExpandedAptId(isExpanded ? null : apt.id)}
-                          >
-                          <div className="shrink-0 flex items-center justify-center h-16 w-16 bg-gradient-to-br from-teal-50 to-emerald-50 rounded-2xl border border-teal-100/50">
-                            <span className="text-xl font-black text-teal-700/80">
-                              #{apt.queue_number || (index + 1)}
-                            </span>
-                          </div>
-                          
-                          <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-3">
-                            <div className="flex-1">
-                              <h4 className="font-bold text-slate-800 text-lg line-clamp-1">
-                                {apt.patient_name || apt.patient}
-                              </h4>
-                              <div className="flex items-center gap-3 text-xs text-slate-500 mt-1">
-                                {apt.patient_phone && (
-                                  <span className="flex items-center gap-1">
-                                    <Phone size={12} className="text-teal-500" /> 
-                                    {apt.patient_phone}
-                                  </span>
-                                )}
-                                {apt.issue && (
-                                  <span className="flex items-center gap-1">
-                                    <Stethoscope size={12} className="text-teal-500" />
-                                    <span className="line-clamp-1">{apt.issue}</span>
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            
-                            <div className="flex items-center sm:flex-row sm:items-center justify-between gap-3 mt-2 sm:mt-0">
-                              <span
-                                className={`
-                                  inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border
-                                  ${STATUS_COLORS[canonicalStatus] || STATUS_COLORS.Scheduled}
-                                `}
-                              >
-                                {STATUS_ICONS[canonicalStatus] || STATUS_ICONS.Scheduled}
-                                {canonicalStatus}
-                              </span>
-                              
-                              <p className="text-[11px] font-medium text-slate-400 hidden sm:block">
-                                via {apt.type || 'App'}
-                              </p>
-                            </div>
-                          </div>
-
-                          <AnimatePresence>
-                            {isExpanded && (
-                              <motion.div
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                className="px-4 pb-4 pt-2 border-t border-slate-50 bg-slate-50/30"
-                              >
-                                <div className="space-y-4">
-                                  <div className="flex flex-wrap gap-2">
-                                    <button 
-                                      onClick={() => handleNotifyPatient(apt)}
-                                      disabled={updatingId === apt.id}
-                                      className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 text-xs font-bold hover:bg-amber-100 transition-colors disabled:opacity-50"
-                                    >
-                                      <Phone size={14} /> Notify Next
-                                    </button>
-
-                                    {(canonicalStatus === 'Scheduled' || canonicalStatus === 'Confirmed' || canonicalStatus === 'Pending') && (
-                                      <button 
-                                        onClick={() => updateAppointmentStatus(apt.id, 'In-Progress')}
-                                        disabled={updatingId === apt.id}
-                                        className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-teal-50 text-teal-700 border border-teal-200 text-xs font-bold hover:bg-teal-100 transition-colors disabled:opacity-50"
-                                      >
-                                        <Clock size={14} /> Start
-                                      </button>
-                                    )}
-                                    
-                                    <button 
-                                      onClick={() => {
-                                        setShowPrescriptionForm(apt.id);
-                                        setDiagnosisText(apt.diagnosis || '');
-                                        setPrescriptionText((apt.medicines || []).join('\n'));
-                                      }}
-                                      className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold hover:bg-blue-100 transition-colors"
-                                    >
-                                      <FileText size={14} /> Write Prescription
-                                    </button>
-
-                                    {canonicalStatus !== 'Completed' && (
-                                      <button 
-                                        onClick={() => updateAppointmentStatus(apt.id, 'Completed')}
-                                        disabled={updatingId === apt.id}
-                                        className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold hover:bg-emerald-100 transition-colors disabled:opacity-50"
-                                      >
-                                        <CheckCircle size={14} /> Complete
-                                      </button>
-                                    )}
-
-                                    {canonicalStatus !== 'Cancelled' && (
-                                      <button 
-                                        onClick={() => {
-                                          if(window.confirm('Cancel this appointment?')) updateAppointmentStatus(apt.id, 'Cancelled');
-                                        }}
-                                        disabled={updatingId === apt.id}
-                                        className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-red-50 text-red-700 border border-red-200 text-xs font-bold hover:bg-red-100 transition-colors disabled:opacity-50"
-                                      >
-                                        <XCircle size={14} /> Cancel
-                                      </button>
-                                    )}
-                                  </div>
-
-                                  {showPrescriptionForm === apt.id && (
-                                    <motion.div 
-                                      initial={{ opacity: 0, y: 10 }}
-                                      animate={{ opacity: 1, y: 0 }}
-                                      className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3"
-                                    >
-                                      <div>
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Diagnosis</label>
-                                        <input 
-                                          value={diagnosisText}
-                                          onChange={(e) => setDiagnosisText(e.target.value)}
-                                          placeholder="Enter diagnosis..."
-                                          className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20"
-                                        />
-                                      </div>
-                                      <div>
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Medicines (one per line)</label>
-                                        <textarea 
-                                          value={prescriptionText}
-                                          onChange={(e) => setPrescriptionText(e.target.value)}
-                                          placeholder="Paracetamol 500mg - 1-0-1&#10;Amoxicillin 250mg - after food"
-                                          rows={3}
-                                          className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20"
-                                        />
-                                      </div>
-                                      <div className="flex justify-end gap-2">
-                                        <button 
-                                          onClick={() => setShowPrescriptionForm(null)}
-                                          className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-700"
-                                        >
-                                          Cancel
-                                        </button>
-                                        <button 
-                                          onClick={() => handleSavePrescription(apt.id)}
-                                          disabled={updatingId === apt.id}
-                                          className="px-4 py-1.5 rounded-xl bg-teal-600 text-white text-xs font-bold hover:bg-teal-700 transition-colors disabled:opacity-50"
-                                        >
-                                          {updatingId === apt.id ? 'Saving...' : 'Save & Complete'}
-                                        </button>
-                                      </div>
-                                    </motion.div>
-                                  )}
-                                </div>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                          </div>
-                        </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-            
           </div>
+
+          {/* ── Slot list ── */}
+          <div className="p-5 flex-1 overflow-y-auto">
+            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center justify-between">
+              Time Slots
+              <span className="font-medium px-2 py-0.5 bg-slate-100 rounded-full text-slate-500 normal-case text-[10px]">
+                Tap a slot to see patients
+              </span>
+            </h4>
+
+            {loadingSlots ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map(i => <Skeleton key={i} height={64} borderRadius={16} />)}
+              </div>
+            ) : slots.length === 0 ? (
+              <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                <CalendarDays className="mx-auto text-slate-300 mb-2 h-8 w-8" />
+                <p className="text-sm font-semibold text-slate-600">No Schedule</p>
+                <p className="text-xs text-slate-400 mt-1">No active slots for {format(selectedDate, 'EEEE')}.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {slots.map((slot) => (
+                  <button
+                    key={slot.id}
+                    onClick={() => handleSlotClick(slot)}
+                    className="w-full flex items-center justify-between p-4 rounded-2xl border border-slate-200 bg-white hover:border-teal-400 hover:bg-teal-50 active:scale-[0.98] transition-all text-left group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-slate-50 text-slate-400 group-hover:bg-teal-100 group-hover:text-teal-600 flex items-center justify-center transition-colors shrink-0">
+                        <Clock size={17} />
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-700 group-hover:text-teal-800 text-sm transition-colors">
+                          {slot.time_from} – {slot.time_to}
+                        </p>
+                        {slot.notes && (
+                          <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">{slot.notes}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 text-[11px] font-bold text-teal-500 opacity-0 group-hover:opacity-100 transition-opacity pr-1">
+                      View Patients <ChevronRight size={14} />
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
         </motion.div>
       </div>
     </AnimatePresence>

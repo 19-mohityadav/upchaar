@@ -423,30 +423,13 @@ export default function DoctorDashboard() {
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    {apt.status === 'Scheduled' || apt.status === 'Confirmed' || apt.status === 'Pending' ? (
-                                        <>
-                                            <button
-                                                onClick={() => handleStart(apt.id)}
-                                                disabled={updatingId === apt.id}
-                                                className="px-4 py-2 rounded-xl bg-teal-600 text-white text-xs font-bold hover:bg-teal-700 transition-colors disabled:opacity-50"
-                                            >
-                                                {updatingId === apt.id ? 'Starting...' : 'Start'}
-                                            </button>
-                                            <button
-                                                onClick={() => handleCancel(apt.id)}
-                                                disabled={updatingId === apt.id}
-                                                className="px-4 py-2 rounded-xl bg-white border border-red-200 text-red-600 text-xs font-bold hover:bg-red-50 transition-colors disabled:opacity-50"
-                                            >
-                                                Cancel
-                                            </button>
-                                        </>
-                                    ) : apt.status === 'In-Progress' ? (
+                                    {(apt.status === 'Scheduled' || apt.status === 'Confirmed' || apt.status === 'Pending') ? (
                                         <button
-                                            onClick={() => handleEnd(apt.id)}
+                                            onClick={() => handleStart(apt.id)}
                                             disabled={updatingId === apt.id}
-                                            className="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition-colors disabled:opacity-50"
+                                            className="px-4 py-2 rounded-xl bg-teal-600 text-white text-xs font-bold hover:bg-teal-700 transition-colors disabled:opacity-50"
                                         >
-                                            {updatingId === apt.id ? 'Completing...' : 'Complete'}
+                                            {updatingId === apt.id ? 'Starting...' : 'Start'}
                                         </button>
                                     ) : (
                                         <span className="text-xs font-medium text-slate-400 px-3 py-1 bg-slate-100 rounded-full">
@@ -467,6 +450,7 @@ export default function DoctorDashboard() {
                 doctor={doctorRecord}
                 orgId={selectedOrgForAppointments?.id}
                 orgProfileId={selectedOrgForAppointments?.profile_id}
+                orgName={selectedOrgForAppointments?.displayName}
             />
         </div>
     );

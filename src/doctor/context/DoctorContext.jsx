@@ -40,6 +40,9 @@ const mapDoctorRecord = (record) => {
         clinicAddress: record.clinic_address || '',
         experience: record.experience || 0,
         fee: record.consultation_fee ?? 500,
+        pendingFee: record.pending_fee ?? null,
+        pendingFeeAt: record.pending_fee_at ?? null,
+        pendingFeeEffective: record.pending_fee_effective ?? null,
         degree: record.degree || 'MBBS',
         bio: record.bio || '',
         gender: record.gender || '',
@@ -345,49 +348,44 @@ export function DoctorProvider({ children }) {
             throw new Error('No doctor session found.');
         }
 
+        const currentFee = doctorRecord.consultation_fee ?? 500;
+        const newFee     = updates.fee != null ? Number(updates.fee) : currentFee;
+        const feeChanged = newFee !== currentFee;
+
+        // ── Non-fee fields update immediately ──────────────────────────────
         const doctorUpdates = {
-            full_name: updates.fullName,
-            phone: updates.phone,
-            city: updates.city,
-            specialization: updates.specialization,
-            experience: updates.experience,
-            consultation_fee: updates.fee,
-            degree: updates.degree,
-            clinic_name: updates.clinicName,
-            bio: updates.bio,
-            gender: updates.gender,
-            hours_from: updates.hoursFrom,
-            hours_to: updates.hoursTo,
-            available_days: updates.availableDays,
-            languages: updates.languages,
-            avatar_color: updates.avatarColor,
-            avatar_url: updates.avatarUrl,
-            updated_at: new Date().toISOString(),
+            full_name:        updates.fullName,
+            phone:            updates.phone,
+            city:             updates.city,
+            specialization:   updates.specialization,
+            experience:       updates.experience,
+            degree:           updates.degree,
+            clinic_name:      updates.clinicName,
+            bio:              updates.bio,
+            gender:           updates.gender,
+            hours_from:       updates.hoursFrom,
+            hours_to:         updates.hoursTo,
+            available_days:   updates.availableDays,
+            languages:        updates.languages,
+            avatar_color:     updates.avatarColor,
+            avatar_url:       updates.avatarUrl,
+            updated_at:       new Date().toISOString(),
         };
 
-        Object.keys(doctorUpdates).forEach((key) => doctorUpdates[key] === undefined && delete doctorUpdates[key]);
+        // ── Fee: queue as pending with 24hr delay ──────────────────────────
+        if (feeChanged) {
+            const effectiveAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+            doctorUpdates.pending_fee           = newFee;
+            doctorUpdates.pending_fee_at        = new Date().toISOString();
+            doctorUpdates.pending_fee_effective = effectiveAt;
+            // Keep current consultation_fee unchanged — it will update after 24hrs
+            delete doctorUpdates.consultation_fee;
+        }
 
-        const authMetaUpdates = {
-            fullName: updates.fullName,
-            phone: updates.phone,
-            city: updates.city,
-            specialization: updates.specialization,
-            clinicName: updates.clinicName,
-            availableDays: updates.availableDays,
-            hoursFrom: updates.hoursFrom,
-            hoursTo: updates.hoursTo,
-            fee: updates.fee,
-            degree: updates.degree,
-            bio: updates.bio,
-            gender: updates.gender,
-            languages: updates.languages,
-            avatarColor: updates.avatarColor,
-            avatarUrl: updates.avatarUrl,
-        };
+        Object.keys(doctorUpdates).forEach(
+            (key) => doctorUpdates[key] === undefined && delete doctorUpdates[key]
+        );
 
-        Object.keys(authMetaUpdates).forEach((key) => authMetaUpdates[key] === undefined && delete authMetaUpdates[key]);
-
-        // Run DB update first, then Auth metadata to avoid race conditions with auth listeners
         const { data: doctorData, error: doctorError } = await supabase
             .from('doctors')
             .update(doctorUpdates)
@@ -397,13 +395,50 @@ export function DoctorProvider({ children }) {
 
         if (doctorError) throw new Error(doctorError.message);
 
-        const { data: authData, error: authError } = await supabase.auth.updateUser({ data: authMetaUpdates });
+        // ── Auth metadata (fee reflected immediately in context only) ──────
+        const authMetaUpdates = {
+            fullName:      updates.fullName,
+            phone:         updates.phone,
+            city:          updates.city,
+            specialization:updates.specialization,
+            clinicName:    updates.clinicName,
+            availableDays: updates.availableDays,
+            hoursFrom:     updates.hoursFrom,
+            hoursTo:       updates.hoursTo,
+            fee:           currentFee, // keep old fee in auth meta until effective
+            degree:        updates.degree,
+            bio:           updates.bio,
+            gender:        updates.gender,
+            languages:     updates.languages,
+            avatarColor:   updates.avatarColor,
+            avatarUrl:     updates.avatarUrl,
+        };
+        Object.keys(authMetaUpdates).forEach(
+            (key) => authMetaUpdates[key] === undefined && delete authMetaUpdates[key]
+        );
+
+        const { data: authData, error: authError } = await supabase.auth.updateUser({
+            data: authMetaUpdates,
+        });
         if (authError) throw new Error(authError.message);
+
+        // ── Notify admin of fee change request ────────────────────────────
+        if (feeChanged) {
+            await supabase.from('admin_notifications').insert({
+                type:       'fee_change_request',
+                from_id:    doctorRecord.id,
+                from_name:  updates.fullName || doctorRecord.full_name,
+                from_email: doctorRecord.email,
+                subject:    'Doctor Fee Update Request',
+                message:    `Dr. ${updates.fullName || doctorRecord.full_name} has requested to update their consultation fee from ₹${currentFee} to ₹${newFee}. This will take effect in 24 hours.`,
+                is_read:    false,
+            });
+        }
 
         setDoctorRecord(doctorData);
         const nextDoctor = buildDoctorState(authData.user, doctorData);
         setDoctor(nextDoctor);
-        return nextDoctor;
+        return { doctor: nextDoctor, feeChangePending: feeChanged, pendingFee: feeChanged ? newFee : null };
     }, [doctor?.id, doctorRecord?.id]);
 
     const rotateSecretKey = useCallback(async () => {

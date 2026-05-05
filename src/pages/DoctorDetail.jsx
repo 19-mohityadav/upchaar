@@ -238,41 +238,79 @@ export default function DoctorDetailPage() {
     const [booking, setBooking] = useState(false);
 
     useEffect(() => {
-        supabase
-            .from('doctors')
-            .select('*')
-            .eq('id', id)
-            .eq('status', 'Approved')
-            .single()
-            .then(({ data, error }) => {
-                if (!error && data) {
-                    setDoctor({
-                        id: data.id,
-                        name: data.full_name,
-                        specialty: data.specialization,
-                        subSpecialty: data.sub_specialization,
-                        location: [data.clinic_name, data.clinic_address, data.city, data.state].filter(Boolean).join(', '),
-                        avatar: data.avatar_url || null,
-                        experience: data.experience || 0,
-                        rating: Number(data.rating) || 4.5,
-                        reviews: data.total_appointments || 0,
-                        verified: true,
-                        fees: data.consultation_fee || 0,
-                        clinicName: data.clinic_name || '',
-                        clinicNames: parseClinicNames(data.clinic_name),
-                        languages: data.languages || [],
-                        availableDays: data.available_days || [],
-                        hoursFrom: data.hours_from || '09:00',
-                        hoursTo: data.hours_to || '17:00',
-                        licenseNo: data.license_no,
-                        nmcNo: data.nmc_no,
-                        degree: data.degree,
-                        institution: data.institution,
-                        city: data.city,
-                    });
+        const fetchDoctorDetails = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('doctors')
+                    .select('*')
+                    .eq('id', id)
+                    .eq('status', 'Approved')
+                    .single();
+
+                if (error || !data) {
+                    setLoading(false);
+                    return;
                 }
+
+                // Fetch linked clinics via staff_links
+                const { data: staffData, error: staffError } = await supabase
+                    .from('staff_links')
+                    .select('organization_id, organization_type')
+                    .eq('doctor_id', id);
+
+                let fetchedClinicNames = [];
+                if (!staffError && staffData && staffData.length > 0) {
+                    const orgPromises = staffData.map(async (link) => {
+                        const table = link.organization_type === 'medical' ? 'medicals' : 'clinics';
+                        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(link.organization_id));
+                        const { data: orgData } = await supabase
+                            .from(table)
+                            .select('name')
+                            .eq(isUUID ? 'profile_id' : 'id', link.organization_id)
+                            .maybeSingle();
+                        
+                        return orgData?.name || null;
+                    });
+                    const list = (await Promise.all(orgPromises)).filter(Boolean);
+                    fetchedClinicNames = [...new Set(list)];
+                }
+
+                if (fetchedClinicNames.length === 0) {
+                    fetchedClinicNames = parseClinicNames(data.clinic_name);
+                }
+
+                setDoctor({
+                    id: data.id,
+                    name: data.full_name,
+                    specialty: data.specialization,
+                    subSpecialty: data.sub_specialization,
+                    location: [data.clinic_name, data.clinic_address, data.city, data.state].filter(Boolean).join(', '),
+                    avatar: data.avatar_url || null,
+                    experience: data.experience || 0,
+                    rating: Number(data.rating) || 4.5,
+                    reviews: data.total_appointments || 0,
+                    verified: true,
+                    fees: data.consultation_fee || 0,
+                    clinicName: data.clinic_name || '',
+                    clinicNames: fetchedClinicNames,
+                    languages: data.languages || [],
+                    availableDays: data.available_days || [],
+                    hoursFrom: data.hours_from || '09:00',
+                    hoursTo: data.hours_to || '17:00',
+                    licenseNo: data.license_no,
+                    nmcNo: data.nmc_no,
+                    degree: data.degree,
+                    institution: data.institution,
+                    city: data.city,
+                });
+            } catch (err) {
+                console.error(err);
+            } finally {
                 setLoading(false);
-            });
+            }
+        };
+
+        fetchDoctorDetails();
     }, [id]);
 
     useEffect(() => {
