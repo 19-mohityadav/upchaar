@@ -207,13 +207,33 @@ export default function BookAppointmentQueued() {
         if (!staffError && staffData && staffData.length > 0) {
             const orgPromises = staffData.map(async (link) => {
                 const table = link.organization_type === 'medical' ? 'medicals' : 'clinics';
-                const { data, error } = await supabase
+                const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(link.organization_id));
+                let { data, error } = await supabase
                     .from(table)
                     .select('*')
-                    .eq('profile_id', link.organization_id)
+                    .eq(isUUID ? 'profile_id' : 'id', link.organization_id)
                     .maybeSingle();
                 
                 if (error) console.error(`Error fetching from ${table}:`, error);
+                
+                // Fallback to profiles table if not found in medicals/clinics
+                if (!data && isUUID) {
+                    const { data: profileData } = await supabase
+                        .from('profiles')
+                        .select('id, full_name, name, city, state, address, phone')
+                        .eq('id', link.organization_id)
+                        .maybeSingle();
+                        
+                    if (profileData) {
+                        data = {
+                            id: profileData.id,
+                            name: profileData.full_name || profileData.name || 'Unnamed Facility',
+                            address: profileData.address || [profileData.city, profileData.state].filter(Boolean).join(', ') || '',
+                            phone: profileData.phone || ''
+                        };
+                    }
+                }
+                
                 return data ? { ...data, organization_type: link.organization_type } : null;
             });
             const list = (await Promise.all(orgPromises)).filter(Boolean);
