@@ -2,7 +2,12 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase.js';
-import { X, CalendarDays, Clock, ChevronRight } from 'lucide-react';
+import {
+  X, CalendarDays, Clock, Users,
+  ChevronRight, Phone, Stethoscope, CheckCircle,
+  Clock3, XCircle, FileText, Bell, Check, X as CloseIcon,
+  Building2
+} from 'lucide-react';
 import { format, addDays, startOfToday } from 'date-fns';
 import Skeleton from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
@@ -13,7 +18,7 @@ export default function DoctorAppointmentsModal({
   doctor,
   orgId,
   orgProfileId,
-  orgName,
+  orgName
 }) {
   const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState(startOfToday());
@@ -113,8 +118,11 @@ export default function DoctorAppointmentsModal({
                 )}
               </div>
               <div>
-                <h3 className="font-bold text-slate-800 line-clamp-1">{doctor?.full_name}</h3>
-                <p className="text-xs font-medium text-teal-600">{doctor?.specialization || 'Doctor'}</p>
+                <h3 className="text-lg font-bold text-slate-800 line-clamp-1">{doctor?.full_name}</h3>
+                <p className="text-xs font-medium text-teal-600 flex items-center gap-1">
+                  <Building2 size={12} />
+                  {orgName || 'Clinic'}
+                </p>
               </div>
             </div>
             <button

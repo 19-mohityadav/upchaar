@@ -225,28 +225,53 @@ export default function DoctorDashboard() {
 
                 if (staffError) throw staffError;
 
-                const orgPromises = (staffLinks || []).map(async (link) => {
-                    const table = link.organization_type === 'medical' ? 'medicals' : 'clinics';
-                    const { data } = await supabase
-                        .from(table)
-                        .select('id, name, address, city, state')
-                        .eq('profile_id', link.organization_id)
-                        .maybeSingle();
-                    
-                    if (!data) return null;
+                if (staffLinks && staffLinks.length > 0) {
+                    const fetchedOrgs = [];
+                    for (const link of staffLinks) {
+                        const table = link.organization_type === 'medical' ? 'medicals' : 'clinics';
+                        let { data: orgData } = await supabase
+                            .from(table)
+                            .select('*')
+                            .eq('profile_id', link.organization_id)
+                            .maybeSingle();
 
-                    return {
-                        ...data,
-                        id: data.id, // Entry ID for timetables
-                        profile_id: link.organization_id, // Profile ID for appointments
-                        type: link.organization_type,
-                        displayName: data.name
-                    };
-                });
+                        if (!orgData) {
+                            const { data: profile } = await supabase
+                                .from('profiles')
+                                .select('id, full_name, profile_type')
+                                .eq('id', link.organization_id)
+                                .maybeSingle();
+                            if (profile) {
+                                orgData = {
+                                    id: profile.id,
+                                    profile_id: profile.id,
+                                    name: profile.full_name,
+                                    type: profile.profile_type
+                                };
+                            }
+                        }
 
-                const orgs = (await Promise.all(orgPromises)).filter(Boolean);
-                setLinkedOrgs(orgs);
+                        if (orgData) {
+                            fetchedOrgs.push({
+                                ...orgData,
+                                displayName: orgData.name || 'Unnamed Organization',
+                                type: orgData.type || link.organization_type
+                            });
+                        }
+                    }
 
+                    // De-duplicate by profile_id
+                    const uniqueOrgs = fetchedOrgs.reduce((acc, curr) => {
+                        if (!acc.find(o => o.profile_id === curr.profile_id)) {
+                            acc.push(curr);
+                        }
+                        return acc;
+                    }, []);
+
+                    setLinkedOrgs(uniqueOrgs);
+                } else {
+                    setLinkedOrgs([]);
+                }
             } catch (error) {
                 console.error('Failed to load dashboard data:', error.message);
                 setAppointments([]);
@@ -281,6 +306,7 @@ export default function DoctorDashboard() {
 
             return {
                 ...org,
+                displayName: org.name || 'Unnamed Organization',
                 totalPatients: relatedAppointments.length,
                 todayPatients: relatedAppointments.filter(apt => String(apt.date || '').slice(0, 10) === today).length,
                 upcoming: relatedAppointments.find(apt => String(apt.date || '').slice(0, 10) >= today) || null,
@@ -288,6 +314,11 @@ export default function DoctorDashboard() {
             };
         });
     }, [appointments, linkedOrgs, today]);
+
+    const getClinicName = (apt) => {
+        const org = linkedOrgs.find(o => o.id === apt.organization_id || o.profile_id === apt.organization_id);
+        return org ? org.name : (apt.clinic_name || 'Main Clinic');
+    };
 
     return (
         <div className="space-y-6 max-w-7xl mx-auto pb-8">
@@ -431,6 +462,10 @@ export default function DoctorDashboard() {
                                     <div>
                                         <p className="font-semibold text-slate-800">{apt.patient_name || apt.patient || 'Patient'}</p>
                                         <p className="text-xs text-slate-500">{apt.time_slot} · {apt.status}</p>
+                                        <div className="flex items-center gap-1 mt-1">
+                                            <Building2 size={12} className="text-teal-500" />
+                                            <p className="text-[10px] font-bold text-teal-600 uppercase tracking-tight">{getClinicName(apt)}</p>
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -461,7 +496,7 @@ export default function DoctorDashboard() {
                 doctor={doctorRecord}
                 orgId={selectedOrgForAppointments?.id}
                 orgProfileId={selectedOrgForAppointments?.profile_id}
-                orgName={selectedOrgForAppointments?.displayName}
+                orgName={selectedOrgForAppointments?.name}
             />
         </div>
     );
