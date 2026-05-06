@@ -118,7 +118,7 @@ export default function DiagnosticDashboard() {
                                     exit={{ opacity: 0, width: 0 }}
                                     className="whitespace-nowrap"
                                 >
-                                    <h1 className="text-lg font-bold text-slate-800">Upchaar Health</h1>
+                                    <h1 className="text-lg font-bold text-slate-800">Upchar Health</h1>
                                     <p className="text-xs text-slate-500">Diagnostic Centre</p>
                                 </motion.div>
                             )}

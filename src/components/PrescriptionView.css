@@ -408,12 +408,32 @@
 
 /* Print styles */
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+  body * {
+    visibility: hidden;
+  }
+  .prescription-wrapper, .prescription-wrapper * {
+    visibility: visible;
+  }
   .prescription-wrapper {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 210mm;
+    height: 297mm;
     padding: 0;
+    margin: 0;
+    overflow: hidden;
   }
   .prescription-page {
     box-shadow: none;
-    width: 100%;
+    width: 210mm;
+    height: 297mm;
     margin: 0;
+    padding: 0;
+    overflow: hidden;
   }
 }

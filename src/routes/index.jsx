@@ -1,7 +1,7 @@
 /**
  * routes/index.jsx
  * ─────────────────────────────────────────────────
- * Master routes file for Upchaar Health.
+ * Master routes file for Upchar Health.
  *
  * React Router v6 requires that only <Route> elements
  * (or React.Fragments containing Routes) appear as
@@ -161,7 +161,7 @@ export function AppRoutes() {
             <Route path="/hospitals" element={<AppLayout><HospitalsPage /></AppLayout>} />
             <Route path="/medicals" element={<AppLayout><MedicalsPage /></AppLayout>} />
             <Route path="/records" element={<AppLayout><RecordsPage /></AppLayout>} />
-            <Route path="/prescription/:id" element={<AppLayout><PrescriptionPage /></AppLayout>} />
+            <Route path="/prescription/:id" element={<PrescriptionPage />} />
             <Route path="/emergency" element={<EmergencyPage />} />
 
             {/* Blog: public, no nav/sidebar */}
