@@ -207,11 +207,30 @@ export default function DoctorSlotPatients() {
     const updateStatus = async (aptId, newStatus) => {
         setUpdatingId(aptId);
         try {
+            const apt = appointments.find(a => a.id === aptId);
+            const isCurrentlyCompleted = apt?.status === 'Completed';
+            
             const { error } = await supabase
                 .from('appointments')
                 .update({ status: newStatus })
                 .eq('id', aptId);
             if (error) throw error;
+
+            // Handle Revenue Updates
+            if (newStatus === 'Completed' && !isCurrentlyCompleted && apt?.fee) {
+                const { data: docData } = await supabase.from('doctors').select('total_revenue').eq('id', doctorId).single();
+                if (docData) {
+                    const newRev = (docData.total_revenue || 0) + Number(apt.fee);
+                    await supabase.from('doctors').update({ total_revenue: newRev }).eq('id', doctorId);
+                }
+            } else if (newStatus === 'Cancelled' && isCurrentlyCompleted && apt?.fee) {
+                // If they undo a completion within the 2 min window, revert the revenue
+                const { data: docData } = await supabase.from('doctors').select('total_revenue').eq('id', doctorId).single();
+                if (docData) {
+                    const newRev = Math.max(0, (docData.total_revenue || 0) - Number(apt.fee));
+                    await supabase.from('doctors').update({ total_revenue: newRev }).eq('id', doctorId);
+                }
+            }
 
             // Update local status immediately
             setAppointments(prev =>
@@ -272,6 +291,9 @@ export default function DoctorSlotPatients() {
         if (!diagnosisText && !prescriptionText) return;
         setSavingRx(true);
         try {
+            const apt = appointments.find(a => a.id === prescriptionAptId);
+            const isCurrentlyCompleted = apt?.status === 'Completed';
+
             const { error } = await supabase
                 .from('appointments')
                 .update({
@@ -281,6 +303,15 @@ export default function DoctorSlotPatients() {
                 })
                 .eq('id', prescriptionAptId);
             if (error) throw error;
+
+            if (!isCurrentlyCompleted && apt?.fee) {
+                const { data: docData } = await supabase.from('doctors').select('total_revenue').eq('id', doctorId).single();
+                if (docData) {
+                    const newRev = (docData.total_revenue || 0) + Number(apt.fee);
+                    await supabase.from('doctors').update({ total_revenue: newRev }).eq('id', doctorId);
+                }
+            }
+
             setPrescriptionAptId(null);
             setDiagnosisText('');
             setPrescriptionText('');

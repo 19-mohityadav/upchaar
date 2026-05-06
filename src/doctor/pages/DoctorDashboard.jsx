@@ -131,6 +131,9 @@ export default function DoctorDashboard() {
     const handleEnd = async (appointmentId) => {
         setUpdatingId(appointmentId);
         try {
+            const apt = appointments.find(a => a.id === appointmentId);
+            const isCurrentlyCompleted = apt?.status === 'Completed';
+            
             const updateData = { status: 'Completed', ended_at: new Date().toISOString() };
 
             let { error } = await supabase
@@ -148,8 +151,16 @@ export default function DoctorDashboard() {
 
             if (error) throw error;
 
-            setAppointments(prev => prev.map(apt => (
-                apt.id === appointmentId ? { ...apt, ...updateData } : apt
+            if (!isCurrentlyCompleted && apt?.fee) {
+                const { data: docData } = await supabase.from('doctors').select('total_revenue').eq('id', doctorRecord.id).single();
+                if (docData) {
+                    const newRev = (docData.total_revenue || 0) + Number(apt.fee);
+                    await supabase.from('doctors').update({ total_revenue: newRev }).eq('id', doctorRecord.id);
+                }
+            }
+
+            setAppointments(prev => prev.map(a => (
+                a.id === appointmentId ? { ...a, ...updateData } : a
             )));
             window.alert('Consultation ended successfully!');
         } catch (error) {

@@ -882,7 +882,9 @@ export default function MedicalDashboard() {
                   visits: 0,
                   lastVisit: apt.date,
                   totalSpent: 0,
-                  recentDoctor: apt.doctor_name
+                  recentDoctor: apt.doctor_name,
+                  latestApptId: apt.id,
+                  latestStatus: apt.status
                 };
               }
               patientsMap[pid].visits += 1;
@@ -890,6 +892,8 @@ export default function MedicalDashboard() {
               if (new Date(apt.date) > new Date(patientsMap[pid].lastVisit)) {
                 patientsMap[pid].lastVisit = apt.date;
                 patientsMap[pid].recentDoctor = apt.doctor_name;
+                patientsMap[pid].latestApptId = apt.id;
+                patientsMap[pid].latestStatus = apt.status;
               }
             });
             const patientsList = Object.values(patientsMap).sort((a, b) => new Date(b.lastVisit) - new Date(a.lastVisit));
@@ -918,6 +922,7 @@ export default function MedicalDashboard() {
                           <th className="py-4 px-6 font-semibold text-gray-600">Total Visits</th>
                           <th className="py-4 px-6 font-semibold text-gray-600">Last Encounter</th>
                           <th className="py-4 px-6 font-semibold text-gray-600 text-right">Revenue</th>
+                          <th className="py-4 px-6 font-semibold text-gray-600 text-center">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50">
@@ -950,10 +955,22 @@ export default function MedicalDashboard() {
                             <td className="py-4 px-6 text-right">
                               <span className="text-sm font-bold text-gray-900">₹{p.totalSpent.toLocaleString()}</span>
                             </td>
+                            <td className="py-4 px-6 text-center">
+                              {p.latestStatus === 'Completed' && p.latestApptId ? (
+                                <button
+                                  onClick={() => navigate(`/prescription/${p.latestApptId}`)}
+                                  className="px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold text-xs rounded-lg transition-colors"
+                                >
+                                  View Latest Rx
+                                </button>
+                              ) : (
+                                <span className="text-xs text-gray-400">No Rx</span>
+                              )}
+                            </td>
                           </tr>
                         )) : (
                           <tr>
-                            <td colSpan="4" className="py-12 text-center text-gray-500 text-sm">
+                            <td colSpan="5" className="py-12 text-center text-gray-500 text-sm">
                               <div className="flex flex-col items-center gap-2">
                                 <span className="material-symbols-outlined text-4xl text-gray-300">group_off</span>
                                 <p>No patients have visited yet.</p>
