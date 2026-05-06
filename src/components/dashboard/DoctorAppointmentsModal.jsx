@@ -4,7 +4,8 @@ import { supabase } from '@/lib/supabase.js';
 import {
   X, CalendarDays, Clock, Users,
   ChevronRight, Phone, Stethoscope, CheckCircle,
-  Clock3, XCircle, FileText, Bell, Check, X as CloseIcon
+  Clock3, XCircle, FileText, Bell, Check, X as CloseIcon,
+  Building2
 } from 'lucide-react';
 import { format, addDays, startOfToday } from 'date-fns';
 import Skeleton from 'react-loading-skeleton';
@@ -44,7 +45,8 @@ export default function DoctorAppointmentsModal({
   onClose,
   doctor,
   orgId,
-  orgProfileId
+  orgProfileId,
+  orgName
 }) {
   const [selectedDate, setSelectedDate] = useState(startOfToday());
   const [loadingSlots, setLoadingSlots] = useState(false);
@@ -288,7 +290,10 @@ export default function DoctorAppointmentsModal({
               </div>
               <div>
                 <h3 className="text-lg font-bold text-slate-800 line-clamp-1">{doctor?.full_name}</h3>
-                <p className="text-xs font-medium text-teal-600">{doctor?.specialization || 'Doctor'}</p>
+                <p className="text-xs font-medium text-teal-600 flex items-center gap-1">
+                  <Building2 size={12} />
+                  {orgName || 'Clinic'}
+                </p>
               </div>
             </div>
 
