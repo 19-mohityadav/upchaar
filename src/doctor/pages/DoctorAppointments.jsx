@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Clock, CheckCircle, Search, Loader2 } from 'lucide-react';
+import { Clock, CheckCircle, Search, Loader2, Building2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase.js';
 import { useDoctor } from '../context/DoctorContext.jsx';
@@ -20,6 +20,7 @@ export default function DoctorAppointments() {
     const [search, setSearch] = useState('');
     const [appointments, setAppointments] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [linkedOrgs, setLinkedOrgs] = useState([]);
 
     useEffect(() => {
         if (!doctorRecord?.id) {
@@ -28,14 +29,67 @@ export default function DoctorAppointments() {
             return;
         }
 
-        const fetchAppointments = async () => {
+        const fetchData = async () => {
             setLoading(true);
             try {
+                // Fetch linked clinics/medicals first
+                const { data: staffLinks } = await supabase
+                    .from('staff_links')
+                    .select('organization_id, organization_type')
+                    .eq('doctor_id', doctorRecord.id);
+
+                if (staffLinks && staffLinks.length > 0) {
+                    const fetchedOrgs = [];
+                    for (const link of staffLinks) {
+                        const table = link.organization_type === 'medical' ? 'medicals' : 'clinics';
+                        let { data: orgData } = await supabase
+                            .from(table)
+                            .select('id, name, profile_id')
+                            .eq('profile_id', link.organization_id)
+                            .maybeSingle();
+
+                        if (!orgData) {
+                            const { data: profile } = await supabase
+                                .from('profiles')
+                                .select('id, full_name, profile_type')
+                                .eq('id', link.organization_id)
+                                .maybeSingle();
+                            if (profile) {
+                                orgData = {
+                                    id: profile.id,
+                                    profile_id: profile.id,
+                                    name: profile.full_name,
+                                    type: profile.profile_type
+                                };
+                            }
+                        }
+
+                        if (orgData) {
+                            fetchedOrgs.push({
+                                ...orgData,
+                                type: orgData.type || link.organization_type
+                            });
+                        }
+                    }
+
+                    // De-duplicate by profile_id
+                    const uniqueOrgs = fetchedOrgs.reduce((acc, curr) => {
+                        if (!acc.find(o => o.profile_id === curr.profile_id)) {
+                            acc.push(curr);
+                        }
+                        return acc;
+                    }, []);
+
+                    setLinkedOrgs(uniqueOrgs);
+                } else {
+                    setLinkedOrgs([]);
+                }
+
                 const { data, error } = await supabase
                     .from('appointments')
                     .select('*')
                     .eq('doctor_id', doctorRecord.id)
-                    .order('date', { ascending: true })
+                    .order('date', { ascending: false })
                     .order('time_slot', { ascending: true });
 
                 if (error) throw error;
@@ -48,8 +102,13 @@ export default function DoctorAppointments() {
             }
         };
 
-        fetchAppointments();
+        fetchData();
     }, [doctorRecord?.id]);
+
+    const getClinicName = (apt) => {
+        const org = linkedOrgs.find(o => o.id === apt.organization_id || o.profile_id === apt.organization_id);
+        return org ? org.name : (apt.clinic_name || 'Main Clinic');
+    };
 
     const filtered = useMemo(() => appointments.filter(a => {
         const patientName = a.patient_name || a.patientName || a.patient || '';
@@ -106,7 +165,7 @@ export default function DoctorAppointments() {
                 <table className="w-full text-sm">
                     <thead>
                         <tr className="border-b border-slate-100 bg-slate-50">
-                            {['Patient', 'Age', 'Issue', 'Fee', 'Date & Time', 'Status'].map(h => (
+                            {['Patient', 'Clinic/Medical', 'Age', 'Issue', 'Fee', 'Date & Time', 'Status'].map(h => (
                                 <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
                             ))}
                         </tr>
@@ -139,6 +198,14 @@ export default function DoctorAppointments() {
                                     <div>
                                         <p className="font-medium text-slate-800">{apt.patient_name || apt.patientName || apt.patient || 'Patient'}</p>
                                         <p className="text-xs text-slate-400">{apt.patient_phone || '-'}</p>
+                                    </div>
+                                </td>
+                                <td className="px-4 py-3">
+                                    <div className="flex items-center gap-1.5">
+                                        <div className="h-7 w-7 rounded-lg bg-teal-50 flex items-center justify-center text-teal-600">
+                                            <Building2 size={12} />
+                                        </div>
+                                        <span className="text-xs font-bold text-slate-600">{getClinicName(apt)}</span>
                                     </div>
                                 </td>
                                 <td className="px-4 py-3 text-slate-600">{apt.patient_age ? `${apt.patient_age} yrs` : '-'}</td>

@@ -233,8 +233,8 @@ export default function BookAppointmentQueued() {
                         };
                     }
                 }
-                
-                return data ? { ...data, organization_type: link.organization_type } : null;
+
+                return null;
             });
             const list = (await Promise.all(orgPromises)).filter(Boolean);
             setClinics(list);

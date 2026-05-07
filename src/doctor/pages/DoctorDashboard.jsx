@@ -218,34 +218,79 @@ export default function DoctorDashboard() {
                 setAppointments(aptData || []);
 
                 // 2. Fetch linked organizations
-                const { data: staffLinks, error: staffError } = await supabase
-                    .from('staff_links')
-                    .select('organization_id, organization_type')
-                    .eq('doctor_id', doctorRecord.id);
+                let staffLinks = [];
+                try {
+                    // Try to find links using both doctor_id and profile_id for compatibility
+                    const { data, error } = await supabase
+                        .from('staff_links')
+                        .select('organization_id, organization_type')
+                        .or(`doctor_id.eq.${doctorRecord.id},doctor_id.eq.${doctorRecord.profile_id}`);
 
-                if (staffError) throw staffError;
+                    if (error) {
+                        console.error('Error fetching staff links:', error);
+                    } else {
+                        staffLinks = data || [];
+                    }
+                } catch (err) {
+                    console.error('Unexpected error fetching staff links:', err);
+                }
 
-                const orgPromises = (staffLinks || []).map(async (link) => {
-                    const table = link.organization_type === 'medical' ? 'medicals' : 'clinics';
-                    const { data } = await supabase
-                        .from(table)
-                        .select('id, name, address, city, state')
-                        .eq('profile_id', link.organization_id)
-                        .maybeSingle();
-                    
-                    if (!data) return null;
+                if (staffLinks.length > 0) {
+                    // Filter out any null/undefined IDs and get unique list
+                    const orgIds = [...new Set(staffLinks.map(l => l.organization_id).filter(Boolean))];
 
-                    return {
-                        ...data,
-                        id: data.id, // Entry ID for timetables
-                        profile_id: link.organization_id, // Profile ID for appointments
-                        type: link.organization_type,
-                        displayName: data.name
-                    };
-                });
+                    if (orgIds.length > 0) {
+                        // Fetch all profiles in one go
+                        const { data: profiles, error: profileError } = await supabase
+                            .from('profiles')
+                            .select('id, full_name, profile_type')
+                            .in('id', orgIds);
 
-                const orgs = (await Promise.all(orgPromises)).filter(Boolean);
-                setLinkedOrgs(orgs);
+                        if (profileError) {
+                            console.error('Error fetching profiles:', profileError);
+                        }
+
+                        const enrichedOrgs = await Promise.all((profiles || []).map(async (profile) => {
+                            try {
+                                const link = staffLinks.find(l => l.organization_id === profile.id);
+                                const table = link?.organization_type === 'medical' ? 'medicals' : 'clinics';
+
+                                // Try to get more details from specialized table
+                                const { data: specialized } = await supabase
+                                    .from(table)
+                                    .select('id, name, address, city, state')
+                                    .eq('profile_id', profile.id)
+                                    .maybeSingle();
+
+                                return {
+                                    id: specialized?.id || profile.id,
+                                    profile_id: profile.id,
+                                    name: specialized?.name || profile.full_name || 'Unnamed Organization',
+                                    displayName: specialized?.name || profile.full_name || 'Unnamed Organization',
+                                    type: link?.organization_type || profile.profile_type,
+                                    address: specialized?.address,
+                                    city: specialized?.city,
+                                    state: specialized?.state
+                                };
+                            } catch (err) {
+                                console.error(`Error enriching org ${profile.id}:`, err);
+                                return {
+                                    id: profile.id,
+                                    profile_id: profile.id,
+                                    name: profile.full_name || 'Unnamed Organization',
+                                    displayName: profile.full_name || 'Unnamed Organization',
+                                    type: profile.profile_type
+                                };
+                            }
+                        }));
+
+                        setLinkedOrgs(enrichedOrgs.filter(Boolean));
+                    } else {
+                        setLinkedOrgs([]);
+                    }
+                } else {
+                    setLinkedOrgs([]);
+                }
 
             } catch (error) {
                 console.error('Failed to load dashboard data:', error.message);
@@ -281,6 +326,7 @@ export default function DoctorDashboard() {
 
             return {
                 ...org,
+                displayName: org.name || 'Unnamed Organization',
                 totalPatients: relatedAppointments.length,
                 todayPatients: relatedAppointments.filter(apt => String(apt.date || '').slice(0, 10) === today).length,
                 upcoming: relatedAppointments.find(apt => String(apt.date || '').slice(0, 10) >= today) || null,
@@ -288,6 +334,11 @@ export default function DoctorDashboard() {
             };
         });
     }, [appointments, linkedOrgs, today]);
+
+    const getClinicName = (apt) => {
+        const org = linkedOrgs.find(o => o.id === apt.organization_id || o.profile_id === apt.organization_id);
+        return org ? org.name : (apt.clinic_name || 'Main Clinic');
+    };
 
     return (
         <div className="space-y-6 max-w-7xl mx-auto pb-8">
@@ -431,6 +482,10 @@ export default function DoctorDashboard() {
                                     <div>
                                         <p className="font-semibold text-slate-800">{apt.patient_name || apt.patient || 'Patient'}</p>
                                         <p className="text-xs text-slate-500">{apt.time_slot} · {apt.status}</p>
+                                        <div className="flex items-center gap-1 mt-1">
+                                            <Building2 size={12} className="text-teal-500" />
+                                            <p className="text-[10px] font-bold text-teal-600 uppercase tracking-tight">{getClinicName(apt)}</p>
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -461,7 +516,7 @@ export default function DoctorDashboard() {
                 doctor={doctorRecord}
                 orgId={selectedOrgForAppointments?.id}
                 orgProfileId={selectedOrgForAppointments?.profile_id}
-                orgName={selectedOrgForAppointments?.displayName}
+                orgName={selectedOrgForAppointments?.name}
             />
         </div>
     );
