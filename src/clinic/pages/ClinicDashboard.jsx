@@ -728,6 +728,14 @@ export default function ClinicDashboard() {
                             <p className="text-[10px] text-gray-500">with Dr. {item.doctor_name}</p>
                             <p className="text-xs text-teal-600 mt-1">{new Date(item.date).toLocaleDateString()} {item.time_slot}</p>
                           </div>
+                          {item.status === 'Completed' && (
+                              <button 
+                                onClick={() => navigate(`/prescription/${item.id}`)}
+                                className="h-8 px-3 rounded-lg bg-teal-50 text-teal-700 text-xs font-bold hover:bg-teal-100 transition-colors flex items-center justify-center shrink-0 self-center"
+                              >
+                                View Rx
+                              </button>
+                          )}
                         </div>
                       ))
                     ) : (
@@ -752,7 +760,9 @@ export default function ClinicDashboard() {
                   visits: 0,
                   lastVisit: apt.date,
                   totalSpent: 0,
-                  recentDoctor: apt.doctor_name
+                  recentDoctor: apt.doctor_name,
+                  latestApptId: apt.id,
+                  latestStatus: apt.status
                 };
               }
               patientsMap[pid].visits += 1;
@@ -760,6 +770,8 @@ export default function ClinicDashboard() {
               if (new Date(apt.date) > new Date(patientsMap[pid].lastVisit)) {
                 patientsMap[pid].lastVisit = apt.date;
                 patientsMap[pid].recentDoctor = apt.doctor_name;
+                patientsMap[pid].latestApptId = apt.id;
+                patientsMap[pid].latestStatus = apt.status;
               }
             });
             const patientsList = Object.values(patientsMap).sort((a, b) => new Date(b.lastVisit) - new Date(a.lastVisit));
@@ -788,6 +800,7 @@ export default function ClinicDashboard() {
                           <th className="py-4 px-6 font-semibold text-gray-600">Total Visits</th>
                           <th className="py-4 px-6 font-semibold text-gray-600">Last Encounter</th>
                           <th className="py-4 px-6 font-semibold text-gray-600 text-right">Revenue</th>
+                          <th className="py-4 px-6 font-semibold text-gray-600 text-center">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50">
@@ -819,6 +832,18 @@ export default function ClinicDashboard() {
                             </td>
                             <td className="py-4 px-6 text-right">
                               <span className="text-sm font-bold text-gray-900">₹{p.totalSpent.toLocaleString()}</span>
+                            </td>
+                            <td className="py-4 px-6 text-center">
+                              {p.latestStatus === 'Completed' && p.latestApptId ? (
+                                <button
+                                  onClick={() => navigate(`/prescription/${p.latestApptId}`)}
+                                  className="px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold text-xs rounded-lg transition-colors"
+                                >
+                                  View Latest Rx
+                                </button>
+                              ) : (
+                                <span className="text-xs text-gray-400">No Rx</span>
+                              )}
                             </td>
                           </tr>
                         )) : (
