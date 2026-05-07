@@ -71,6 +71,12 @@ export function AuthProvider({ children }) {
         }
     }, []);
 
+    const refreshProfile = useCallback(async () => {
+        if (!user) return;
+        const p = await fetchProfile(user.id);
+        setProfile(p);
+    }, [user, fetchProfile]);
+
     useEffect(() => {
         let mounted = true;
 
@@ -277,8 +283,8 @@ export function AuthProvider({ children }) {
     }, []);
 
     const contextValue = useMemo(() => ({
-        user, profile, loading, signIn, signUp, signOut, getDashboardPath,
-    }), [user, profile, loading, signIn, signUp, signOut, getDashboardPath]);
+        user, profile, loading, signIn, signUp, signOut, getDashboardPath, refreshProfile
+    }), [user, profile, loading, signIn, signUp, signOut, getDashboardPath, refreshProfile]);
 
     return (
         <AuthContext.Provider value={contextValue}>
