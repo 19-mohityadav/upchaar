@@ -38,24 +38,69 @@ export default function DiagnosticsPage() {
         const fetchCenters = async () => {
             setLoading(true);
             try {
-                const { data, error } = await supabase
+                // Fetch from auth profiles
+                const { data: profilesData } = await supabase
                     .from('profiles')
                     .select('*')
                     .eq('profile_type', 'diagnostic');
                 
-                if (error) throw error;
-                
-                if (data) {
-                    const mappedCenters = data.map(center => ({
-                        id: center.id,
-                        name: center.full_name || center.name || 'Diagnostic Center',
-                        location: center.address || center.city ? `${center.city || ''} ${center.state || ''}`.trim() : 'Location not specified',
-                        tests: ['Blood Test', 'Pathology', 'X-Ray'], // Default tests for now
-                        logo: getStorageUrl(center.avatar_url, 'avatars'),
-                        dataAiHint: 'diagnostic center'
-                    }));
-                    setDiagnosticCenters(mappedCenters);
+                // Fetch from facilities table (added by admin)
+                const { data: facilitiesData } = await supabase
+                    .from('facilities')
+                    .select('*')
+                    .eq('type', 'diagnostic');
+
+                // Fetch from diagnostic_centers table (added via user signup)
+                const { data: diagnosticCentersData } = await supabase
+                    .from('diagnostic_centers')
+                    .select('*');
+
+                const allCenters = [];
+
+                if (profilesData) {
+                    profilesData.forEach(center => {
+                        allCenters.push({
+                            id: center.id,
+                            name: center.full_name || center.name || 'Diagnostic Center',
+                            location: [center.city, center.state].filter(Boolean).join(', ') || 'Location not specified',
+                            tests: ['Blood Test', 'Pathology', 'X-Ray'],
+                            logo: getStorageUrl(center.avatar_url, 'avatars'),
+                            dataAiHint: 'diagnostic center'
+                        });
+                    });
                 }
+
+                if (facilitiesData) {
+                    facilitiesData.forEach(center => {
+                        if (!allCenters.find(c => c.id === center.id)) {
+                            allCenters.push({
+                                id: center.id,
+                                name: center.name || 'Diagnostic Center',
+                                location: center.location || center.city ? `${center.city || ''} ${center.location || ''}`.trim() : 'Location not specified',
+                                tests: center.facilities && center.facilities.length > 0 ? center.facilities : ['Blood Test', 'Pathology', 'X-Ray'],
+                                logo: getStorageUrl(center.avatar_url, 'avatars'),
+                                dataAiHint: 'diagnostic center'
+                            });
+                        }
+                    });
+                }
+
+                if (diagnosticCentersData) {
+                    diagnosticCentersData.forEach(center => {
+                        if (!allCenters.find(c => c.id === center.profile_id || c.id === center.id)) {
+                            allCenters.push({
+                                id: center.id,
+                                name: center.name || 'Diagnostic Center',
+                                location: center.address || center.city ? `${center.city || ''} ${center.address || ''}`.trim() : 'Location not specified',
+                                tests: center.tests && center.tests.length > 0 ? center.tests : ['Blood Test', 'Pathology', 'X-Ray'],
+                                logo: getStorageUrl(center.avatar_url, 'avatars'),
+                                dataAiHint: 'diagnostic center'
+                            });
+                        }
+                    });
+                }
+
+                setDiagnosticCenters(allCenters);
             } catch (err) {
                 console.error("Error fetching diagnostics centers:", err);
             } finally {

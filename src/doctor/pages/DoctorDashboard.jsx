@@ -218,60 +218,80 @@ export default function DoctorDashboard() {
                 setAppointments(aptData || []);
 
                 // 2. Fetch linked organizations
-                const { data: staffLinks, error: staffError } = await supabase
-                    .from('staff_links')
-                    .select('organization_id, organization_type')
-                    .eq('doctor_id', doctorRecord.id);
+                let staffLinks = [];
+                try {
+                    // Try to find links using both doctor_id and profile_id for compatibility
+                    const { data, error } = await supabase
+                        .from('staff_links')
+                        .select('organization_id, organization_type')
+                        .or(`doctor_id.eq.${doctorRecord.id},doctor_id.eq.${doctorRecord.profile_id}`);
 
-                if (staffError) throw staffError;
+                    if (error) {
+                        console.error('Error fetching staff links:', error);
+                    } else {
+                        staffLinks = data || [];
+                    }
+                } catch (err) {
+                    console.error('Unexpected error fetching staff links:', err);
+                }
 
-                if (staffLinks && staffLinks.length > 0) {
-                    const fetchedOrgs = [];
-                    for (const link of staffLinks) {
-                        const table = link.organization_type === 'medical' ? 'medicals' : 'clinics';
-                        let { data: orgData } = await supabase
-                            .from(table)
-                            .select('*')
-                            .eq('profile_id', link.organization_id)
-                            .maybeSingle();
+                if (staffLinks.length > 0) {
+                    // Filter out any null/undefined IDs and get unique list
+                    const orgIds = [...new Set(staffLinks.map(l => l.organization_id).filter(Boolean))];
 
-                        if (!orgData) {
-                            const { data: profile } = await supabase
-                                .from('profiles')
-                                .select('id, full_name, profile_type')
-                                .eq('id', link.organization_id)
-                                .maybeSingle();
-                            if (profile) {
-                                orgData = {
+                    if (orgIds.length > 0) {
+                        // Fetch all profiles in one go
+                        const { data: profiles, error: profileError } = await supabase
+                            .from('profiles')
+                            .select('id, full_name, profile_type')
+                            .in('id', orgIds);
+
+                        if (profileError) {
+                            console.error('Error fetching profiles:', profileError);
+                        }
+
+                        const enrichedOrgs = await Promise.all((profiles || []).map(async (profile) => {
+                            try {
+                                const link = staffLinks.find(l => l.organization_id === profile.id);
+                                const table = link?.organization_type === 'medical' ? 'medicals' : 'clinics';
+
+                                // Try to get more details from specialized table
+                                const { data: specialized } = await supabase
+                                    .from(table)
+                                    .select('id, name, address, city, state')
+                                    .eq('profile_id', profile.id)
+                                    .maybeSingle();
+
+                                return {
+                                    id: specialized?.id || profile.id,
+                                    profile_id: profile.id,
+                                    name: specialized?.name || profile.full_name || 'Unnamed Organization',
+                                    displayName: specialized?.name || profile.full_name || 'Unnamed Organization',
+                                    type: link?.organization_type || profile.profile_type,
+                                    address: specialized?.address,
+                                    city: specialized?.city,
+                                    state: specialized?.state
+                                };
+                            } catch (err) {
+                                console.error(`Error enriching org ${profile.id}:`, err);
+                                return {
                                     id: profile.id,
                                     profile_id: profile.id,
-                                    name: profile.full_name,
+                                    name: profile.full_name || 'Unnamed Organization',
+                                    displayName: profile.full_name || 'Unnamed Organization',
                                     type: profile.profile_type
                                 };
                             }
-                        }
+                        }));
 
-                        if (orgData) {
-                            fetchedOrgs.push({
-                                ...orgData,
-                                displayName: orgData.name || 'Unnamed Organization',
-                                type: orgData.type || link.organization_type
-                            });
-                        }
+                        setLinkedOrgs(enrichedOrgs.filter(Boolean));
+                    } else {
+                        setLinkedOrgs([]);
                     }
-
-                    // De-duplicate by profile_id
-                    const uniqueOrgs = fetchedOrgs.reduce((acc, curr) => {
-                        if (!acc.find(o => o.profile_id === curr.profile_id)) {
-                            acc.push(curr);
-                        }
-                        return acc;
-                    }, []);
-
-                    setLinkedOrgs(uniqueOrgs);
                 } else {
                     setLinkedOrgs([]);
                 }
+
             } catch (error) {
                 console.error('Failed to load dashboard data:', error.message);
                 setAppointments([]);

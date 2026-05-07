@@ -260,6 +260,15 @@ export function AuthProvider({ children }) {
                     whatsapp_number: whatsappNumber?.trim() || '',
                     status: 'Pending',
                 });
+            } else if (profileType === 'diagnostic') {
+                await supabase.from('diagnostic_centers').insert({
+                    profile_id: userId,
+                    name: fullName.trim(),
+                    email: email.trim(),
+                    phone: phone?.trim() || '',
+                    whatsapp_number: whatsappNumber?.trim() || '',
+                    status: 'Pending',
+                });
             }
 
             // Clear the temporary session without letting sign-out block the UI.
