@@ -215,26 +215,32 @@ export default function BookAppointmentQueued() {
                     .maybeSingle();
                 
                 if (error) console.error(`Error fetching from ${table}:`, error);
-                
-                // Fallback to profiles table if not found in medicals/clinics
-                if (!data && isUUID) {
-                    const { data: profileData } = await supabase
-                        .from('profiles')
-                        .select('id, full_name, name, city, state, address, phone')
-                        .eq('id', link.organization_id)
-                        .maybeSingle();
-                        
-                    if (profileData) {
-                        data = {
-                            id: profileData.id,
-                            name: profileData.full_name || profileData.name || 'Unnamed Facility',
-                            address: profileData.address || [profileData.city, profileData.state].filter(Boolean).join(', ') || '',
-                            phone: profileData.phone || ''
-                        };
-                    }
+
+                // If the org has a full profile row, use it
+                if (data) return { ...data, organization_type: link.organization_type };
+
+                // Fallback: org exists in staff_links but hasn't completed their detail profile yet
+                // Use the profiles table to at least get the org name
+                const { data: profileData, error: profileError } = await supabase
+                    .from('profiles')
+                    .select('id, full_name, email')
+                    .eq('id', link.organization_id)
+                    .maybeSingle();
+
+                if (profileError) console.error('Error fetching profile fallback:', profileError);
+
+                if (profileData) {
+                    return {
+                        id: profileData.id,
+                        profile_id: profileData.id,
+                        name: profileData.full_name || profileData.email || 'Unnamed Clinic',
+                        address: '',
+                        organization_type: link.organization_type,
+                        _isFallback: true,
+                    };
                 }
-                
-                return data ? { ...data, organization_type: link.organization_type } : null;
+
+                return null;
             });
             const list = (await Promise.all(orgPromises)).filter(Boolean);
             setClinics(list);
