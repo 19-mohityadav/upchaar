@@ -3,45 +3,10 @@ import { useParams } from "react-router-dom";
 import { supabase } from "@/lib/supabase.js";
 import "./PrescriptionView.css";
 
+
 const UpcharLogo = () => (
   <div className="upchar-logo">
-    <div className="upchar-icon">
-      <svg width="72" height="88" viewBox="0 0 72 88" fill="none" xmlns="http://www.w3.org/2000/svg">
-        {/* Phone body */}
-        <rect x="10" y="6" width="46" height="76" rx="7" fill="white" stroke="#222" strokeWidth="2.5" />
-        <rect x="14" y="14" width="38" height="56" rx="3" fill="#f5f5f5" />
-        {/* Home button */}
-        <circle cx="33" cy="76" r="3.5" fill="#ccc" />
-        {/* Red cross */}
-        <rect x="27" y="28" width="12" height="28" rx="2.5" fill="#E63946" />
-        <rect x="20" y="35" width="26" height="12" rx="2.5" fill="#E63946" />
-        {/* Hand icon overlay */}
-        <ellipse cx="33" cy="42" rx="9" ry="9" fill="rgba(230,57,70,0.18)" />
-        {/* Connected dots - network lines */}
-        {/* Top dot */}
-        <circle cx="33" cy="2" r="4" fill="#E63946" />
-        {/* Right dots */}
-        <circle cx="68" cy="20" r="4" fill="#E63946" />
-        <circle cx="68" cy="44" r="4" fill="#E63946" />
-        {/* Bottom dot */}
-        <circle cx="33" cy="86" r="4" fill="#222" />
-        {/* Left dots */}
-        <circle cx="2" cy="30" r="3" fill="#333" />
-        <circle cx="2" cy="55" r="3" fill="#333" />
-        {/* Lines */}
-        <line x1="33" y1="6" x2="33" y2="14" stroke="#222" strokeWidth="1.5" />
-        <line x1="56" y1="10" x2="64" y2="18" stroke="#222" strokeWidth="1.5" />
-        <line x1="56" y1="18" x2="64" y2="22" stroke="#222" strokeWidth="1.5" />
-        <line x1="56" y1="44" x2="64" y2="44" stroke="#222" strokeWidth="1.5" />
-        <line x1="10" y1="20" x2="5" y2="30" stroke="#222" strokeWidth="1.5" />
-        <line x1="10" y1="55" x2="5" y2="55" stroke="#222" strokeWidth="1.5" />
-        <line x1="33" y1="82" x2="33" y2="86" stroke="#222" strokeWidth="1.5" />
-      </svg>
-    </div>
-    <div className="upchar-text">
-      <span className="upchar-name">UPCHAR</span>
-      <span className="upchar-health">HEALTH</span>
-    </div>
+    <img src="/upcharhealth.svg" alt="Upchar Health" style={{ width: '180px', height: 'auto', objectFit: 'contain' }} />
   </div>
 );
 
@@ -82,6 +47,7 @@ export default function PrescriptionView({ appointmentId }) {
   const [appointment, setAppointment] = useState(null);
   const [doctor, setDoctor] = useState(null);
   const [patient, setPatient] = useState(null);
+  const [organizations, setOrganizations] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -114,6 +80,59 @@ export default function PrescriptionView({ appointmentId }) {
             .single();
           setPatient(pat);
         }
+
+        if (apt.doctor_id) {
+          const { data: staffData } = await supabase
+            .from('staff_links')
+            .select('organization_id, organization_type')
+            .eq('doctor_id', apt.doctor_id);
+
+          let orgs = [];
+          if (staffData && staffData.length > 0) {
+            const orgPromises = staffData.map(async (link) => {
+              const table = link.organization_type === 'medical' ? 'medicals' : 'clinics';
+              const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(link.organization_id));
+              
+              let { data: orgData } = await supabase
+                .from(table)
+                .select('*')
+                .eq(isUUID ? 'profile_id' : 'id', link.organization_id)
+                .maybeSingle();
+
+              if (!orgData && isUUID) {
+                const { data: profileData } = await supabase
+                  .from('profiles')
+                  .select('id, full_name, name, city, state, address, phone')
+                  .eq('id', link.organization_id)
+                  .maybeSingle();
+                if (profileData) {
+                  orgData = {
+                    id: profileData.id,
+                    name: profileData.full_name || profileData.name || 'Unnamed Facility',
+                    address: profileData.address || [profileData.city, profileData.state].filter(Boolean).join(', ') || '',
+                    phone: profileData.phone || ''
+                  };
+                }
+              }
+              if (orgData) {
+                const { data: ttData } = await supabase
+                  .from('doctor_timetables')
+                  .select('*')
+                  .eq('doctor_id', apt.doctor_id)
+                  .eq('org_id', link.organization_id)
+                  .eq('is_active', true);
+                  
+                return {
+                  ...orgData,
+                  timetables: ttData || []
+                };
+              }
+              return null;
+            });
+            orgs = (await Promise.all(orgPromises)).filter(Boolean);
+          }
+          setOrganizations(orgs);
+        }
       } catch (err) {
         console.error("Error fetching prescription:", err);
       } finally {
@@ -132,7 +151,9 @@ export default function PrescriptionView({ appointmentId }) {
   }
 
   // Parse doctor name to highlight first part
-  const docNameParts = (doctor?.full_name || appointment.doctor_name || "").split(" ");
+  let rawName = doctor?.full_name || appointment.doctor_name || "";
+  rawName = rawName.replace(/^Dr\.?\s+/i, ""); // Strip 'Dr.' or 'Dr ' from the beginning
+  const docNameParts = rawName.split(" ");
   const firstName = docNameParts[0] || "Doctor";
   const lastName = docNameParts.slice(1).join(" ") || "";
 
@@ -198,39 +219,57 @@ export default function PrescriptionView({ appointmentId }) {
         {/* Clinical History Section */}
         <div className="clinical-section">
           <div className="clinical-left pr-4 border-r-2 border-red-500/10 min-h-full">
-            <h2 className="clinical-title mb-4">Clinical Notes:</h2>
-            <div className="whitespace-pre-wrap text-sm text-gray-700 leading-relaxed font-medium">
-              {appointment.diagnosis || appointment.issue || "No clinical notes provided."}
+            <h2 className="clinical-title mb-4">Clinic / Medicals</h2>
+            <div className="whitespace-pre-wrap text-sm text-gray-700 leading-relaxed font-medium mb-6">
+              {organizations && organizations.length > 0 ? (
+                <div className="space-y-6">
+                  {organizations.map((org, i) => (
+                    <div key={i} className="pb-4 border-b border-red-500/10 last:border-0">
+                      <p className="font-bold text-slate-900 text-base">{org.name}</p>
+                      <p className="text-slate-600 mt-1">{org.address}</p>
+                      {org.phone && <p className="text-slate-600 mt-1">Phone: {org.phone}</p>}
+                      
+                      {org.timetables && org.timetables.length > 0 && (
+                        <div className="mt-3">
+                          <p className="font-bold text-slate-800 text-[10px] uppercase mb-1.5 opacity-70">Timings</p>
+                          {org.timetables.map((tt, idx) => (
+                             <div key={idx} className="flex justify-between items-center text-xs text-slate-600 mb-0.5">
+                               <span className="font-semibold">{tt.day}</span>
+                               <span>{tt.time_from} - {tt.time_to}</span>
+                             </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-slate-400 italic">No clinics linked to this doctor.</span>
+              )}
             </div>
+
           </div>
-          <div className="clinical-right relative z-10 w-full pl-6 pt-2">
-             <h2 className="clinical-title mb-4">Rx / Medicines:</h2>
-             <div className="whitespace-pre-wrap text-sm text-gray-800 leading-loose">
-               {(appointment.medicines && appointment.medicines.length > 0)
-                  ? appointment.medicines.join("\n") 
-                  : "No medicines prescribed."}
+          <div className="clinical-right relative z-10 w-full pl-6 pt-2 flex flex-col">
+             <div className="mb-8">
+               <h2 className="clinical-title mb-4">Rx / Medicines:</h2>
+               <div className="whitespace-pre-wrap text-sm text-gray-800 leading-loose">
+                 {(appointment.medicines && appointment.medicines.length > 0)
+                    ? appointment.medicines.join("\n") 
+                    : "No medicines prescribed."}
+               </div>
+             </div>
+             
+             <div className="mt-4 pt-6 border-t border-red-500/10">
+               <h2 className="clinical-title mb-4">Clinical Notes</h2>
+               <div className="whitespace-pre-wrap text-sm text-gray-700 leading-relaxed font-medium">
+                 {appointment.diagnosis || appointment.issue || "No clinical notes provided."}
+               </div>
              </div>
           </div>
           
           {/* Watermark */}
-          <div className="watermark">
-            <div className="watermark-icon">
-              <svg width="180" height="200" viewBox="0 0 72 88" fill="none" xmlns="http://www.w3.org/2000/svg" opacity="0.07">
-                <rect x="10" y="6" width="46" height="76" rx="7" fill="#1A9E9E" stroke="#1A9E9E" strokeWidth="2" />
-                <rect x="27" y="28" width="12" height="28" rx="2.5" fill="#E63946" />
-                <rect x="20" y="35" width="26" height="12" rx="2.5" fill="#E63946" />
-                <circle cx="33" cy="2" r="4" fill="#E63946" />
-                <circle cx="68" cy="20" r="4" fill="#E63946" />
-                <circle cx="68" cy="44" r="4" fill="#E63946" />
-                <circle cx="33" cy="86" r="4" fill="#222" />
-                <circle cx="2" cy="30" r="3" fill="#333" />
-                <circle cx="2" cy="55" r="3" fill="#333" />
-              </svg>
-            </div>
-            <div className="watermark-text">
-              <span>UPCHAR</span>
-              <span>HEALTH</span>
-            </div>
+          <div className="watermark" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', opacity: 0.1 }}>
+            <img src="/upcharhealth.svg" alt="Watermark" style={{ width: '350px', height: 'auto', objectFit: 'contain' }} />
           </div>
         </div>
 
