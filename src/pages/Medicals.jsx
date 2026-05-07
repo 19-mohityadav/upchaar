@@ -39,70 +39,34 @@ export default function MedicalsPage() {
     const [loadingDoctors, setLoadingDoctors] = useState(false);
 
     useEffect(() => {
-        // Fetch registered medicals & clinics directly from their respective tables
         const fetchMedicals = async () => {
             setLoading(true);
             try {
-                // Fetch from medicals table
-                const { data: medicalsData, error: medicalsError } = await supabase
-                    .from('medicals')
-                    .select('*');
+                // Fetch all auth profiles that are medicals or clinics
+                const { data: profilesData, error: profilesError } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .in('profile_type', ['medical', 'clinic', 'hospital']);
 
-                // Fetch from clinics table
-                const { data: clinicsData, error: clinicsError } = await supabase
-                    .from('clinics')
-                    .select('*');
+                if (profilesError) throw profilesError;
                 
-                const mappedMedicals = !medicalsError && medicalsData
-                    ? medicalsData.map(m => ({
-                        ...m,
-                        full_name: m.name,
-                        profile_type: 'medical',
-                    }))
-                    : [];
+                // Fetch internal tables for extra details (if any)
+                const { data: medicalsData } = await supabase.from('medicals').select('*');
+                const { data: clinicsData } = await supabase.from('clinics').select('*');
 
-                const mappedClinics = !clinicsError && clinicsData
-                    ? clinicsData.map(c => ({
-                        ...c,
-                        full_name: c.name,
-                        profile_type: 'clinic',
-                    }))
-                    : [];
+                const medicalsMap = new Map((medicalsData || []).map(m => [m.profile_id, m]));
+                const clinicsMap = new Map((clinicsData || []).map(c => [c.profile_id, c]));
 
-                let merged = [...mappedMedicals, ...mappedClinics];
-
-                // If fetching from those tables isn't returning anything, fallback to profiles for backward compatibility
-                if (merged.length === 0) {
-                    const { data: profileData, error } = await supabase
-                        .from('profiles')
-                        .select('*')
-                        .in('profile_type', ['medical', 'clinic', 'hospital']);
-                    if (!error && profileData) {
-                        const processed = profileData.map(p => ({
-                            ...p,
-                            avatar_url: getStorageUrl(p.avatar_url, 'avatars'),
-                            full_name: p.full_name || p.name
-                        }));
-                        setMedicals(processed);
-                        return;
-                    }
-                }
-
-                const profileIds = [...new Set(merged.map(m => m.profile_id).filter(Boolean))];
-                const { data: profilesData } = profileIds.length
-                    ? await supabase
-                        .from('profiles')
-                        .select('id, avatar_url')
-                        .in('id', profileIds)
-                    : { data: [] };
-
-                const profilesMap = new Map((profilesData || []).map(p => [p.id, p]));
-
-                const mergedWithAvatars = merged.map((m) => {
-                    const profileAvatar = profilesMap.get(m.profile_id)?.avatar_url;
+                const mergedWithAvatars = (profilesData || []).map(p => {
+                    const internalData = medicalsMap.get(p.id) || clinicsMap.get(p.id) || {};
                     return {
-                        ...m,
-                        avatar_url: getStorageUrl(m.avatar_url || profileAvatar, 'avatars'),
+                        ...p,
+                        ...internalData,
+                        profile_id: p.id,
+                        id: internalData.id || p.id, // Prefer internal ID for staff_links, but fallback to profile_id
+                        avatar_url: getStorageUrl(p.avatar_url, 'avatars'),
+                        full_name: p.full_name || p.name || internalData.name,
+                        profile_type: p.profile_type
                     };
                 });
 

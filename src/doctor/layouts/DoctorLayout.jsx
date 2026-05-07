@@ -77,7 +77,7 @@ export default function DoctorLayout() {
                                 </div>
                                 <div className="flex flex-col sm:flex-row sm:gap-1 tracking-tight">
                                     <span className="font-extrabold text-base lg:text-lg text-teal-600 leading-tight">
-                                        Upchaar
+                                        Upchar
                                     </span>
                                     <span className='font-bold text-base lg:text-lg text-red-500'>Health</span>
                                 </div>
@@ -159,7 +159,7 @@ export default function DoctorLayout() {
                                 <motion.div initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.15 }}
                                     className="flex flex-col sm:flex-row sm:gap-1 tracking-tight">
                                     <span className="font-extrabold text-base lg:text-lg text-teal-600 leading-tight">
-                                        Upchaar
+                                        Upchar
                                     </span>
                                     <span className='font-bold text-base lg:text-lg text-red-500'>Health</span>
                                 </motion.div>

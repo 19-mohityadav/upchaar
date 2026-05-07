@@ -131,6 +131,9 @@ export default function DoctorDashboard() {
     const handleEnd = async (appointmentId) => {
         setUpdatingId(appointmentId);
         try {
+            const apt = appointments.find(a => a.id === appointmentId);
+            const isCurrentlyCompleted = apt?.status === 'Completed';
+            
             const updateData = { status: 'Completed', ended_at: new Date().toISOString() };
 
             let { error } = await supabase
@@ -148,8 +151,16 @@ export default function DoctorDashboard() {
 
             if (error) throw error;
 
-            setAppointments(prev => prev.map(apt => (
-                apt.id === appointmentId ? { ...apt, ...updateData } : apt
+            if (!isCurrentlyCompleted && apt?.fee) {
+                const { data: docData } = await supabase.from('doctors').select('total_revenue').eq('id', doctorRecord.id).single();
+                if (docData) {
+                    const newRev = (docData.total_revenue || 0) + Number(apt.fee);
+                    await supabase.from('doctors').update({ total_revenue: newRev }).eq('id', doctorRecord.id);
+                }
+            }
+
+            setAppointments(prev => prev.map(a => (
+                a.id === appointmentId ? { ...a, ...updateData } : a
             )));
             window.alert('Consultation ended successfully!');
         } catch (error) {
@@ -478,30 +489,13 @@ export default function DoctorDashboard() {
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    {apt.status === 'Scheduled' || apt.status === 'Confirmed' || apt.status === 'Pending' ? (
-                                        <>
-                                            <button
-                                                onClick={() => handleStart(apt.id)}
-                                                disabled={updatingId === apt.id}
-                                                className="px-4 py-2 rounded-xl bg-teal-600 text-white text-xs font-bold hover:bg-teal-700 transition-colors disabled:opacity-50"
-                                            >
-                                                {updatingId === apt.id ? 'Starting...' : 'Start'}
-                                            </button>
-                                            <button
-                                                onClick={() => handleCancel(apt.id)}
-                                                disabled={updatingId === apt.id}
-                                                className="px-4 py-2 rounded-xl bg-white border border-red-200 text-red-600 text-xs font-bold hover:bg-red-50 transition-colors disabled:opacity-50"
-                                            >
-                                                Cancel
-                                            </button>
-                                        </>
-                                    ) : apt.status === 'In-Progress' ? (
+                                    {(apt.status === 'Scheduled' || apt.status === 'Confirmed' || apt.status === 'Pending') ? (
                                         <button
-                                            onClick={() => handleEnd(apt.id)}
+                                            onClick={() => handleStart(apt.id)}
                                             disabled={updatingId === apt.id}
-                                            className="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition-colors disabled:opacity-50"
+                                            className="px-4 py-2 rounded-xl bg-teal-600 text-white text-xs font-bold hover:bg-teal-700 transition-colors disabled:opacity-50"
                                         >
-                                            {updatingId === apt.id ? 'Completing...' : 'Complete'}
+                                            {updatingId === apt.id ? 'Starting...' : 'Start'}
                                         </button>
                                     ) : (
                                         <span className="text-xs font-medium text-slate-400 px-3 py-1 bg-slate-100 rounded-full">

@@ -207,10 +207,11 @@ export default function BookAppointmentQueued() {
         if (!staffError && staffData && staffData.length > 0) {
             const orgPromises = staffData.map(async (link) => {
                 const table = link.organization_type === 'medical' ? 'medicals' : 'clinics';
-                const { data, error } = await supabase
+                const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(link.organization_id));
+                let { data, error } = await supabase
                     .from(table)
                     .select('*')
-                    .eq('profile_id', link.organization_id)
+                    .eq(isUUID ? 'profile_id' : 'id', link.organization_id)
                     .maybeSingle();
                 
                 if (error) console.error(`Error fetching from ${table}:`, error);

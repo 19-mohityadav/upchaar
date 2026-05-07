@@ -21,7 +21,7 @@ export const MsmeSection = () => {
                 </h2>
 
                 <p className="mt-4 text-lg text-muted-foreground leading-relaxed">
-                    Upchaar Health is officially registered under the{" "}
+                    Upchar Health is officially registered under the{" "}
                     <span className="font-semibold text-foreground">
                         MSME (Udyam) Scheme, Government of India
                     </span>.
