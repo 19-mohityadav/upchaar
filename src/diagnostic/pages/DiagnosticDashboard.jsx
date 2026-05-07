@@ -9,8 +9,8 @@ import {
     ChevronLeft, ChevronRight, Menu, Plus, X, Filter, Trash2,
     Camera, Loader2, User, Phone, MapPin, Globe, Save
 } from 'lucide-react';
-import { uploadAvatar, getStorageUrl } from '@/lib/uploadImage.js';
 import { supabase } from '@/lib/supabase.js';
+import { uploadAvatar, getStorageUrl } from '@/lib/uploadImage.js';
 import { toast, Toaster } from 'sonner';
 
 export default function DiagnosticDashboard() {
@@ -140,14 +140,51 @@ export default function DiagnosticDashboard() {
         { title: "Lifetime Revenue", value: "₹0", icon: DollarSign, color: "text-orange-600", bg: "bg-orange-100" }
     ];
 
-    const [tests, setTests] = useState([
-        { id: 1, name: 'Complete Blood Count (CBC)', price: '₹500', category: 'Blood Test', status: 'Active' },
-        { id: 2, name: 'Lipid Profile', price: '₹800', category: 'Blood Test', status: 'Active' },
-        { id: 3, name: 'Chest X-Ray', price: '₹600', category: 'Radiology', status: 'Active' },
-        { id: 4, name: 'MRI Brain', price: '₹5000', category: 'Radiology', status: 'Inactive' },
-        { id: 5, name: 'Thyroid Profile', price: '₹700', category: 'Pathology', status: 'Active' },
-        { id: 6, name: 'Ultrasound Abdomen', price: '₹1200', category: 'Imaging', status: 'Active' }
-    ]);
+    const [tests, setTests] = useState([]);
+    const [testsLoading, setTestsLoading] = useState(true);
+    const [dcId, setDcId] = useState(null); // diagnostic_centers.id
+
+    // Load tests from Supabase on mount
+    useEffect(() => {
+        if (!profile?.id) return;
+        const loadTests = async () => {
+            setTestsLoading(true);
+            // Get or create the diagnostic_centers row for this profile
+            let { data: dc, error } = await supabase
+                .from('diagnostic_centers')
+                .select('id, tests')
+                .eq('profile_id', profile.id)
+                .maybeSingle();
+
+            if (!dc) {
+                // Create the row if it doesn't exist yet
+                const { data: created } = await supabase
+                    .from('diagnostic_centers')
+                    .insert([{ profile_id: profile.id, name: profile.full_name }])
+                    .select('id, tests')
+                    .single();
+                dc = created;
+            }
+
+            if (dc) {
+                setDcId(dc.id);
+                // tests column is an array of objects: [{id, name, price, category, status}]
+                setTests(Array.isArray(dc.tests) ? dc.tests : []);
+            }
+            setTestsLoading(false);
+        };
+        loadTests();
+    }, [profile?.id]);
+
+    // Persist updated tests array back to Supabase
+    const persistTests = async (updatedTests) => {
+        setTests(updatedTests);
+        if (!dcId) return;
+        await supabase
+            .from('diagnostic_centers')
+            .update({ tests: updatedTests })
+            .eq('id', dcId);
+    };
 
     const filteredTests = tests.filter(test => {
         const matchesSearch = test.name.toLowerCase().includes(searchTerm.toLowerCase()) || test.category.toLowerCase().includes(searchTerm.toLowerCase());
@@ -156,17 +193,15 @@ export default function DiagnosticDashboard() {
     });
 
     const handleToggleStatus = (id) => {
-        setTests(tests.map(test => {
-            if (test.id === id) {
-                return { ...test, status: test.status === 'Active' ? 'Inactive' : 'Active' };
-            }
-            return test;
-        }));
+        const updated = tests.map(test =>
+            test.id === id ? { ...test, status: test.status === 'Active' ? 'Inactive' : 'Active' } : test
+        );
+        persistTests(updated);
     };
 
     const handleDeleteTest = () => {
         if (testToDelete) {
-            setTests(tests.filter(t => t.id !== testToDelete.id));
+            persistTests(tests.filter(t => t.id !== testToDelete.id));
             setTestToDelete(null);
         }
     };
@@ -176,16 +211,15 @@ export default function DiagnosticDashboard() {
             alert('Please provide at least a Test Name and Price.');
             return;
         }
-
         const newId = tests.length > 0 ? Math.max(...tests.map(t => t.id)) + 1 : 1;
-        setTests([...tests, {
+        const updated = [...tests, {
             id: newId,
             name: newTest.name,
             price: `₹${newTest.price}`,
             category: newTest.category,
             status: newTest.status
-        }]);
-
+        }];
+        persistTests(updated);
         setNewTest({ name: '', price: '', category: 'Blood Test', description: '', status: 'Active' });
         setIsAddTestModalOpen(false);
     };
@@ -432,7 +466,16 @@ export default function DiagnosticDashboard() {
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
-                                            {tests.length === 0 ? (
+                                            {testsLoading ? (
+                                                <tr>
+                                                    <td colSpan="5" className="px-6 py-12 text-center text-slate-400">
+                                                        <div className="flex items-center justify-center gap-2">
+                                                            <div className="w-4 h-4 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
+                                                            Loading tests...
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ) : tests.length === 0 ? (
                                                 <tr>
                                                     <td colSpan="5" className="px-6 py-16 text-center">
                                                         <div className="flex flex-col items-center justify-center">
