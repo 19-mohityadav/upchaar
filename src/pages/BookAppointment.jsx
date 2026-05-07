@@ -178,7 +178,7 @@ export default function BookAppointment() {
                 if (!data && isUUID) {
                     const { data: profileData } = await supabase
                         .from('profiles')
-                        .select('id, full_name, name, city, state, address, phone')
+                        .select('id, full_name, name, city, state, phone')
                         .eq('id', link.organization_id)
                         .maybeSingle();
                         
@@ -186,7 +186,7 @@ export default function BookAppointment() {
                         data = {
                             id: profileData.id,
                             name: profileData.full_name || profileData.name || 'Unnamed Facility',
-                            address: profileData.address || [profileData.city, profileData.state].filter(Boolean).join(', ') || '',
+                            address: [profileData.city, profileData.state].filter(Boolean).join(', ') || '',
                             phone: profileData.phone || ''
                         };
                     }
