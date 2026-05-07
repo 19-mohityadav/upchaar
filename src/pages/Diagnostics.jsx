@@ -405,6 +405,51 @@ export default function DiagnosticsPage() {
             }
         };
         fetchCenters();
+
+        // Real-time subscription for profile changes
+        const channel = supabase
+            .channel('diagnostic-centers-realtime')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'profiles',
+                    filter: 'profile_type=eq.diagnostic'
+                },
+                (payload) => {
+                    console.log('Real-time update received:', payload);
+                    if (payload.eventType === 'INSERT') {
+                        const center = payload.new;
+                        const mapped = {
+                            id: center.id,
+                            name: center.full_name || center.name || 'Diagnostic Center',
+                            location: center.address || center.city ? `${center.city || ''} ${center.state || ''}`.trim() : 'Location not specified',
+                            tests: ['Blood Test', 'Pathology', 'X-Ray'],
+                            logo: getStorageUrl(center.avatar_url, 'avatars'),
+                            dataAiHint: 'diagnostic center'
+                        };
+                        setDiagnosticCenters(prev => [mapped, ...prev]);
+                    } else if (payload.eventType === 'UPDATE') {
+                        const center = payload.new;
+                        setDiagnosticCenters(prev => prev.map(c => 
+                            c.id === center.id ? {
+                                ...c,
+                                name: center.full_name || center.name || 'Diagnostic Center',
+                                location: center.address || center.city ? `${center.city || ''} ${center.state || ''}`.trim() : 'Location not specified',
+                                logo: getStorageUrl(center.avatar_url, 'avatars')
+                            } : c
+                        ));
+                    } else if (payload.eventType === 'DELETE') {
+                        setDiagnosticCenters(prev => prev.filter(c => c.id === payload.old.id));
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, []);
 
     const filteredCenters = diagnosticCenters.filter(center => {

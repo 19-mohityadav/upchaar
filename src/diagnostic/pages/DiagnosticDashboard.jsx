@@ -1,16 +1,22 @@
 import { useAuth } from '@/auth/AuthContext.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useEffect, useRef, useState } from 'react';
+import { SignOutModal } from '@/components/landing/SignOutModal';
+import { useNavigate } from 'react-router-dom';
 import {
     Activity, Clock, DollarSign, Users, LogOut, CheckCircle, XCircle,
     Search, Edit, LayoutDashboard, TestTubes, FileText, Settings,
-    ChevronLeft, ChevronRight, Menu, Plus, X, Filter, Trash2
+    ChevronLeft, ChevronRight, Menu, Plus, X, Filter, Trash2,
+    Camera, Loader2, User, Phone, MapPin, Globe, Save
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase.js';
+import { uploadAvatar, getStorageUrl } from '@/lib/uploadImage.js';
+import { toast, Toaster } from 'sonner';
 
 export default function DiagnosticDashboard() {
-    const { profile, signOut } = useAuth();
+    const { profile, signOut, refreshProfile } = useAuth();
     const navigate = useNavigate();
     const [searchTerm, setSearchTerm] = useState('');
     const [filterCategory, setFilterCategory] = useState('All');
@@ -19,6 +25,9 @@ export default function DiagnosticDashboard() {
     const [isAddTestModalOpen, setIsAddTestModalOpen] = useState(false);
     const [editingTest, setEditingTest] = useState(null);
     const [testToDelete, setTestToDelete] = useState(null);
+    const [isSignOutModalOpen, setIsSignOutModalOpen] = useState(false);
+    const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
+    const profileRef = useRef(null);
     const [newTest, setNewTest] = useState({
         name: '',
         price: '',
@@ -27,11 +36,104 @@ export default function DiagnosticDashboard() {
         status: 'Active'
     });
 
-    const handleSignOut = async () => {
-        if (!window.confirm('Are you sure you want to sign out?')) return;
+    // Profile/Settings State
+    const [profileData, setProfileData] = useState({
+        full_name: '',
+        phone: '',
+        bio: '',
+        address: '',
+        avatar_url: ''
+    });
+    const [isSavingProfile, setIsSavingProfile] = useState(false);
+    const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+    const fileInputRef = useRef(null);
+
+    useEffect(() => {
+        if (profile) {
+            setProfileData({
+                full_name: profile.full_name || '',
+                phone: profile.phone || '',
+                bio: profile.bio || '',
+                address: profile.address || '',
+                avatar_url: profile.avatar_url || ''
+            });
+        }
+    }, [profile]);
+
+    const handleUpdateProfile = async (e) => {
+        e.preventDefault();
+        setIsSavingProfile(true);
+        try {
+            const { error } = await supabase
+                .from('profiles')
+                .update({
+                    full_name: profileData.full_name,
+                    phone: profileData.phone,
+                    bio: profileData.bio,
+                    address: profileData.address,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', profile.id);
+
+            if (error) throw error;
+            
+            // Refresh global auth state
+            await refreshProfile();
+            toast.success('Profile updated successfully!');
+        } catch (err) {
+            console.error('Detailed error updating profile:', err);
+            toast.error(err.message || 'Failed to update profile.');
+        } finally {
+            setIsSavingProfile(false);
+        }
+    };
+
+    const handleAvatarUpload = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setIsUploadingAvatar(true);
+        try {
+            const url = await uploadAvatar(file, profile.id);
+            const { error } = await supabase
+                .from('profiles')
+                .update({ avatar_url: url })
+                .eq('id', profile.id);
+
+            if (error) throw error;
+            
+            setProfileData(prev => ({ ...prev, avatar_url: url }));
+            await refreshProfile();
+            toast.success('Profile picture updated!');
+        } catch (err) {
+            console.error('Error uploading avatar:', err);
+            toast.error('Failed to upload image.');
+        } finally {
+            setIsUploadingAvatar(false);
+        }
+    };
+
+    const handleSignOut = () => {
+        setIsSignOutModalOpen(true);
+    };
+
+    const handleConfirmSignOut = async () => {
+        setIsSignOutModalOpen(false);
+        setIsProfileDropdownOpen(false);
         await signOut();
         navigate('/');
     };
+
+    // Close dropdown on outside click
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (profileRef.current && !profileRef.current.contains(event.target)) {
+                setIsProfileDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     const stats = [
         { title: "Today's Tests", value: "0", icon: Clock, color: "text-blue-600", bg: "bg-blue-100" },
@@ -140,21 +242,25 @@ export default function DiagnosticDashboard() {
                 className="bg-white border-r border-slate-200 h-full flex flex-col shadow-sm relative z-20 flex-shrink-0 transition-all duration-300"
             >
                 {/* Sidebar Header */}
-                <div className="h-20 flex items-center px-4 border-b border-slate-200">
-                    <div className="flex items-center gap-3 overflow-hidden">
-                        <div className="w-10 h-10 min-w-[40px] bg-teal-100 text-teal-600 rounded-xl flex items-center justify-center">
-                            <Activity size={24} />
-                        </div>
-                        <AnimatePresence>
+                <div className="h-24 flex items-center px-4 border-b border-slate-50/50">
+                    <div className="flex items-center gap-3 overflow-hidden w-full">
+                        <motion.div 
+                            whileHover={{ scale: 1.05 }}
+                            className="w-12 h-12 min-w-[48px] rounded-full border-2 border-[#a7f3d0] flex items-center justify-center p-1.5 bg-white overflow-hidden shadow-sm"
+                        >
+                            <img src="/logo.png" alt="Upchar Logo" className="w-full h-full object-contain" />
+                        </motion.div>
+                        <AnimatePresence mode="wait">
                             {isSidebarOpen && (
                                 <motion.div
-                                    initial={{ opacity: 0, width: 0 }}
-                                    animate={{ opacity: 1, width: 'auto' }}
-                                    exit={{ opacity: 0, width: 0 }}
-                                    className="whitespace-nowrap"
+                                    initial={{ opacity: 0, x: -10 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    exit={{ opacity: 0, x: -10 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="flex items-baseline gap-1 select-none"
                                 >
-                                    <h1 className="text-lg font-bold text-slate-800">Upchar Health</h1>
-                                    <p className="text-xs text-slate-500">Diagnostic Centre</p>
+                                    <span className="text-xl sm:text-2xl font-black text-[#0d9488] tracking-tighter leading-none">Upchar</span>
+                                    <span className="text-xl sm:text-2xl font-black text-[#dc2626] tracking-tighter leading-none">Health</span>
                                 </motion.div>
                             )}
                         </AnimatePresence>
@@ -171,66 +277,40 @@ export default function DiagnosticDashboard() {
 
                 {/* Sidebar Links */}
                 <div className="flex-1 py-6 flex flex-col gap-2 px-3 overflow-y-auto">
-                    {navItems.map((item) => {
-                        const isActive = activeTab === item.name;
-                        return (
-                            <button
-                                key={item.name}
-                                onClick={() => setActiveTab(item.name)}
-                                className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 group ${isActive
-                                        ? 'bg-teal-50 text-teal-700 font-medium'
-                                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                                    }`}
-                                title={!isSidebarOpen ? item.name : ''}
-                            >
-                                <item.icon
-                                    size={20}
-                                    className={`min-w-[20px] transition-colors ${isActive ? 'text-teal-600' : 'text-slate-400 group-hover:text-slate-600'}`}
-                                />
-                                <AnimatePresence>
-                                    {isSidebarOpen && (
-                                        <motion.span
-                                            initial={{ opacity: 0, width: 0 }}
-                                            animate={{ opacity: 1, width: 'auto' }}
-                                            exit={{ opacity: 0, width: 0 }}
-                                            className="whitespace-nowrap"
-                                        >
-                                            {item.name}
-                                        </motion.span>
-                                    )}
-                                </AnimatePresence>
-                                {isActive && isSidebarOpen && (
-                                    <motion.div
-                                        layoutId="sidebar-active-indicator"
-                                        className="ml-auto w-1.5 h-1.5 rounded-full bg-teal-600"
-                                    />
+                    {navItems.map((item) => (
+                        <button
+                            key={item.name}
+                            onClick={() => setActiveTab(item.name)}
+                            className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 group ${activeTab === item.name
+                                    ? 'bg-teal-50 text-teal-700 font-medium'
+                                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                                }`}
+                            title={!isSidebarOpen ? item.name : ''}
+                        >
+                            <item.icon
+                                size={20}
+                                className={`min-w-[20px] transition-colors ${activeTab === item.name ? 'text-teal-600' : 'text-slate-400 group-hover:text-slate-600'}`}
+                            />
+                            <AnimatePresence>
+                                {isSidebarOpen && (
+                                    <motion.span
+                                        initial={{ opacity: 0, width: 0 }}
+                                        animate={{ opacity: 1, width: 'auto' }}
+                                        exit={{ opacity: 0, width: 0 }}
+                                        className="whitespace-nowrap"
+                                    >
+                                        {item.name}
+                                    </motion.span>
                                 )}
-                            </button>
-                        );
-                    })}
-                </div>
-
-                {/* Sidebar Footer */}
-                <div className="p-4 border-t border-slate-200">
-                    <button
-                        onClick={handleSignOut}
-                        className={`flex items-center gap-3 px-3 py-3 rounded-xl text-red-600 hover:bg-red-50 transition-colors w-full ${!isSidebarOpen && 'justify-center'}`}
-                        title={!isSidebarOpen ? 'Sign Out' : ''}
-                    >
-                        <LogOut size={20} className="min-w-[20px]" />
-                        <AnimatePresence>
-                            {isSidebarOpen && (
-                                <motion.span
-                                    initial={{ opacity: 0, width: 0 }}
-                                    animate={{ opacity: 1, width: 'auto' }}
-                                    exit={{ opacity: 0, width: 0 }}
-                                    className="whitespace-nowrap font-medium"
-                                >
-                                    Sign Out
-                                </motion.span>
+                            </AnimatePresence>
+                            {activeTab === item.name && isSidebarOpen && (
+                                <motion.div
+                                    layoutId="sidebar-active-indicator"
+                                    className="ml-auto w-1.5 h-1.5 rounded-full bg-teal-600"
+                                />
                             )}
-                        </AnimatePresence>
-                    </button>
+                        </button>
+                    ))}
                 </div>
             </motion.div>
 
@@ -249,14 +329,46 @@ export default function DiagnosticDashboard() {
                             <h2 className="text-xl font-bold text-slate-800">{activeTab}</h2>
                         </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                        <div className="hidden sm:block text-right">
-                            <p className="text-sm font-medium text-slate-800">{profile?.full_name || 'Diagnostic Admin'}</p>
-                            <p className="text-xs text-slate-500">Center Manager</p>
-                        </div>
-                        <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center border border-slate-200">
-                            <Users size={20} className="text-slate-500" />
-                        </div>
+                    <div className="flex items-center gap-4 relative" ref={profileRef}>
+                        <button
+                            onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
+                            className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center border border-slate-200 hover:border-teal-500 transition-all overflow-hidden focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
+                        >
+                            {profile?.avatar_url ? (
+                                <img src={profile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                            ) : (
+                                <div className="w-full h-full bg-gradient-to-br from-teal-500 to-emerald-400 flex items-center justify-center text-white font-bold text-sm">
+                                    {profile?.full_name?.charAt(0) || 'D'}
+                                </div>
+                            )}
+                        </button>
+
+                        <AnimatePresence>
+                            {isProfileDropdownOpen && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                    transition={{ duration: 0.2 }}
+                                    className="absolute right-0 top-full mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 z-50"
+                                >
+                                    <div className="px-4 py-3 border-b border-slate-50 mb-1">
+                                        <p className="text-sm font-bold text-slate-800 truncate">{profile?.full_name || 'Diagnostic Admin'}</p>
+                                        <p className="text-[11px] text-slate-500 font-medium">Diagnostic Center Manager</p>
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            setIsProfileDropdownOpen(false);
+                                            handleSignOut();
+                                        }}
+                                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors text-left"
+                                    >
+                                        <LogOut size={16} />
+                                        Sign Out
+                                    </button>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                     </div>
                 </div>
 
@@ -454,7 +566,180 @@ export default function DiagnosticDashboard() {
                             </motion.div>
                         )}
 
-                        {['Patients', 'Reports', 'Settings'].includes(activeTab) && (
+                        {activeTab === 'Settings' && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="max-w-4xl mx-auto pb-10"
+                            >
+                                <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-200/50 overflow-hidden">
+                                    {/* Profile Header */}
+                                    <div className="bg-gradient-to-br from-teal-600 via-teal-500 to-emerald-500 px-8 py-12 text-white relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/3 blur-3xl" />
+                                        <div className="absolute bottom-0 left-0 w-48 h-48 bg-teal-400/20 rounded-full translate-y-1/2 -translate-x-1/4 blur-2xl" />
+                                        
+                                        <div className="relative flex flex-col md:flex-row items-center gap-8">
+                                            {/* Avatar Section */}
+                                            <div className="relative group">
+                                                <div className="w-36 h-36 rounded-[2rem] bg-white/20 backdrop-blur-md border-4 border-white/30 flex items-center justify-center overflow-hidden shadow-2xl transition-transform duration-500 group-hover:scale-[1.02]">
+                                                    {profileData.avatar_url ? (
+                                                        <img 
+                                                            src={getStorageUrl(profileData.avatar_url, 'avatars')} 
+                                                            alt="Profile" 
+                                                            className="w-full h-full object-cover"
+                                                        />
+                                                    ) : (
+                                                        <div className="w-full h-full bg-gradient-to-br from-teal-400 to-emerald-300 flex items-center justify-center text-white text-4xl font-bold">
+                                                            {profileData.full_name?.charAt(0) || 'D'}
+                                                        </div>
+                                                    )}
+                                                    
+                                                    {isUploadingAvatar && (
+                                                        <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center">
+                                                            <Loader2 size={32} className="text-white animate-spin" />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <button 
+                                                    onClick={() => fileInputRef.current?.click()}
+                                                    disabled={isUploadingAvatar}
+                                                    className="absolute -bottom-3 -right-3 w-12 h-12 bg-white rounded-2xl shadow-lg flex items-center justify-center text-teal-600 hover:scale-110 active:scale-95 transition-all duration-200 disabled:opacity-50 z-10"
+                                                    title="Change Center Photo"
+                                                >
+                                                    <Camera size={20} />
+                                                </button>
+                                                <input 
+                                                    type="file" 
+                                                    ref={fileInputRef} 
+                                                    className="hidden" 
+                                                    accept="image/*" 
+                                                    onChange={handleAvatarUpload} 
+                                                />
+                                            </div>
+
+                                            {/* Header Info */}
+                                            <div className="text-center md:text-left space-y-3">
+                                                <div className="space-y-1">
+                                                    <h2 className="text-4xl font-black tracking-tight">{profileData.full_name || 'Diagnostic Center'}</h2>
+                                                    <p className="text-teal-50/80 font-medium flex items-center justify-center md:justify-start gap-2 text-lg">
+                                                        <MapPin size={18} className="text-teal-200" /> {profileData.address || 'Location not set'}
+                                                    </p>
+                                                </div>
+                                                <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 pt-2">
+                                                    <span className="px-4 py-1.5 bg-white/20 backdrop-blur-md rounded-xl text-xs font-black uppercase tracking-widest border border-white/10">
+                                                        Healthcare Provider
+                                                    </span>
+                                                    <span className="px-4 py-1.5 bg-emerald-400/20 backdrop-blur-md text-emerald-100 rounded-xl text-xs font-black uppercase tracking-widest border border-emerald-400/20">
+                                                        Verified Diagnostic Center
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Settings Form */}
+                                    <form onSubmit={handleUpdateProfile} className="p-10 space-y-12">
+                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                                            {/* Left Column: Core Info */}
+                                            <div className="space-y-8">
+                                                <div className="flex items-center gap-3 pb-2 border-b border-slate-50">
+                                                    <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center text-teal-600">
+                                                        <User size={18} />
+                                                    </div>
+                                                    <h3 className="text-lg font-bold text-slate-800">Basic Information</h3>
+                                                </div>
+                                                
+                                                <div className="space-y-6">
+                                                    <div className="space-y-2">
+                                                        <label className="text-sm font-bold text-slate-500 ml-1">Center Name</label>
+                                                        <input 
+                                                            type="text" 
+                                                            value={profileData.full_name}
+                                                            onChange={(e) => setProfileData({...profileData, full_name: e.target.value})}
+                                                            className="w-full px-6 py-4 bg-slate-50/50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500 outline-none transition-all font-semibold text-slate-700 placeholder:text-slate-300"
+                                                            placeholder="e.g. LifeCare Diagnostics"
+                                                        />
+                                                    </div>
+                                                    
+                                                    <div className="space-y-2">
+                                                        <label className="text-sm font-bold text-slate-500 ml-1">Contact Number</label>
+                                                        <div className="relative">
+                                                            <input 
+                                                                type="tel" 
+                                                                value={profileData.phone}
+                                                                onChange={(e) => setProfileData({...profileData, phone: e.target.value})}
+                                                                className="w-full px-6 py-4 pl-14 bg-slate-50/50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500 outline-none transition-all font-semibold text-slate-700 placeholder:text-slate-300"
+                                                                placeholder="+91 00000 00000"
+                                                            />
+                                                            <Phone size={20} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Right Column: Location */}
+                                            <div className="space-y-8">
+                                                <div className="flex items-center gap-3 pb-2 border-b border-slate-50">
+                                                    <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600">
+                                                        <MapPin size={18} />
+                                                    </div>
+                                                    <h3 className="text-lg font-bold text-slate-800">Location Details</h3>
+                                                </div>
+                                                
+                                                <div className="space-y-2">
+                                                    <label className="text-sm font-bold text-slate-500 ml-1">Full Office Address</label>
+                                                    <textarea 
+                                                        rows={5}
+                                                        value={profileData.address}
+                                                        onChange={(e) => setProfileData({...profileData, address: e.target.value})}
+                                                        className="w-full px-6 py-4 bg-slate-50/50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500 outline-none transition-all font-semibold text-slate-700 placeholder:text-slate-300 resize-none leading-relaxed"
+                                                        placeholder="Enter the complete operational address..."
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Bottom Section: Description */}
+                                        <div className="space-y-8 pt-4">
+                                            <div className="flex items-center gap-3 pb-2 border-b border-slate-50">
+                                                <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
+                                                    <FileText size={18} />
+                                                </div>
+                                                <h3 className="text-lg font-bold text-slate-800">Center Description</h3>
+                                            </div>
+                                            
+                                            <div className="space-y-2">
+                                                <label className="text-sm font-bold text-slate-500 ml-1">About the Center</label>
+                                                <textarea 
+                                                    rows={4}
+                                                    value={profileData.bio}
+                                                    onChange={(e) => setProfileData({...profileData, bio: e.target.value})}
+                                                    className="w-full px-6 py-4 bg-slate-50/50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500 outline-none transition-all font-semibold text-slate-700 placeholder:text-slate-300 resize-none leading-relaxed"
+                                                    placeholder="Highlight your specialties, high-end equipment, or center history..."
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Submit Button */}
+                                        <div className="flex justify-end pt-8 border-t border-slate-50">
+                                            <button 
+                                                type="submit"
+                                                disabled={isSavingProfile}
+                                                className="group relative flex items-center gap-3 bg-slate-900 hover:bg-teal-600 text-white px-10 py-4 rounded-[1.5rem] font-black text-lg transition-all duration-300 shadow-xl shadow-slate-200 hover:shadow-teal-500/25 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none overflow-hidden"
+                                            >
+                                                <div className="absolute inset-0 bg-gradient-to-r from-teal-500 to-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                                                <span className="relative flex items-center gap-3">
+                                                    {isSavingProfile ? <Loader2 size={22} className="animate-spin" /> : <Save size={22} />}
+                                                    Update Profile
+                                                </span>
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </motion.div>
+                        )}
+
+                        {['Patients', 'Reports'].includes(activeTab) && (
                             <motion.div
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
@@ -463,7 +748,6 @@ export default function DiagnosticDashboard() {
                                 <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-6">
                                     {activeTab === 'Patients' && <Users size={40} className="text-slate-400" />}
                                     {activeTab === 'Reports' && <FileText size={40} className="text-slate-400" />}
-                                    {activeTab === 'Settings' && <Settings size={40} className="text-slate-400" />}
                                 </div>
                                 <h3 className="text-xl font-bold text-slate-700 mb-2">{activeTab} Module</h3>
                                 <p className="text-slate-500 max-w-sm">This section is currently under development. Check back later for updates.</p>
@@ -719,6 +1003,13 @@ export default function DiagnosticDashboard() {
                     </div>
                 )}
             </AnimatePresence>
+
+            <Toaster position="top-right" richColors />
+            <SignOutModal
+                isOpen={isSignOutModalOpen}
+                onClose={() => setIsSignOutModalOpen(false)}
+                onConfirm={handleConfirmSignOut}
+            />
         </div>
     );
 }

@@ -60,19 +60,27 @@ export default function AppLayout({ children, hideSidebar = false, hideNavbar = 
     const SidebarContent = ({ onClose }) => (
         <div className="flex flex-col h-full">
             {/* Logo + close */}
-            <div className="flex items-center justify-between px-4 py-5 border-b border-slate-100 h-16 flex-shrink-0">
-                <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-5 border-b border-slate-50/50 h-24 flex-shrink-0">
+                <div className="flex items-center gap-3">
+                    <motion.div 
+                        whileHover={{ scale: 1.05 }}
+                        className="h-12 w-12 rounded-full border-2 border-[#a7f3d0] flex items-center justify-center p-1.5 bg-white overflow-hidden shadow-sm flex-shrink-0"
+                    >
                         <img src="/logo.png" alt="Upchar Logo" className="w-full h-full object-contain" />
-                    </div>
-                    <AnimatePresence>
+                    </motion.div>
+                    <AnimatePresence mode="wait">
                         {(!collapsed || onClose) && (
-                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.12 }}
-                                className="flex flex-col sm:flex-row sm:gap-1 tracking-tight">
-                                <span className="font-extrabold text-sm text-teal-600 leading-tight whitespace-nowrap">
+                            <motion.div 
+                                initial={{ opacity: 0, x: -10 }} 
+                                animate={{ opacity: 1, x: 0 }} 
+                                exit={{ opacity: 0, x: -10 }} 
+                                transition={{ duration: 0.12 }}
+                                className="flex items-baseline gap-1 tracking-tighter select-none"
+                            >
+                                <span className="text-xl sm:text-2xl font-black text-[#0d9488] whitespace-nowrap leading-none">
                                     Upchar
                                 </span>
-                                <span className="font-bold text-[10px] sm:text-xs text-red-600 whitespace-nowrap">Health</span>
+                                <span className="text-xl sm:text-2xl font-black text-[#dc2626] whitespace-nowrap leading-none">Health</span>
                             </motion.div>
                         )}
                     </AnimatePresence>
