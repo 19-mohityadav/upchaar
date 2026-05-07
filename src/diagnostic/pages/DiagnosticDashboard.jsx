@@ -9,8 +9,8 @@ import {
     ChevronLeft, ChevronRight, Menu, Plus, X, Filter, Trash2,
     Camera, Loader2, User, Phone, MapPin, Globe, Save
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+
+
 import { supabase } from '@/lib/supabase.js';
 import { uploadAvatar, getStorageUrl } from '@/lib/uploadImage.js';
 import { toast, Toaster } from 'sonner';
