@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import Skeleton from 'react-loading-skeleton';
+import 'react-loading-skeleton/dist/skeleton.css';
 import { useAuth } from '@/auth/AuthContext.jsx';
 
 import { supabase } from '@/lib/supabase.js';
@@ -552,12 +554,12 @@ export default function MedicalDashboard() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
                 {loading ? (
                   Array(4).fill(0).map((_, i) => (
-                    <div key={i} className="bg-white p-4 sm:p-6 rounded-2xl border-l-4 border-teal-500 shadow-sm animate-pulse">
+                    <div key={i} className="bg-white p-4 sm:p-6 rounded-2xl border-l-4 border-teal-500 shadow-sm">
                       <div className="flex items-center gap-3 sm:gap-4">
-                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gray-100 rounded-xl" />
+                        <Skeleton circle width={48} height={48} />
                         <div className="flex-1">
-                          <div className="h-3 bg-gray-100 rounded w-16 mb-2" />
-                          <div className="h-6 bg-gray-100 rounded w-12" />
+                          <Skeleton width="60%" height={12} className="mb-2" />
+                          <Skeleton width="40%" height={24} />
                         </div>
                       </div>
                     </div>
@@ -595,10 +597,10 @@ export default function MedicalDashboard() {
                     {loading ? (
                       Array(3).fill(0).map((_, i) => (
                         <div key={i} className="bg-white p-5 sm:p-6 rounded-2xl text-center flex flex-col items-center shadow-sm">
-                          <div className="w-20 h-20 rounded-full bg-gray-100 mb-4 animate-pulse" />
-                          <div className="h-4 bg-gray-100 rounded w-32 mb-2 animate-pulse" />
-                          <div className="h-3 bg-gray-100 rounded w-24 mb-4 animate-pulse" />
-                          <div className="w-full h-8 bg-gray-50 rounded-lg animate-pulse" />
+                          <Skeleton circle width={80} height={80} className="mb-4" />
+                          <Skeleton width="120px" height={16} className="mb-2" />
+                          <Skeleton width="80px" height={12} className="mb-4" />
+                          <Skeleton width="100%" height={32} />
                         </div>
                       ))
                     ) : staffDoctors.length > 0 ? (
@@ -753,7 +755,20 @@ export default function MedicalDashboard() {
                     <span className="material-symbols-outlined text-teal-600">history</span> Activity
                   </h3>
                   <div className="bg-white rounded-2xl p-5 sm:p-6" style={{ boxShadow: '0 4px 6px -1px rgb(0 0 0/0.05)' }}>
-                    {appointments && appointments.length > 0 ? (
+                    {loading || appointments === null ? (
+                      <div className="space-y-6">
+                        {Array(3).fill(0).map((_, i) => (
+                          <div key={i} className="flex gap-4">
+                            <Skeleton circle width={12} height={12} className="mt-1" />
+                            <div className="flex-1">
+                              <Skeleton width="70%" height={14} className="mb-1" />
+                              <Skeleton width="40%" height={10} className="mb-2" />
+                              <Skeleton width="50%" height={12} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : appointments.length > 0 ? (
                       appointments.slice(0, 5).map((item, idx) => (
                         <div key={item.id} className="flex gap-4 mb-6 last:mb-0">
                           <div className="relative flex-shrink-0">

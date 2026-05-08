@@ -1,6 +1,6 @@
 import { useAuth } from '@/auth/AuthContext.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { SignOutModal } from '@/components/landing/SignOutModal';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -135,12 +135,13 @@ export default function DiagnosticDashboard() {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    const stats = [
+    const stats = useMemo(() => [
         { title: "Today's Tests", value: "0", icon: Clock, color: "text-blue-600", bg: "bg-blue-100" },
         { title: "Today's Revenue", value: "₹0", icon: DollarSign, color: "text-emerald-600", bg: "bg-emerald-100" },
         { title: "Lifetime Tests", value: "0", icon: Activity, color: "text-purple-600", bg: "bg-purple-100" },
         { title: "Lifetime Revenue", value: "₹0", icon: DollarSign, color: "text-orange-600", bg: "bg-orange-100" }
-    ];
+    ], []);
+
 
     const [tests, setTests] = useState([]);
     const [testsLoading, setTestsLoading] = useState(true);
@@ -171,7 +172,8 @@ export default function DiagnosticDashboard() {
             if (dc) {
                 setDcId(dc.id);
                 // tests column is an array of objects: [{id, name, price, category, status}]
-                setTests(Array.isArray(dc.tests) ? dc.tests : []);
+                const rawTests = Array.isArray(dc.tests) ? dc.tests : [];
+                setTests(rawTests.filter(t => t && typeof t === 'object'));
             }
             setTestsLoading(false);
         };
@@ -189,8 +191,11 @@ export default function DiagnosticDashboard() {
     };
 
     const filteredTests = tests.filter(test => {
-        const matchesSearch = test.name.toLowerCase().includes(searchTerm.toLowerCase()) || test.category.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesCategory = filterCategory === 'All' || test.category === filterCategory;
+        const name = test?.name || '';
+        const category = test?.category || '';
+        const matchesSearch = name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                            category.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesCategory = filterCategory === 'All' || category === filterCategory;
         return matchesSearch && matchesCategory;
     });
 
@@ -906,17 +911,31 @@ export default function DiagnosticDashboard() {
                                 <form className="space-y-5">
                                     <div>
                                         <label className="block text-sm font-medium text-slate-700 mb-1">Test Name</label>
-                                        <input type="text" defaultValue={editingTest.name} className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all" />
+                                        <input 
+                                            type="text" 
+                                            value={editingTest.name} 
+                                            onChange={(e) => setEditingTest({...editingTest, name: e.target.value})}
+                                            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all" 
+                                        />
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
                                             <label className="block text-sm font-medium text-slate-700 mb-1">Price</label>
-                                            <input type="text" defaultValue={editingTest.price} className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all" />
+                                            <input 
+                                                type="text" 
+                                                value={editingTest.price} 
+                                                onChange={(e) => setEditingTest({...editingTest, price: e.target.value})}
+                                                className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all" 
+                                            />
                                         </div>
                                         <div>
                                             <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
-                                            <select defaultValue={editingTest.category} className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all bg-white">
+                                            <select 
+                                                value={editingTest.category} 
+                                                onChange={(e) => setEditingTest({...editingTest, category: e.target.value})}
+                                                className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all bg-white"
+                                            >
                                                 <option>Blood Test</option>
                                                 <option>Radiology</option>
                                                 <option>Pathology</option>
@@ -935,7 +954,8 @@ export default function DiagnosticDashboard() {
                                             <input
                                                 type="checkbox"
                                                 className="sr-only peer"
-                                                defaultChecked={editingTest.status === 'Active'}
+                                                checked={editingTest.status === 'Active'}
+                                                onChange={(e) => setEditingTest({...editingTest, status: e.target.checked ? 'Active' : 'Inactive'})}
                                             />
                                             <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-teal-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
                                         </label>
@@ -951,7 +971,15 @@ export default function DiagnosticDashboard() {
                                 >
                                     Cancel
                                 </button>
-                                <button type="button" className="px-5 py-2.5 text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 rounded-lg transition-colors shadow-sm">
+                                <button 
+                                    type="button" 
+                                    onClick={() => {
+                                        const updated = tests.map(t => t.id === editingTest.id ? editingTest : t);
+                                        persistTests(updated);
+                                        setEditingTest(null);
+                                    }}
+                                    className="px-5 py-2.5 text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 rounded-lg transition-colors shadow-sm"
+                                >
                                     Save Changes
                                 </button>
                             </div>
@@ -1004,6 +1032,7 @@ export default function DiagnosticDashboard() {
                 )}
             </AnimatePresence>
 
+            {/* Toaster & Modals */}
             <Toaster position="top-right" richColors />
             <SignOutModal
                 isOpen={isSignOutModalOpen}
