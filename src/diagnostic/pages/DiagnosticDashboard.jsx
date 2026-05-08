@@ -170,7 +170,8 @@ export default function DiagnosticDashboard() {
             if (dc) {
                 setDcId(dc.id);
                 // tests column is an array of objects: [{id, name, price, category, status}]
-                setTests(Array.isArray(dc.tests) ? dc.tests : []);
+                const rawTests = Array.isArray(dc.tests) ? dc.tests : [];
+                setTests(rawTests.filter(t => t && typeof t === 'object'));
             }
             setTestsLoading(false);
         };
@@ -188,8 +189,11 @@ export default function DiagnosticDashboard() {
     };
 
     const filteredTests = tests.filter(test => {
-        const matchesSearch = test.name.toLowerCase().includes(searchTerm.toLowerCase()) || test.category.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesCategory = filterCategory === 'All' || test.category === filterCategory;
+        const name = test?.name || '';
+        const category = test?.category || '';
+        const matchesSearch = name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                            category.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesCategory = filterCategory === 'All' || category === filterCategory;
         return matchesSearch && matchesCategory;
     });
 

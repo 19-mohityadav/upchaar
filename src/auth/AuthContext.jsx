@@ -20,12 +20,15 @@ import { normalisePhone } from '@/lib/otpService.js';
 const AuthContext = createContext(null);
 
 export const PROFILE_TYPE_DASHBOARDS = {
-    patient: '/',
+    patient: '/patient/dashboard',
     doctor: '/doctor/dashboard',
     clinic: '/clinic/dashboard',
     diagnostic: '/diagnostic/dashboard',
     medical: '/medical/dashboard',
     hospital: '/hospital/dashboard',
+    blogger: '/blogger/dashboard',
+    super_admin: '/admin/dashboard',
+    support_admin: '/admin/dashboard',
 };
 
 export function AuthProvider({ children }) {
