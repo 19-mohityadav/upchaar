@@ -1,5 +1,5 @@
 {
-  "name": "upchaar-health",
+  "name": "upchar-health",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -36,27 +36,38 @@
     "@radix-ui/react-tooltip": "^1.1.8",
     "@supabase/supabase-js": "^2.97.0",
     "@vercel/analytics": "^2.0.1",
+    "@vercel/speed-insights": "^2.0.0",
     "@vis.gl/react-google-maps": "^1.1.0",
+    "chart.js": "^4.5.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "d3": "^7.9.0",
     "date-fns": "^3.6.0",
     "dotenv": "^16.5.0",
+    "echarts": "^6.0.0",
+    "echarts-for-react": "^3.0.6",
     "embla-carousel-react": "^8.6.0",
-    "firebase": "^11.9.1",
-    "framer-motion": "^11.5.7",
+    "framer-motion": "^11.18.2",
     "init": "^0.1.2",
+    "lint": "^1.2.2",
+    "lodash": "^4.18.1",
     "lucide-react": "^0.475.0",
     "react": "^18.3.1",
+    "react-chartjs-2": "^5.3.1",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",
+    "react-easy-crop": "^5.5.7",
+    "react-helmet-async": "^3.0.0",
     "react-hook-form": "^7.54.2",
     "react-loading-skeleton": "^3.5.0",
     "react-router-dom": "^6.30.3",
-    "recharts": "^2.15.1",
+    "recharts": "^2.15.4",
+    "sitemap": "^9.0.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7",
-    "zod": "^3.24.2"
+    "zod": "^3.24.2",
+    "zustand": "^5.0.12"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
@@ -65,6 +76,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
     "eslint": "^9.17.0",
+    "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^5.0.0",
     "eslint-plugin-react-refresh": "^0.4.16",
     "globals": "^15.14.0",
@@ -76,13 +88,13 @@
   "main": "eslint.config.js",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/wtechsan-ssetch/upchaar.git"
+    "url": "git+https://github.com/wtechsan-ssetch/upchar.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/wtechsan-ssetch/upchaar/issues"
+    "url": "https://github.com/wtechsan-ssetch/upchar/issues"
   },
-  "homepage": "https://github.com/wtechsan-ssetch/upchaar#readme"
+  "homepage": "https://github.com/wtechsan-ssetch/upchar#readme"
 }

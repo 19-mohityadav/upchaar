@@ -46,6 +46,7 @@ export default function DashboardGate() {
         clinic: '/clinic/dashboard',
         medical: '/medical/dashboard',
         hospital: '/hospital/dashboard',
+        diagnostic: '/diagnostic/dashboard',
         blogger: '/blogger/dashboard',
         super_admin: '/admin/dashboard',
         support_admin: '/admin/dashboard',

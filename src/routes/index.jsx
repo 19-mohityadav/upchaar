@@ -1,7 +1,7 @@
 /**
  * routes/index.jsx
  * ─────────────────────────────────────────────────
- * Master routes file for Upchaar Health.
+ * Master routes file for Upchar Health.
  *
  * React Router v6 requires that only <Route> elements
  * (or React.Fragments containing Routes) appear as
@@ -46,14 +46,16 @@ const DiagnosticsPage = lazy(() => import('@/pages/Diagnostics'));
 const HospitalsPage   = lazy(() => import('@/pages/Hospitals'));
 const MedicalsPage    = lazy(() => import('@/pages/Medicals.jsx'));
 const RecordsPage     = lazy(() => import('@/pages/Records'));
-import EmergencyPage   from '@/pages/Emergency';
-// const EmergencyPage   = lazy(() => import('@/pages/Emergency'));
+const PrescriptionPage = lazy(() => import('@/pages/PrescriptionPage.jsx'));
+const EmergencyPage   = lazy(() => import('@/pages/Emergency'));
+
 const BlogsPage       = lazy(() => import('@/pages/Blogs.jsx'));
 const AppointmentOptions = lazy(() => import('@/pages/AppointmentOptions.jsx'));
 const BookAppointment = lazy(() => import('@/pages/BookAppointment.jsx'));
 const BookAppointmentQueued = lazy(() => import('@/pages/BookAppointmentQueued.jsx'));
 const BlogPostPage    = lazy(() => import('@/pages/BlogPost.jsx'));
 const TermsPage       = lazy(() => import('@/pages/Terms.jsx'));
+const PrivacyPolicyPage = lazy(() => import('@/pages/PrivacyPolicy.jsx'));
 
 // ── PATIENT pages ─────────────────────────────────────
 const PatientLogin     = lazy(() => import('@/patient/pages/PatientLogin.jsx'));
@@ -85,6 +87,7 @@ const DoctorProfile      = lazy(() => import('@/doctor/pages/DoctorProfile.jsx')
 const DoctorClinicPatients = lazy(() => import('@/doctor/pages/DoctorClinicPatients.jsx'));
 const DoctorReleaseRequests = lazy(() => import('@/doctor/pages/DoctorReleaseRequests.jsx'));
 const DoctorTimetable = lazy(() => import('@/doctor/pages/DoctorTimetable.jsx'));
+const DoctorSlotPatients = lazy(() => import('@/doctor/pages/DoctorSlotPatients.jsx'));
 
 // ── BLOGGER pages ─────────────────────────────────────
 const BloggerLayout   = lazy(() => import('@/blog/layouts/BloggerLayout.jsx'));
@@ -97,6 +100,7 @@ const BloggerProfile  = lazy(() => import('@/blog/pages/BloggerProfile.jsx'));
 // ── MEDICAL & CLINIC pages ───────────
 const MedicalDashboard = lazy(() => import('@/medical/pages/MedicalDashboard.jsx'));
 const ClinicDashboard = lazy(() => import('@/clinic/pages/ClinicDashboard.jsx'));
+const DiagnosticDashboard = lazy(() => import('@/diagnostic/pages/DiagnosticDashboard.jsx'));
 
 // ── Minimal loading fallback ───────────────────────────
 const PageLoader = () => (
@@ -157,12 +161,14 @@ export function AppRoutes() {
             <Route path="/hospitals" element={<AppLayout><HospitalsPage /></AppLayout>} />
             <Route path="/medicals" element={<AppLayout><MedicalsPage /></AppLayout>} />
             <Route path="/records" element={<AppLayout><RecordsPage /></AppLayout>} />
+            <Route path="/prescription/:id" element={<PrescriptionPage />} />
             <Route path="/emergency" element={<EmergencyPage />} />
 
             {/* Blog: public, no nav/sidebar */}
             <Route path="/blogs" element={<BlogsPage />} />
             <Route path="/blogs/:slug" element={<BlogPostPage />} />
             <Route path="/terms" element={<TermsPage />} />
+            <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
 
 
             {/* ═══════════════════════════════════════
@@ -216,6 +222,7 @@ export function AppRoutes() {
                 <Route path="clinics/:clinicName" element={<DoctorClinicPatients />} />
                 <Route path="release" element={<DoctorReleaseRequests />} />
                 <Route path="timetable" element={<DoctorTimetable />} />
+                <Route path="slot-patients" element={<DoctorSlotPatients />} />
                 <Route path="profile" element={<DoctorProfile />} />
             </Route>
 
@@ -242,6 +249,7 @@ export function AppRoutes() {
                 ═══════════════════════════════════════ */}
             <Route path="/medical/dashboard" element={<RequireAuth><MedicalDashboard /></RequireAuth>} />
             <Route path="/clinic/dashboard" element={<RequireAuth><ClinicDashboard /></RequireAuth>} />
+            <Route path="/diagnostic/dashboard" element={<RequireAuth><DiagnosticDashboard /></RequireAuth>} />
 
         </Routes>
         </Suspense>

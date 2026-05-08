@@ -4,7 +4,7 @@ import { useAdmin } from '../context/AdminContext.jsx';
 import { fetchDoctors, fetchPendingDoctors, updateDoctorStatus, approvePendingDoctor, rejectPendingDoctor } from '@/lib/adminApi.js';
 import {
     Search, Eye, CheckCircle, XCircle, ShieldAlert,
-    ChevronLeft, ChevronRight, ExternalLink, X, FileText, Phone, Mail, Plus, Trash2
+    ChevronLeft, ChevronRight, ExternalLink, X, FileText, Phone, Mail, Plus, Trash2, User
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -634,7 +634,7 @@ function AvatarImage({ path, supabase, className }) {
             return;
         }
 
-        supabase.storage.from('doctor-docs').createSignedUrl(path, 3600)
+        supabase.storage.from('doctor-avtar').createSignedUrl(path, 3600)
             .then(({ data, error }) => {
                 if (error || !data?.signedUrl) {
                     setError(true);
@@ -694,7 +694,7 @@ function DocumentViewer({ documents = {}, supabase }) {
             setLoading(false);
         }
         loadUrls();
-    }, [JSON.stringify(documents)]);
+    }, [documents, supabase]);
 
     return (
         <div>

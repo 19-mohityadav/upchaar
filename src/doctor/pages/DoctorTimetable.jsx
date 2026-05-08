@@ -31,7 +31,7 @@ const DAY_COLORS = {
     Sunday:    'bg-slate-50 text-slate-600 border-slate-200',
 };
 
-const EMPTY_SLOT = { day: 'Monday', time_from: '09:00', time_to: '13:00', notes: '' };
+const EMPTY_SLOT = { day: 'Monday', time_from: '09:00', time_to: '13:00', notes: '', is_active: true };
 
 /* ── Toast ───────────────────────────────────────────── */
 function Toast({ toast }) {
@@ -189,13 +189,17 @@ function ClinicCard({ org, doctorId, showToast }) {
         setSaving(true);
         try {
             const toUpsert = slots.map((item) => {
-                const { _isNew, _localId, ...s } = item;
                 return {
-                    ...s,
+                    id: item.id,
                     doctor_id: doctorId,
                     org_id: org.id,
                     org_type: org.type,
                     org_name: org.name,
+                    day: item.day,
+                    time_from: item.time_from,
+                    time_to: item.time_to,
+                    notes: item.notes || '',
+                    is_active: item.is_active === false ? false : true
                 };
             });
 
@@ -273,7 +277,7 @@ function ClinicCard({ org, doctorId, showToast }) {
                                 <div className="text-center py-6 text-slate-400">
                                     <CalendarDays size={28} className="mx-auto mb-2 text-slate-300" />
                                     <p className="text-sm">No time slots set for this clinic.</p>
-                                    <p className="text-xs mt-1">Click "Add Slot" to create your first schedule.</p>
+                                    <p className="text-xs mt-1">Click &quot;Add Slot&quot; to create your first schedule.</p>
                                 </div>
                             ) : (
                                 <AnimatePresence>
@@ -356,7 +360,30 @@ export default function DoctorTimetable() {
                         .select('id, name, address, city, state')
                         .eq('profile_id', link.organization_id)
                         .maybeSingle();
-                    return data ? { ...data, type: link.organization_type } : null;
+
+                    if (data) {
+                        return { ...data, type: link.organization_type };
+                    }
+
+                    // Fallback: org registered but not yet in specialized table
+                    const { data: profile } = await supabase
+                        .from('profiles')
+                        .select('id, full_name, profile_type')
+                        .eq('id', link.organization_id)
+                        .maybeSingle();
+
+                    if (profile) {
+                        return {
+                            id: profile.id,
+                            name: profile.full_name || 'Unnamed Organization',
+                            address: null,
+                            city: null,
+                            state: null,
+                            type: link.organization_type,
+                        };
+                    }
+
+                    return null;
                 });
 
                 const results = (await Promise.all(orgPromises)).filter(Boolean);

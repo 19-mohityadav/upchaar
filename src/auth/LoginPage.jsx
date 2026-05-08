@@ -22,7 +22,7 @@ import { sendOtp, verifyOtp, normalisePhone } from '@/lib/otpService.js';
 import { supabase } from '@/lib/supabase.js';
 import {
     Heart, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle,
-    User, Phone, ChevronDown, Building2,
+    User, Phone, ChevronDown, Building2, Activity,
     Pill, HospitalIcon, Users, CheckCircle2, ShieldCheck, RefreshCw
 } from 'lucide-react';
 
@@ -30,6 +30,7 @@ import {
 const PROFILE_TYPES = [
     { value: 'patient',  label: 'Patient',       icon: Users,         desc: 'Book appointments, manage records' },
     { value: 'clinic',   label: 'Clinic',         icon: Building2,     desc: 'Register your clinic' },
+    { value: 'diagnostic', label: 'Diagnostic Centre', icon: Activity, desc: 'Manage tests & reports' },
     { value: 'medical',  label: 'Medical Store',  icon: Pill,          desc: 'List medicines & supplies' },
     { value: 'hospital', label: 'Hospital',       icon: HospitalIcon,  desc: 'Register your hospital' },
 ];
@@ -279,11 +280,11 @@ export default function LoginPage() {
                     {/* Brand banner */}
                     <div className="bg-gradient-to-r from-teal-600 to-emerald-500 px-8 pt-8 pb-6">
                         <div className="flex items-center gap-3 mb-2">
-                            <div className="h-11 w-11 rounded-xl bg-white/20 flex items-center justify-center">
-                                <Heart size={22} className="text-white" />
+                            <div className="h-11 w-11 rounded-xl bg-white flex items-center justify-center overflow-hidden p-1">
+                                <img src="/logo.png" alt="Upchar Logo" className="w-full h-full object-contain drop-shadow-sm" />
                             </div>
                             <div>
-                                <p className="text-white/70 text-xs uppercase tracking-widest font-medium">Upchaar Health</p>
+                                <p className="text-white/70 text-xs uppercase tracking-widest font-medium">Upchar Health</p>
                                 <h1 className="text-white font-bold text-xl">
                                     {tab === 'signin' ? 'Welcome Back' : signupStep === 'otp' ? 'Verify Mobile' : 'Create Account'}
                                 </h1>
@@ -294,7 +295,7 @@ export default function LoginPage() {
                                 ? 'Sign in to access your health dashboard.'
                                 : signupStep === 'otp'
                                     ? `We sent a 6-digit code to ${signUpForm.phone}.`
-                                    : 'Join Upchaar Health — choose your account type.'}
+                                    : 'Join Upchar Health — choose your account type.'}
                         </p>
                     </div>
 
@@ -402,7 +403,7 @@ export default function LoginPage() {
                                 </button>
 
                                 <p className="text-center text-sm text-slate-500 mt-1">
-                                    Don't have an account?{' '}
+                                    Don&apos;t have an account?{' '}
                                     <button type="button" onClick={() => { setTab('signup'); setError(''); setSuccess(''); }}
                                         className="text-teal-600 font-semibold hover:underline">Sign Up</button>
                                 </p>
@@ -622,7 +623,7 @@ export default function LoginPage() {
 
                 {/* Back link */}
                 <p className="mt-4 text-center text-xs text-slate-400">
-                    <Link to="/" className="hover:text-slate-600 transition">← Back to Upchaar Health</Link>
+                    <Link to="/" className="hover:text-slate-600 transition">← Back to Upchar Health</Link>
                 </p>
             </motion.div>
 

@@ -1,7 +1,7 @@
 /**
  * App.jsx
  * ─────────────────────────────────────────────────
- * Root application component for Upchaar Health.
+ * Root application component for Upchar Health.
  *
  * Architecture:
  * ┌─ BrowserRouter
@@ -18,10 +18,11 @@
  * ─────────────────────────────────────────────────
  */
 
-import { BrowserRouter as Router } from 'react-router-dom';
+import { BrowserRouter } from 'react-router-dom';
 import { SkeletonTheme } from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
 import { Analytics } from '@vercel/analytics/react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 
 // ── Portal-specific context providers ────────────
 import { PatientProvider } from '@/patient/context/PatientContext.jsx';
@@ -39,10 +40,10 @@ import { AppRoutes } from '@/routes/index.jsx';
 
 function App() {
   return (
-    <Router>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <SkeletonTheme baseColor="#e2e8f0" highlightColor="#f1f5f9">
         {/*
-          AuthProvider is INSIDE <Router> so that components that use
+          AuthProvider is INSIDE <BrowserRouter> so that components that use
           useAuth() + useNavigate() (e.g. Landing Header sign-out) work correctly.
         */}
         <AuthProvider>
@@ -54,6 +55,7 @@ function App() {
                     <ClinicProvider>
                       <AppRoutes />
                       <Analytics />
+                      <SpeedInsights />
                     </ClinicProvider>
                   </MedicalProvider>
                 </AdminProvider>
@@ -62,7 +64,7 @@ function App() {
           </PatientProvider>
         </AuthProvider>
       </SkeletonTheme>
-    </Router>
+    </BrowserRouter>
   );
 }
 

@@ -24,11 +24,10 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { Checkbox } from '@/components/ui/checkbox';
-import { cn } from '@/lib/utils';
-import { select } from 'framer-motion/client';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/auth/AuthContext.jsx';
 import { supabase } from '@/lib/supabase.js';
+import { getStorageUrl } from '@/lib/uploadImage.js';
 import Skeleton from 'react-loading-skeleton';
 
 export default function DoctorsPage() {
@@ -54,7 +53,7 @@ export default function DoctorsPage() {
                         location: [d.clinic_name, d.city, d.state].filter(Boolean).join(', '),
                         city: (d.city || '').toLowerCase(),
                         availability: 'Available Today',
-                        avatar: d.avatar_url || null,
+                        avatar: getStorageUrl(d.avatar_url, 'doctor-avtar'),
                         experience: d.experience || 0,
                         rating: Number(d.rating) || 4.5,
                         reviews: d.total_appointments || 0,
@@ -104,7 +103,7 @@ export default function DoctorsPage() {
                                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-200">Just a click away.</span>
                             </h1>
                             <p className="text-xl text-slate-400 max-w-2xl mx-auto mb-10 font-medium leading-relaxed">
-                                Connect with India's top-rated medical specialists. <br className="hidden md:block" />
+                                Connect with India&apos;s top-rated medical specialists. <br className="hidden md:block" />
                                 Verified, experienced, and dedicated to your well-being.
                             </p>
                         </motion.div>
@@ -296,7 +295,7 @@ export default function DoctorsPage() {
                                         <div className="inline-flex h-24 w-24 items-center justify-center rounded-full bg-white shadow-xl mb-6">
                                             <Search className="h-10 w-10 text-slate-200" />
                                         </div>
-                                        <h3 className="text-xl font-extrabold text-slate-900 mb-2">We couldn't find any matches</h3>
+                                        <h3 className="text-xl font-extrabold text-slate-900 mb-2">We couldn&apos;t find any matches</h3>
                                         <p className="text-slate-500 font-medium max-w-xs mx-auto">Try broadening your search or clearing some filters to find your ideal specialist.</p>
                                         <Button 
                                             variant="outline" 
@@ -322,10 +321,11 @@ function DoctorCard({ doctor }) {
     const initials = (doctor.name || '').replace(/Dr\.\s?/, '').charAt(0).toUpperCase();
 
     const handleSelectDoctor = () => {
-        if (!authLoading && user) {
-            navigate(`/book-appointment-queued?doctorId=${doctor.id}`);
+        const route = `/book-appointment-queued?doctorId=${doctor.id}`;
+        if (!authLoading && !user) {
+            navigate('/login', { state: { from: route } });
         } else {
-            navigate(`/appointment-options?doctorId=${doctor.id}`);
+            navigate(route);
         }
     };
 

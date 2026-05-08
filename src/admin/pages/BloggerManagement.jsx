@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useAdmin } from '../context/AdminContext.jsx';
 import { supabase } from '@/lib/supabase.js';
 import {
@@ -49,7 +49,7 @@ export default function BloggerManagement() {
     };
 
     // ── Load bloggers ────────────────────────────────────────────────────────
-    const loadBloggers = async () => {
+    const loadBloggers = useCallback(async () => {
         try {
             setLoading(true);
             const { data, error } = await supabase
@@ -73,10 +73,10 @@ export default function BloggerManagement() {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
 
     // ── Load all posts ───────────────────────────────────────────────────────
-    const loadPosts = async () => {
+    const loadPosts = useCallback(async () => {
         setPostsLoading(true);
         try {
             const { data, error } = await supabase
@@ -90,10 +90,10 @@ export default function BloggerManagement() {
         } finally {
             setPostsLoading(false);
         }
-    };
+    }, []);
 
-    useEffect(() => { loadBloggers(); }, []);
-    useEffect(() => { if (tab === 'posts') loadPosts(); }, [tab]);
+    useEffect(() => { loadBloggers(); }, [loadBloggers]);
+    useEffect(() => { if (tab === 'posts') loadPosts(); }, [tab, loadPosts]);
 
     // ── Filtered bloggers ────────────────────────────────────────────────────
     const filtered = useMemo(() =>
@@ -440,7 +440,7 @@ export default function BloggerManagement() {
                             <form onSubmit={handleAdd} className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
                                 {[
                                     { key: 'name', label: 'Full Name', placeholder: 'Dr. Meera Krishnan', type: 'text', required: true },
-                                    { key: 'email', label: 'Email', placeholder: 'blogger@upchaar.health', type: 'email', required: true },
+                                    { key: 'email', label: 'Email', placeholder: 'blogger@upcharhealth.com', type: 'email', required: true },
                                     { key: 'password', label: 'Password', placeholder: 'Set login password', type: 'password', required: true },
                                     { key: 'specialty', label: 'Medical Specialty', placeholder: 'General Medicine', type: 'text', required: false },
                                     { key: 'bio', label: 'Bio (optional)', placeholder: 'Short bio…', type: 'text', required: false },
@@ -490,7 +490,7 @@ export default function BloggerManagement() {
                             <p className="text-sm text-slate-500 mb-5">{suspendTarget.name} — {suspendTarget.email}</p>
                             {!isSuspended(suspendTarget) && (
                                 <p className="text-xs text-amber-600 bg-amber-50 rounded-xl p-3 mb-4 border border-amber-200">
-                                    The blogger will see a "Suspended" screen when they log in and will only be able to submit an appeal.
+                                    The blogger will see a &quot;Suspended&quot; screen when they log in and will only be able to submit an appeal.
                                 </p>
                             )}
                             <div className="flex gap-3">
@@ -535,7 +535,7 @@ export default function BloggerManagement() {
                         <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
                             className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
                             <h3 className="font-bold text-slate-800 text-lg mb-1">Delete Post?</h3>
-                            <p className="text-sm text-slate-500 mb-5 truncate">"{deletePostTarget.title}"</p>
+                            <p className="text-sm text-slate-500 mb-5 truncate">&quot;{deletePostTarget.title}&quot;</p>
                             <div className="flex gap-3">
                                 <button onClick={() => setDeletePostTarget(null)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition">Cancel</button>
                                 <button onClick={handleDeletePost} className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition">Yes, Delete</button>

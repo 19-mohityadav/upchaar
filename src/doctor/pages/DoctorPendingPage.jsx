@@ -57,12 +57,12 @@ export default function DoctorPendingPage() {
 
                 {/* Brand */}
                 <p className="text-xs font-bold tracking-[0.25em] uppercase text-teal-600 mb-2">
-                    Upchaar Health
+                    Upchar Health
                 </p>
 
                 {/* Heading */}
                 <h1 className="text-2xl font-bold text-slate-800 leading-snug mb-4">
-                    Welcome to Upchaar Health!
+                    Welcome to Upchar Health!
                 </h1>
 
                 {isRejected ? (
@@ -80,7 +80,7 @@ export default function DoctorPendingPage() {
                             {rejectReason && (
                                 <div className="mt-4 p-4 bg-white rounded-xl border border-red-100 text-left">
                                     <p className="text-xs font-bold text-red-600 mb-1">Message from Admin:</p>
-                                    <p className="text-sm text-slate-600 italic">"{rejectReason}"</p>
+                                    <p className="text-sm text-slate-600 italic">&quot;{rejectReason}&quot;</p>
                                 </div>
                             )}
                         </div>

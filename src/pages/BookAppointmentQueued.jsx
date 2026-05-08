@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/supabase.js';
 import { useAuth } from '@/auth/AuthContext.jsx';
+import { getStorageUrl } from '@/lib/uploadImage.js';
 
 // ── Static Data ──────────────────────────────────────
 // Constants will be fetched dynamically
@@ -22,13 +23,16 @@ export default function BookAppointmentQueued() {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const { user, loading: authLoading } = useAuth();
+    const doctorIdParam = searchParams.get('doctorId');
+    const clinicIdParam = searchParams.get('clinicId');
     
     useEffect(() => {
         if (!authLoading && !user) {
-            navigate('/login', { state: { from: '/book-appointment-queued' } });
+            const returnTo = `/book-appointment-queued${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
+            navigate('/login', { state: { from: returnTo } });
             toast.error("You must be logged in to book a queued appointment.");
         }
-    }, [user, authLoading, navigate]);
+    }, [user, authLoading, navigate, searchParams]);
 
     // ── Search & Filter State ────────────────────────
     const [selectedState, setSelectedState] = useState('');
@@ -50,7 +54,7 @@ export default function BookAppointmentQueued() {
     const [availableScheduleDays, setAvailableScheduleDays] = useState([]);
     
     // ── UI Flow State ────────────────────────────────
-    const [step, setStep] = useState(1); // 1: Search, 2: Clinic/Slot, 3: Details & OTP, 4: Payment, 5: Confirmation
+    const [step, setStep] = useState(doctorIdParam ? 2 : 1); // 1: Search, 2: Clinic/Slot, 3: Details & OTP, 4: Payment, 5: Confirmation
     const [bookingLoading, setBookingLoading] = useState(false);
     const [bookingSuccess, setBookingSuccess] = useState(false);
 
@@ -112,7 +116,7 @@ export default function BookAppointmentQueued() {
     }, [selectedState]);
 
     // ── Geolocation ──────────────────────────────────
-    const handleAutoDetect = () => {
+    const handleAutoDetect = useCallback(() => {
         if (detectingLocation) return;
         setDetectingLocation(true);
         if ("geolocation" in navigator) {
@@ -134,12 +138,10 @@ export default function BookAppointmentQueued() {
         } else {
             setDetectingLocation(false);
         }
-    };
+    }, [detectingLocation]);
 
-    // Auto-detect on mount
-    useEffect(() => {
-        handleAutoDetect();
-    }, []);
+    // Auto-detect only if user is on step 1 (browsing, no doctorId in URL)
+    // Removed auto-detect on mount since most users arrive via a doctorId link
 
     // ── Fetch Doctors ────────────────────────────────
     useEffect(() => {
@@ -157,22 +159,36 @@ export default function BookAppointmentQueued() {
         fetchDoctors();
     }, [selectedState, selectedCity]);
 
-    // ── Fetch Clinics & Timetables for Selected Doctor ────────────
-    // ── Handle Deep Link Doctor & Redirect ──────────────────────
+    // ── Handle Deep Link Doctor ──────────────────────────────────────
     useEffect(() => {
         const doctorId = searchParams.get('doctorId');
         if (!doctorId) {
-            navigate('/doctors');
+            // No doctor ID in URL — stay on step 1 for searching
             return;
         }
 
-        if (doctors.length > 0) {
-            const doc = doctors.find(d => d.id === doctorId);
-            if (doc && !selectedDoctor) {
-                handleSelectDoctor(doc);
+        // Fetch this doctor directly by ID, regardless of the filter state
+        const fetchAndSelectDoctor = async () => {
+            setLoading(true);
+            const { data, error } = await supabase
+                .from('doctors')
+                .select('*')
+                .eq('id', doctorId)
+                .maybeSingle();
+
+            if (error || !data) {
+                console.error('Doctor not found:', error);
+                setLoading(false);
+                navigate('/doctors');
+                return;
             }
-        }
-    }, [searchParams, doctors, selectedDoctor, navigate]);
+
+            await handleSelectDoctor(data);
+        };
+
+        fetchAndSelectDoctor();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchParams]);
 
     // ── Fetch Clinics for Selected Doctor ────────────
     const handleSelectDoctor = async (doc) => {
@@ -191,18 +207,43 @@ export default function BookAppointmentQueued() {
         if (!staffError && staffData && staffData.length > 0) {
             const orgPromises = staffData.map(async (link) => {
                 const table = link.organization_type === 'medical' ? 'medicals' : 'clinics';
-                const { data, error } = await supabase
+                const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(link.organization_id));
+                let { data, error } = await supabase
                     .from(table)
                     .select('*')
-                    .eq('profile_id', link.organization_id)
+                    .eq(isUUID ? 'profile_id' : 'id', link.organization_id)
                     .maybeSingle();
                 
                 if (error) console.error(`Error fetching from ${table}:`, error);
-                return data ? { ...data, organization_type: link.organization_type } : null;
+                
+                // Fallback to profiles table if not found in medicals/clinics
+                if (!data && isUUID) {
+                    const { data: profileData } = await supabase
+                        .from('profiles')
+                        .select('id, full_name, name, city, state, phone')
+                        .eq('id', link.organization_id)
+                        .maybeSingle();
+                        
+                    if (profileData) {
+                        data = {
+                            id: profileData.id,
+                            name: profileData.full_name || profileData.name || 'Unnamed Facility',
+                            address: [profileData.city, profileData.state].filter(Boolean).join(', ') || '',
+                            phone: profileData.phone || ''
+                        };
+                    }
+                }
+
+                return null;
             });
             const list = (await Promise.all(orgPromises)).filter(Boolean);
             setClinics(list);
-            if (list.length > 0) setSelectedClinic(list[0]);
+            if (list.length > 0) {
+                const desiredClinic = clinicIdParam
+                    ? list.find(c => String(c.id) === String(clinicIdParam))
+                    : null;
+                setSelectedClinic(desiredClinic || list[0]);
+            }
         } else {
             setClinics([]);
         }
@@ -244,37 +285,88 @@ export default function BookAppointmentQueued() {
     const handleConfirmBooking = async () => {
         setBookingLoading(true);
         
-        // Sync to appointments table
-        const appointmentData = {
-            patient_id: user?.id || null,
-            patient_name: patientInfo.name,
-            doctor_id: selectedDoctor.id,
-            doctor_name: selectedDoctor.full_name,
-            organization_id: selectedClinic?.id,
-            organization_type: selectedClinic?.organization_type || 'clinic',
-            date: selectedDate,
-            time_slot: selectedSlot,
-            status: 'Confirmed',
-            type: 'In-person',
-            fee: selectedDoctor.fees || 500,
-            queue_number: Math.floor(Math.random() * 20) + 1, // Mock queue number
-            specialization: selectedDoctor.specialization
-        };
+        try {
+            const normalizedPhone = patientInfo.phone?.trim() || null;
 
-        const { error } = await supabase.from('appointments').insert([appointmentData]);
+            let duplicateQuery = supabase
+                .from('appointments')
+                .select('id', { count: 'exact', head: true })
+                .eq('doctor_id', selectedDoctor.id)
+                .eq('organization_id', selectedClinic?.id)
+                .eq('date', selectedDate)
+                .eq('time_slot', selectedSlot)
+                .neq('status', 'Cancelled');
+
+            if (user?.id) {
+                duplicateQuery = duplicateQuery.eq('patient_id', user.id);
+            } else if (normalizedPhone) {
+                duplicateQuery = duplicateQuery.eq('patient_phone', normalizedPhone);
+            }
+
+            const { count: existingCount, error: duplicateError } = await duplicateQuery;
+
+            if (duplicateError) throw duplicateError;
+
+            if ((existingCount ?? 0) > 0) {
+                toast.error('Duplicate booking not allowed.', {
+                    description: 'You already have an appointment with this doctor on the same date and time slot.',
+                });
+                return;
+            }
+
+            // Calculate real queue number: count existing appointments for same doctor + org + date + slot
+            const { count, error: countError } = await supabase
+                .from('appointments')
+                .select('id', { count: 'exact', head: true })
+                .eq('doctor_id', selectedDoctor.id)
+                .eq('organization_id', selectedClinic?.id)
+                .eq('date', selectedDate)
+                .eq('time_slot', selectedSlot);
+
+            const realQueueNumber = countError ? 1 : (count ?? 0) + 1;
+
+            // Sync to appointments table
+            const appointmentData = {
+                patient_id: user?.id || null,
+                patient_name: patientInfo.name,
+                patient_phone: normalizedPhone,
+                doctor_id: selectedDoctor.id,
+                doctor_name: selectedDoctor.full_name,
+                organization_id: selectedClinic?.id,
+                organization_type: selectedClinic?.organization_type || 'clinic',
+                date: selectedDate,
+                time_slot: selectedSlot,
+                status: 'Confirmed',
+                type: 'In-person',
+                fee: selectedDoctor.fees || 500,
+                queue_number: realQueueNumber,
+                specialization: selectedDoctor.specialization
+            };
+
+            let { error } = await supabase.from('appointments').insert([appointmentData]);
+
+            if (error?.message?.includes("Could not find the 'patient_phone' column")) {
+                const { patient_phone: _unusedPhone, ...fallbackAppointmentData } = appointmentData;
+                ({ error } = await supabase.from('appointments').insert([fallbackAppointmentData]));
+            }
         
-        if (!error) {
-            setBookingSuccess(true);
-            toast.success('Congratulations / Appointment Confirmed message', {
-                description: `Your appointment with ${selectedDoctor.full_name} is set for ${new Date(selectedDate).toDateString()}.`,
-                duration: 5000,
-            });
-            setStep(5);
-        } else {
-            console.error("Booking error:", error);
-            toast.error("Error booking appointment. Please try again.");
+            if (!error) {
+                setBookingSuccess(true);
+                toast.success('Appointment Confirmed!', {
+                    description: `Your appointment with ${selectedDoctor.full_name} is set for ${new Date(selectedDate).toDateString()}. Queue #${realQueueNumber}`,
+                    duration: 5000,
+                });
+                setStep(5);
+            } else {
+                console.error("Booking error:", error);
+                toast.error("Error booking appointment. Please try again.");
+            }
+        } catch (err) {
+            console.error("Unexpected error:", err);
+            toast.error("Something went wrong. Please try again.");
+        } finally {
+            setBookingLoading(false);
         }
-        setBookingLoading(false);
     };
 
     // Derived: filtered doctors by search term
@@ -328,6 +420,19 @@ export default function BookAppointmentQueued() {
         }));
     }, [selectedClinic, doctorTimetables]);
 
+    const showDeepLinkLoader = authLoading || (doctorIdParam && !selectedDoctor && loading);
+
+    if (showDeepLinkLoader) {
+        return (
+            <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
+                <div className="flex flex-col items-center gap-3 text-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-teal-500" />
+                    <p className="text-sm font-semibold text-slate-600">Preparing appointment slots...</p>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="min-h-screen bg-slate-50 py-12 px-4 sm:px-8">
                 <div className="max-w-6xl mx-auto space-y-8">
@@ -339,7 +444,11 @@ export default function BookAppointmentQueued() {
                                 if (step === 2) {
                                     navigate('/doctors');
                                 } else {
-                                    setStep(step - 1);
+                                    if (step === 4 && user) {
+                                        setStep(2);
+                                    } else {
+                                        setStep(step - 1);
+                                    }
                                 }
                             }}>
                                 <ChevronLeft className="h-6 w-6" />
@@ -450,7 +559,7 @@ export default function BookAppointmentQueued() {
                                                         <div className="flex items-start gap-4">
                                                             <div className="h-16 w-16 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-500 text-2xl font-bold overflow-hidden border-2 border-white shadow-sm">
                                                                 {doc.avatar_url ? (
-                                                                    <img src={doc.avatar_url} alt={doc.full_name} className="w-full h-full object-cover" />
+                                                                    <img src={getStorageUrl(doc.avatar_url, 'doctor-avtar')} alt={doc.full_name} className="w-full h-full object-cover" />
                                                                 ) : doc.full_name?.[0]}
                                                             </div>
                                                             <div className="flex-1">
@@ -506,7 +615,7 @@ export default function BookAppointmentQueued() {
                                         <CardContent className="p-6 text-center space-y-4">
                                             <div className="h-24 w-24 rounded-full bg-slate-100 mx-auto border-4 border-white shadow-md overflow-hidden">
                                                 {selectedDoctor.avatar_url ? (
-                                                    <img src={selectedDoctor.avatar_url} alt={selectedDoctor.full_name} className="w-full h-full object-cover" />
+                                                    <img src={getStorageUrl(selectedDoctor.avatar_url, 'doctor-avtar')} alt={selectedDoctor.full_name} className="w-full h-full object-cover" />
                                                 ) : <div className="h-full w-full flex items-center justify-center text-3xl font-bold text-slate-400">{selectedDoctor.full_name?.[0]}</div>}
                                             </div>
                                             <div>
@@ -707,7 +816,7 @@ export default function BookAppointmentQueued() {
                                         <div className="space-y-4 border-t pt-8">
                                             <div className="text-center">
                                                 <h3 className="font-bold text-slate-900">OTP Verification</h3>
-                                                <p className="text-sm text-slate-500">We've sent a code to your phone (Demo: 000000)</p>
+                                                <p className="text-sm text-slate-500">We&apos;ve sent a code to your phone (Demo: 000000)</p>
                                             </div>
                                             <div className="flex justify-center gap-2">
                                                 {otp.map((digit, idx) => (
@@ -790,7 +899,7 @@ export default function BookAppointmentQueued() {
                                             onClick={handleConfirmBooking}
                                             disabled={bookingLoading}
                                         >
-                                            {bookingLoading ? <Loader2 className="animate-spin mr-2" /> : 'Confirm & Pay Now'}
+                                            {bookingLoading ? <Loader2 className="animate-spin mr-2" /> : 'Confirm and Pay Cash'}
                                         </Button>
                                         <p className="text-[10px] text-center text-slate-400">
                                             By clicking confirm, you agree to our terms of service and refund policy.

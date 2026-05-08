@@ -20,11 +20,15 @@ import { normalisePhone } from '@/lib/otpService.js';
 const AuthContext = createContext(null);
 
 export const PROFILE_TYPE_DASHBOARDS = {
-    patient: '/',
+    patient: '/patient/dashboard',
     doctor: '/doctor/dashboard',
     clinic: '/clinic/dashboard',
+    diagnostic: '/diagnostic/dashboard',
     medical: '/medical/dashboard',
     hospital: '/hospital/dashboard',
+    blogger: '/blogger/dashboard',
+    super_admin: '/admin/dashboard',
+    support_admin: '/admin/dashboard',
 };
 
 export function AuthProvider({ children }) {
@@ -32,9 +36,11 @@ export function AuthProvider({ children }) {
     const [profile, setProfile] = useState(null);
     const [loading, setLoading] = useState(true);
     const isRegistering = useRef(false);
+    const profileRef = useRef(null);
 
     const clearAuthState = useCallback(() => {
         setUser(null);
+        profileRef.current = null;
         setProfile(null);
         setLoading(false);
     }, []);
@@ -70,6 +76,12 @@ export function AuthProvider({ children }) {
         }
     }, []);
 
+    const refreshProfile = useCallback(async () => {
+        if (!user) return;
+        const p = await fetchProfile(user.id);
+        setProfile(p);
+    }, [user, fetchProfile]);
+
     useEffect(() => {
         let mounted = true;
 
@@ -77,15 +89,26 @@ export function AuthProvider({ children }) {
         Promise.race([
             supabase.auth.getSession(),
             new Promise((_, rej) => setTimeout(() => rej(new Error('session fetch timeout')), 5000))
-        ]).then(async ({ data: { session } }) => {
+        ]).then(async ({ data: { session }, error }) => {
             if (!mounted) return;
+
+            // If the refresh token is invalid/expired, Supabase returns an error.
+            // Clear the stale token from localStorage so the user is prompted to log in again.
+            if (error) {
+                console.warn('[Auth] getSession error (likely stale refresh token):', error.message);
+                try { await supabase.auth.signOut(); } catch { /* ignore */ }
+                if (mounted) clearAuthState();
+                return;
+            }
+
             const u = session?.user ?? null;
             setUser(u);
-            
+
             if (u) {
                 // Wait for profile fetch before unblocking the app
                 const p = await fetchProfile(u.id);
                 if (mounted) {
+                    profileRef.current = p;
                     setProfile(p);
                     setLoading(false);
                 }
@@ -100,7 +123,6 @@ export function AuthProvider({ children }) {
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             (event, session) => {
                 if (!mounted) return;
-                console.log('[Auth] event:', event);
 
                 if (event === 'SIGNED_OUT') {
                     clearAuthState();
@@ -109,12 +131,38 @@ export function AuthProvider({ children }) {
 
                 if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
                     const u = session?.user ?? null;
+
+                    // If TOKEN_REFRESHED fires with no session, the refresh token is invalid.
+                    // Clear state so the user is redirected to login.
+                    if (event === 'TOKEN_REFRESHED' && !u) {
+                        console.warn('[Auth] Token refresh failed — clearing session.');
+                        clearAuthState();
+                        return;
+                    }
+
                     setUser(u);
-                    // ⚡ Never block loading on profile fetch
-                    setLoading(false);
+
                     if (u && !isRegistering.current) {
-                        // Fetch profile in background — doesn't block anything
-                        fetchProfile(u.id).then(p => { if (mounted) setProfile(p); });
+                        // For TOKEN_REFRESHED: skip re-fetching profile if we already have one.
+                        // This prevents the infinite re-render loop where token refresh
+                        // triggers fetchProfile → setProfile → re-render → token refresh.
+                        if (event === 'TOKEN_REFRESHED' && profileRef.current) {
+                            setLoading(false);
+                            return;
+                        }
+
+                        // Only show loading spinner for initial SIGNED_IN with no profile yet
+                        if (event === 'SIGNED_IN' && !profileRef.current) setLoading(true);
+
+                        fetchProfile(u.id).then(p => {
+                            if (mounted) {
+                                profileRef.current = p;
+                                setProfile(p);
+                                setLoading(false);
+                            }
+                        });
+                    } else {
+                        setLoading(false);
                     }
                 }
             }
@@ -172,6 +220,7 @@ export function AuthProvider({ children }) {
             throw new Error('Your account has been suspended. Contact support.');
         }
         setUser(data.user);
+        profileRef.current = p;
         setProfile(p);
         return { user: data.user, profile: p };
     }, [fetchProfile, safeSignOut]);
@@ -246,6 +295,15 @@ export function AuthProvider({ children }) {
                     whatsapp_number: whatsappNumber?.trim() || '',
                     status: 'Pending',
                 });
+            } else if (profileType === 'diagnostic') {
+                await supabase.from('diagnostic_centers').insert({
+                    profile_id: userId,
+                    name: fullName.trim(),
+                    email: email.trim(),
+                    phone: phone?.trim() || '',
+                    whatsapp_number: whatsappNumber?.trim() || '',
+                    status: 'Pending',
+                });
             }
 
             // Clear the temporary session without letting sign-out block the UI.
@@ -269,8 +327,8 @@ export function AuthProvider({ children }) {
     }, []);
 
     const contextValue = useMemo(() => ({
-        user, profile, loading, signIn, signUp, signOut, getDashboardPath,
-    }), [user, profile, loading, signIn, signUp, signOut, getDashboardPath]);
+        user, profile, loading, signIn, signUp, signOut, getDashboardPath, refreshProfile
+    }), [user, profile, loading, signIn, signUp, signOut, getDashboardPath, refreshProfile]);
 
     return (
         <AuthContext.Provider value={contextValue}>

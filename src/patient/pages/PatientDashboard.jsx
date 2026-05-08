@@ -8,15 +8,16 @@
  */
 
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, Navigate } from 'react-router-dom';
 import { usePatient } from '../context/PatientContext.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     User, Calendar, FileText, Pill,
     MapPin, ChevronRight, Activity, Camera, Loader2,
-    Hash, Clock, CalendarCheck2, Stethoscope, ChevronLeft, ChevronRight as ChevronRightIcon, Store
+    Hash, Clock, CalendarCheck2, Stethoscope, ChevronLeft, ChevronRight as ChevronRightIcon, Store,
+    CheckCircle2, FlaskConical, XCircle, AlertTriangle
 } from 'lucide-react';
-import { uploadAvatar } from '@/lib/uploadImage.js';
+import { uploadAvatar, getStorageUrl } from '@/lib/uploadImage.js';
 import { supabase } from '@/lib/supabase.js';
 import ChangePasswordModal from '@/components/ChangePasswordModal.jsx';
 import Skeleton from 'react-loading-skeleton';
@@ -26,23 +27,23 @@ import { toast, Toaster } from 'sonner';
 const QUICK_ACTIONS = [
     { icon: Calendar, label: 'Doctors', desc: 'Schedule with a doctor', color: 'from-blue-500 to-indigo-500', href: '/doctors' },
     { icon: Store, label: 'Medical / Clinics', desc: 'Find nearby medicals', color: 'from-pink-500 to-rose-500', href: '/medicals' },
-    { icon: FileText, label: 'Medical Records', desc: 'View your health history', color: 'from-violet-500 to-purple-500', href: '/records' },
     { icon: Pill, label: 'Prescriptions', desc: 'Your current medications', color: 'from-orange-500 to-amber-500', href: '/records' },
+    { icon: Activity, label: 'Diagnostic Centers', desc: 'Book Lab & Diagnostic tests', color: 'from-cyan-500 to-blue-500', href: '/diagnostics' },
     { icon: MapPin, label: 'Find Nearby', desc: 'Hospitals & clinics', color: 'from-emerald-500 to-teal-500', href: '/hospitals' },
 ];
 
 /* ── Format date helper ── */
 function formatDate(dateStr) {
     if (!dateStr) return '';
-    const d = new Date(dateStr + 'T00:00:00');
+    const raw = String(dateStr);
+    const normalized = raw.includes('T') ? raw : `${raw}T00:00:00`;
+    const d = new Date(normalized);
+    if (Number.isNaN(d.getTime())) return '-';
     return d.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 function isToday(dateStr) {
     return dateStr === new Date().toISOString().split('T')[0];
-}
-function isFuture(dateStr) {
-    return dateStr >= new Date().toISOString().split('T')[0];
 }
 
 const AppointmentBannerCard = React.memo(function AppointmentBannerCard({ appt, index }) {
@@ -102,8 +103,58 @@ const AppointmentBannerCard = React.memo(function AppointmentBannerCard({ appt, 
     );
 });
 
+/* ── Cancelled Appointment Card ── */
+const CancelledByDoctorCard = React.memo(function CancelledByDoctorCard({ appt, index }) {
+    return (
+        <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: index * 0.06, duration: 0.35 }}
+            className="flex-shrink-0 w-72 sm:w-80 bg-gradient-to-br from-red-500 to-rose-600 rounded-2xl p-5 shadow-lg shadow-red-500/30 relative overflow-hidden"
+        >
+            <div className="absolute -top-6 -right-6 h-24 w-24 rounded-full bg-white/10" />
+            <div className="absolute -bottom-8 -left-4 h-20 w-20 rounded-full bg-white/10" />
+
+            <div className="relative z-10">
+                {/* Cancelled badge */}
+                <div className="flex items-center justify-between mb-3">
+                    <span className="inline-flex items-center gap-1.5 bg-white/20 text-white text-xs font-bold px-2.5 py-1 rounded-full backdrop-blur-sm">
+                        <XCircle size={11} /> Cancelled by Doctor
+                    </span>
+                </div>
+
+                <p className="text-white font-bold text-base leading-tight line-clamp-1 mb-1">
+                    {appt.doctor_name || 'Doctor'}
+                </p>
+                {appt.specialization && (
+                    <p className="text-white/70 text-xs mb-3">{appt.specialization}</p>
+                )}
+
+                <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-white text-xs">
+                        <CalendarCheck2 size={13} className="text-white/70" />
+                        <span className="font-medium">
+                            {appt.date && isToday(appt.date.split('T')[0])
+                                ? '📅 Today'
+                                : formatDate(appt.date ? appt.date.split('T')[0] : '')}
+                        </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-white text-xs">
+                        <Clock size={13} className="text-white/70" />
+                        <span className="font-medium">{appt.time_slot}</span>
+                    </div>
+                </div>
+
+                <p className="mt-4 text-white/80 text-[11px] leading-snug bg-white/10 rounded-xl px-3 py-2">
+                    ⚠ Your doctor has cancelled this appointment. Please rebook or contact the clinic.
+                </p>
+            </div>
+        </motion.div>
+    );
+});
+
 /* ── Appointments Banner Section ── */
-const AppointmentsBanner = React.memo(function AppointmentsBanner({ patientId }) {
+const AppointmentsBanner = React.memo(function AppointmentsBanner({ patientId, refreshKey }) {
     const [appointments, setAppointments] = useState([]);
     const [loadingAppts, setLoadingAppts] = useState(true);
     const scrollRef = useRef(null);
@@ -111,14 +162,14 @@ const AppointmentsBanner = React.memo(function AppointmentsBanner({ patientId })
     useEffect(() => {
         if (!patientId) return;
         const today = new Date().toISOString().split('T')[0];
-
-        // 'date' is a timestamptz — compare from start of today
         const todayStart = new Date(today + 'T00:00:00').toISOString();
 
         supabase
             .from('appointments')
             .select('*')
             .eq('patient_id', patientId)
+            .neq('status', 'Completed')
+            .neq('status', 'Cancelled')
             .gte('date', todayStart)
             .order('date', { ascending: true })
             .order('queue_number', { ascending: true })
@@ -127,7 +178,7 @@ const AppointmentsBanner = React.memo(function AppointmentsBanner({ patientId })
                 if (!error && data) setAppointments(data);
                 setLoadingAppts(false);
             });
-    }, [patientId]);
+    }, [patientId, refreshKey]);
 
     const scroll = useCallback((dir) => {
         if (scrollRef.current) {
@@ -196,16 +247,376 @@ const AppointmentsBanner = React.memo(function AppointmentsBanner({ patientId })
     );
 });
 
+/* ── Cancelled Appointments Section ── */
+const CancelledAppointmentsBanner = React.memo(function CancelledAppointmentsBanner({ patientId, refreshKey }) {
+    const [cancelled, setCancelled] = useState([]);
+    const [loading, setLoading]     = useState(true);
+    const scrollRef = useRef(null);
+
+    useEffect(() => {
+        if (!patientId) return;
+        // Show cancellations from the last 7 days so they're visible but not permanent
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        supabase
+            .from('appointments')
+            .select('*')
+            .eq('patient_id', patientId)
+            .eq('status', 'Cancelled')
+            .gte('updated_at', sevenDaysAgo)
+            .order('updated_at', { ascending: false })
+            .limit(5)
+            .then(({ data, error }) => {
+                if (!error && data) setCancelled(data);
+                setLoading(false);
+            });
+    }, [patientId, refreshKey]);
+
+    const scroll = useCallback((dir) => {
+        scrollRef.current?.scrollBy({ left: dir === 'left' ? -300 : 300, behavior: 'smooth' });
+    }, []);
+
+    if (loading || cancelled.length === 0) return null;
+
+    return (
+        <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base font-semibold text-slate-700 flex items-center gap-2">
+                    <AlertTriangle size={16} className="text-red-500" />
+                    Cancelled Appointments
+                    <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-600 text-[10px] font-bold">
+                        {cancelled.length}
+                    </span>
+                </h2>
+                <div className="flex gap-1.5">
+                    <button onClick={() => scroll('left')} className="h-8 w-8 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-500 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition">
+                        <ChevronLeft size={15} />
+                    </button>
+                    <button onClick={() => scroll('right')} className="h-8 w-8 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-500 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition">
+                        <ChevronRightIcon size={15} />
+                    </button>
+                </div>
+            </div>
+            <div ref={scrollRef} className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                {cancelled.map((appt, i) => (
+                    <CancelledByDoctorCard key={appt.id} appt={appt} index={i} />
+                ))}
+            </div>
+        </div>
+    );
+});
+/* ── Medicals & Clinics Banner Section ── */
+const MedicalClinicsBanner = React.memo(function MedicalClinicsBanner() {
+    const [facilities, setFacilities] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const scrollRef = useRef(null);
+
+    useEffect(() => {
+        const fetchFacilities = async () => {
+            setLoading(true);
+            try {
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('id, full_name, name, city, state, avatar_url, profile_type')
+                    .in('profile_type', ['medical', 'clinic'])
+                    .limit(5);
+                
+                if (!error && data) {
+                    setFacilities(data.map(f => ({
+                        id: f.id,
+                        name: f.full_name || f.name || 'Healthcare Facility',
+                        location: [f.city, f.state].filter(Boolean).join(', ') || 'Nearby',
+                        logo: getStorageUrl(f.avatar_url, 'avatars'),
+                        type: f.profile_type
+                    })));
+                }
+            } catch (err) {
+                console.error("Error fetching facilities:", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchFacilities();
+    }, []);
+
+    const scroll = useCallback((dir) => {
+        if (scrollRef.current) {
+            scrollRef.current.scrollBy({ left: dir === 'left' ? -250 : 250, behavior: 'smooth' });
+        }
+    }, []);
+
+    if (loading) {
+        return (
+            <div className="mb-8">
+                <h2 className="text-base font-semibold text-slate-700 mb-4">Nearby Medicals & Clinics</h2>
+                <Skeleton height={120} borderRadius={16} />
+            </div>
+        );
+    }
+
+    if (facilities.length === 0) return null;
+
+    return (
+        <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base font-semibold text-slate-700">Nearby Medicals & Clinics</h2>
+                <div className="flex gap-1.5">
+                    <button
+                        onClick={() => scroll('left')}
+                        className="h-8 w-8 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-500 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-300 transition"
+                    >
+                        <ChevronLeft size={15} />
+                    </button>
+                    <button
+                        onClick={() => scroll('right')}
+                        className="h-8 w-8 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-500 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-300 transition"
+                    >
+                        <ChevronRightIcon size={15} />
+                    </button>
+                </div>
+            </div>
+
+            <div
+                ref={scrollRef}
+                className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide"
+                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            >
+                {facilities.map((fac, i) => (
+                    <motion.div
+                        key={fac.id}
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.08, duration: 0.35 }}
+                        className="flex-shrink-0 w-64 bg-white border border-slate-100 rounded-2xl p-4 shadow-sm hover:shadow-md hover:border-rose-200 transition-all cursor-pointer"
+                        onClick={() => window.location.href = '/medicals'}
+                    >
+                        <div className="flex items-center gap-4 mb-3">
+                            <div className="h-12 w-12 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center overflow-hidden flex-shrink-0 text-rose-500">
+                                {fac.logo ? (
+                                    <img src={fac.logo} alt={fac.name} className="h-full w-full object-cover" />
+                                ) : (
+                                    <Store size={20} />
+                                )}
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-sm text-slate-800 line-clamp-1">{fac.name}</h3>
+                                <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                                    <MapPin size={10} /> {fac.location}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-50">
+                            <span className="text-xs font-semibold text-rose-600 capitalize">View {fac.type}</span>
+                            <ChevronRightIcon size={14} className="text-rose-600" />
+                        </div>
+                    </motion.div>
+                ))}
+            </div>
+        </div>
+    );
+});
+
+/* ── Diagnostic Centers Banner Section ── */
+const DiagnosticCentersBanner = React.memo(function DiagnosticCentersBanner() {
+    const [centers, setCenters] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const scrollRef = useRef(null);
+
+    useEffect(() => {
+        const fetchCenters = async () => {
+            setLoading(true);
+            try {
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('id, full_name, name, city, state, avatar_url')
+                    .eq('profile_type', 'diagnostic')
+                    .limit(5);
+                
+                if (!error && data) {
+                    setCenters(data.map(c => ({
+                        id: c.id,
+                        name: c.full_name || c.name || 'Diagnostic Center',
+                        location: [c.city, c.state].filter(Boolean).join(', ') || 'Nearby',
+                        logo: getStorageUrl(c.avatar_url, 'avatars')
+                    })));
+                }
+            } catch (err) {
+                console.error("Error fetching diagnostics centers:", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchCenters();
+    }, []);
+
+    const scroll = useCallback((dir) => {
+        if (scrollRef.current) {
+            scrollRef.current.scrollBy({ left: dir === 'left' ? -250 : 250, behavior: 'smooth' });
+        }
+    }, []);
+
+    if (loading) {
+        return (
+            <div className="mb-8">
+                <h2 className="text-base font-semibold text-slate-700 mb-4">Nearby Diagnostic Centers</h2>
+                <Skeleton height={120} borderRadius={16} />
+            </div>
+        );
+    }
+
+    if (centers.length === 0) return null;
+
+    return (
+        <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base font-semibold text-slate-700">Nearby Diagnostic Centers</h2>
+                <div className="flex gap-1.5">
+                    <button
+                        onClick={() => scroll('left')}
+                        className="h-8 w-8 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-500 hover:bg-teal-50 hover:text-teal-600 hover:border-teal-300 transition"
+                    >
+                        <ChevronLeft size={15} />
+                    </button>
+                    <button
+                        onClick={() => scroll('right')}
+                        className="h-8 w-8 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-500 hover:bg-teal-50 hover:text-teal-600 hover:border-teal-300 transition"
+                    >
+                        <ChevronRightIcon size={15} />
+                    </button>
+                </div>
+            </div>
+
+            <div
+                ref={scrollRef}
+                className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide"
+                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            >
+                {centers.map((center, i) => (
+                    <motion.div
+                        key={center.id}
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.08, duration: 0.35 }}
+                        className="flex-shrink-0 w-64 bg-white border border-slate-100 rounded-2xl p-4 shadow-sm hover:shadow-md hover:border-emerald-200 transition-all cursor-pointer"
+                        onClick={() => window.location.href = '/diagnostics'}
+                    >
+                        <div className="flex items-center gap-4 mb-3">
+                            <div className="h-12 w-12 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center overflow-hidden flex-shrink-0 text-emerald-600">
+                                {center.logo ? (
+                                    <img src={center.logo} alt={center.name} className="h-full w-full object-cover" />
+                                ) : (
+                                    <FlaskConical size={20} />
+                                )}
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-sm text-slate-800 line-clamp-1">{center.name}</h3>
+                                <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                                    <MapPin size={10} /> {center.location}
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-50">
+                            <span className="text-xs font-semibold text-emerald-600">Book Test</span>
+                            <ChevronRightIcon size={14} className="text-emerald-600" />
+                        </div>
+                    </motion.div>
+                ))}
+            </div>
+        </div>
+    );
+});
+
 /* ── Main Dashboard ─────────────────────────────── */
 export default function PatientDashboard() {
-    const { patient, loading, signOut, updateProfile } = usePatient();
+    const { patient, loading, updateProfile } = usePatient();
     const navigate = useNavigate();
     const fileInputRef = useRef(null);
     const [uploadingAvatar, setUploadingAvatar] = useState(false);
     const [avatarError, setAvatarError] = useState('');
     const [changePwOpen, setChangePwOpen] = useState(false);
     const [activeAppointment, setActiveAppointment] = useState(null);
-    const [mockQueuePosition, setMockQueuePosition] = useState(5);
+    const [currentServing, setCurrentServing] = useState(1);
+    const [loadingQueue, setLoadingQueue] = useState(false);
+    const [oldAppointments, setOldAppointments] = useState([]);
+    const [loadingOldAppointments, setLoadingOldAppointments] = useState(true);
+    const [completionNotice, setCompletionNotice] = useState(null);
+    const [cancellationNotice, setCancellationNotice] = useState(null);
+    const [upcomingRefreshKey, setUpcomingRefreshKey] = useState(0);
+    const completionNoticeTimerRef = useRef(null);
+    const cancellationNoticeTimerRef = useRef(null);
+
+    // Fetch the currently serving queue number for a slot
+    const fetchCurrentServing = useCallback(async (appt) => {
+        if (!appt) return;
+        try {
+            const { data, error } = await supabase
+                .from('appointments')
+                .select('queue_number')
+                .eq('doctor_id', appt.doctor_id)
+                .eq('organization_id', appt.organization_id)
+                .eq('date', appt.date)
+                .eq('time_slot', appt.time_slot)
+                .eq('status', 'Confirmed')
+                .order('queue_number', { ascending: true })
+                .limit(1);
+
+            if (error) throw error;
+            
+            if (data && data.length > 0) {
+                setCurrentServing(data[0].queue_number);
+            } else {
+                // If no confirmed appointments, might be everyone is done or none started
+                // We'll check for the highest completed to estimate
+                const { data: completedData } = await supabase
+                    .from('appointments')
+                    .select('queue_number')
+                    .eq('doctor_id', appt.doctor_id)
+                    .eq('organization_id', appt.organization_id)
+                    .eq('date', appt.date)
+                    .eq('time_slot', appt.time_slot)
+                    .eq('status', 'Completed')
+                    .order('queue_number', { descending: true })
+                    .limit(1);
+                
+                if (completedData?.[0]) {
+                    setCurrentServing(completedData[0].queue_number + 1);
+                } else {
+                    setCurrentServing(1);
+                }
+            }
+        } catch (err) {
+            console.error("Error fetching current serving:", err);
+        }
+    }, []);
+
+    const fetchOldAppointments = useCallback(async () => {
+        if (!patient?.id) {
+            setOldAppointments([]);
+            setLoadingOldAppointments(false);
+            return;
+        }
+
+        setLoadingOldAppointments(true);
+        try {
+            const { data, error } = await supabase
+                .from('appointments')
+                .select('*')
+                .eq('patient_id', patient.id)
+                .eq('status', 'Completed')
+                .order('date', { ascending: false })
+                .order('updated_at', { ascending: false })
+                .limit(20);
+
+            if (error) throw error;
+            setOldAppointments(data || []);
+        } catch (err) {
+            console.error('Error fetching old appointments:', err.message);
+            setOldAppointments([]);
+        } finally {
+            setLoadingOldAppointments(false);
+        }
+    }, [patient?.id]);
 
     // Fetch active appointment for queue tracking
     useEffect(() => {
@@ -222,36 +633,102 @@ export default function PatientDashboard() {
             .limit(1)
             .then(({ data }) => {
                 if (data?.[0]) {
-                    setActiveAppointment(data[0]);
-                    setMockQueuePosition(data[0].queue_number || 5);
+                    setActiveAppointment(prev => {
+                        if (prev?.id === data[0].id && prev?.status === data[0].status) return prev;
+                        return data[0];
+                    });
+                    fetchCurrentServing(data[0]);
                 }
             });
-    }, [patient?.id]);
+    }, [patient?.id, fetchCurrentServing]);
 
-    // Live Queue Notification Simulation
     useEffect(() => {
-        if (!activeAppointment || mockQueuePosition <= 0) return;
-        
-        const interval = setInterval(() => {
-            setMockQueuePosition(prev => {
-                const next = Math.max(0, prev - 1);
-                if (next < prev && next > 0) {
-                    toast.info(`Queue Update: ${next} people ahead of you`, {
-                        description: `Your appointment with ${activeAppointment.doctor_name} is getting closer!`,
-                        icon: '🔔'
-                    });
-                } else if (next === 0) {
-                    toast.success('Your Turn!', {
-                        description: 'Please proceed to the doctor\'s cabin now.',
-                        duration: 10000,
-                    });
-                }
-                return next;
-            });
-        }, 120000); // 2 minutes
+        fetchOldAppointments();
+    }, [fetchOldAppointments]);
 
-        return () => clearInterval(interval);
-    }, [activeAppointment, mockQueuePosition]);
+    // Real-time Queue Updates
+    useEffect(() => {
+        if (!activeAppointment?.id) return;
+
+        const channel = supabase
+            .channel('queue-updates')
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'appointments',
+                    filter: `doctor_id=eq.${activeAppointment.doctor_id}`
+                },
+                (payload) => {
+                    // If any appointment in the same slot is updated, refresh serving status
+                    if (payload.new.time_slot === activeAppointment.time_slot && 
+                        payload.new.date === activeAppointment.date &&
+                        payload.new.organization_id === activeAppointment.organization_id) {
+                        
+                        fetchCurrentServing(activeAppointment);
+
+                        // If the updated appointment is MINE, show toast
+                        if (payload.new.id === activeAppointment.id) {
+                            if (payload.new.status === 'Completed') {
+                                toast.success('Consultation Completed', {
+                                    description: 'Your visit has been marked as complete. Take care!',
+                                });
+                                setCompletionNotice(payload.new);
+                                if (completionNoticeTimerRef.current) {
+                                    clearTimeout(completionNoticeTimerRef.current);
+                                }
+                                completionNoticeTimerRef.current = setTimeout(() => {
+                                    setCompletionNotice(null);
+                                }, 6000);
+                                setActiveAppointment(null); // Clear from active tracking
+                                setUpcomingRefreshKey(prev => prev + 1);
+                                void fetchOldAppointments();
+                            } else if (payload.new.status === 'Cancelled') {
+                                toast.error('Appointment Cancelled by Doctor', {
+                                    description: `Your appointment with ${payload.new.doctor_name || 'the doctor'} has been cancelled. Please rebook.`,
+                                    duration: 8000,
+                                });
+                                setCancellationNotice(payload.new);
+                                if (cancellationNoticeTimerRef.current) clearTimeout(cancellationNoticeTimerRef.current);
+                                cancellationNoticeTimerRef.current = setTimeout(() => setCancellationNotice(null), 12000);
+                                setActiveAppointment(null);
+                                setUpcomingRefreshKey(prev => prev + 1);
+                            }
+                        }
+                    }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [activeAppointment, fetchCurrentServing, fetchOldAppointments]);
+
+    useEffect(() => {
+        return () => {
+            if (completionNoticeTimerRef.current) clearTimeout(completionNoticeTimerRef.current);
+            if (cancellationNoticeTimerRef.current) clearTimeout(cancellationNoticeTimerRef.current);
+        };
+    }, []);
+
+    // Notification for turn approaching
+    useEffect(() => {
+        if (!activeAppointment || !currentServing) return;
+        
+        const position = activeAppointment.queue_number - currentServing;
+        if (position === 0) {
+            toast.success('Your Turn!', {
+                description: 'Please proceed to the doctor\'s cabin now.',
+                duration: 10000,
+            });
+        } else if (position > 0 && position <= 2) {
+            toast.info('Almost Your Turn', {
+                description: `There ${position === 1 ? 'is only 1 person' : `are only ${position} people`} ahead of you.`,
+            });
+        }
+    }, [activeAppointment, currentServing]);
 
     /**
      * handleAvatarChange
@@ -295,8 +772,7 @@ export default function PatientDashboard() {
 
     // Redirect unauthenticated users to login
     if (!patient) {
-        navigate('/patient/login', { replace: true });
-        return null;
+        return <Navigate to="/patient/login" replace />;
     }
 
 
@@ -318,7 +794,7 @@ export default function PatientDashboard() {
                             <div className="relative flex-shrink-0">
                                 <div className="h-20 w-20 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center text-white text-2xl font-bold overflow-hidden">
                                     {patient.avatar_url
-                                        ? <img src={patient.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                                        ? <img src={getStorageUrl(patient.avatar_url, 'avatars')} alt="Profile" className="w-full h-full object-cover" />
                                         : initials
                                     }
                                 </div>
@@ -373,9 +849,68 @@ export default function PatientDashboard() {
                     </motion.div>
 
                 {/* ── Active Queue Tracking ─────────── */}
-                <AnimatePresence>
-                    {activeAppointment && (
+                <AnimatePresence mode="wait">
+                    {completionNotice ? (
                         <motion.div
+                            key="completion-notice"
+                            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                            className="mb-8"
+                        >
+                            <div className="rounded-3xl border border-emerald-100 bg-emerald-50/50 p-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+                                <div className="flex items-center gap-4 text-center sm:text-left">
+                                    <div className="h-14 w-14 rounded-2xl bg-emerald-100 flex items-center justify-center text-emerald-600 shadow-inner">
+                                        <CheckCircle2 size={28} />
+                                    </div>
+                                    <div>
+                                        <p className="text-lg font-bold text-emerald-800">Consultation Completed!</p>
+                                        <p className="text-sm text-emerald-600">
+                                            {completionNotice.doctor_name || 'Doctor'} • {completionNotice.time_slot || '-'}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={() => navigate(`/prescription/${completionNotice.id}`)}
+                                    className="px-6 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition shadow-md shadow-emerald-200"
+                                >
+                                    View Prescription
+                                </button>
+                            </div>
+                        </motion.div>
+                    ) : cancellationNotice ? (
+                        <motion.div
+                            key="cancellation-notice"
+                            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                            className="mb-8"
+                        >
+                            <div className="rounded-3xl border border-red-100 bg-red-50/60 p-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+                                <div className="flex items-center gap-4 text-center sm:text-left">
+                                    <div className="h-14 w-14 rounded-2xl bg-red-100 flex items-center justify-center text-red-500 shadow-inner">
+                                        <XCircle size={28} />
+                                    </div>
+                                    <div>
+                                        <p className="text-lg font-bold text-red-700">Appointment Cancelled by Doctor</p>
+                                        <p className="text-sm text-red-500 mt-0.5">
+                                            {cancellationNotice.doctor_name || 'Your doctor'} cancelled your appointment
+                                            {cancellationNotice.time_slot ? ` at ${cancellationNotice.time_slot}` : ''}.
+                                        </p>
+                                        <p className="text-xs text-red-400 mt-1">Please rebook or contact the clinic for assistance.</p>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={() => navigate('/doctors')}
+                                    className="px-6 py-2.5 rounded-xl bg-red-500 text-white text-sm font-bold hover:bg-red-600 transition shadow-md shadow-red-200 shrink-0"
+                                >
+                                    Rebook Appointment
+                                </button>
+                            </div>
+                        </motion.div>
+                    ) : activeAppointment ? (
+                        <motion.div
+                            key="active-queue"
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -20 }}
@@ -386,15 +921,22 @@ export default function PatientDashboard() {
                             </h2>
                             <QueueStatusCard 
                                 appointment={activeAppointment} 
-                                currentServing={activeAppointment.queue_number - mockQueuePosition}
+                                currentServing={currentServing}
                                 onAction={() => navigate(`/records`)}
                             />
                         </motion.div>
-                    )}
+                    ) : null}
                 </AnimatePresence>
 
                 {/* ── Upcoming Appointments Banner ─── */}
-                <AppointmentsBanner patientId={patient.id} />
+                <AppointmentsBanner key={`${patient.id}-${upcomingRefreshKey}`} patientId={patient.id} refreshKey={upcomingRefreshKey} />
+
+                {/* ── Cancelled Appointments (last 7 days) ─── */}
+                <CancelledAppointmentsBanner key={`cancelled-${patient.id}-${upcomingRefreshKey}`} patientId={patient.id} refreshKey={upcomingRefreshKey} />
+
+                {/* ── Diagnostic Centers Banner ───── */}
+                <MedicalClinicsBanner />
+                <DiagnosticCentersBanner />
 
                 {/* ── Quick actions grid ────────────── */}
                 <h2 className="text-base font-semibold text-slate-700 mb-4">Quick Actions</h2>
@@ -422,45 +964,53 @@ export default function PatientDashboard() {
                         ))}
                     </div>
 
-                {/* ── Profile info card ─────────────── */}
-                <h2 className="text-base font-semibold text-slate-700 mb-4">Your Profile</h2>
-                    <motion.div
-                        initial={{ opacity: 0, y: 16 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.2, duration: 0.4 }}
-                        className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6"
-                    >
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            {[
-                                { label: 'Full Name', value: patient.full_name || '—' },
-                                { label: 'Email', value: patient.email },
-                                { label: 'Phone', value: patient.phone || '—' },
-                                { label: 'Account Type', value: 'Patient' },
-                                { label: 'Status', value: patient.status ?? 'Active' },
-                                { label: 'Member Since', value: patient.created_at ? new Date(patient.created_at).toLocaleDateString() : '—' },
-                            ].map(({ label, value }) => (
-                                <div key={label} className="p-3 bg-slate-50 rounded-xl">
-                                    <p className="text-xs text-slate-500 mb-1">{label}</p>
-                                    <p className="text-sm font-medium text-slate-800">{value}</p>
+
+
+                {/* ── Old Appointments ─────────────── */}
+                <h2 className="text-base font-semibold text-slate-700 mb-4">Old Appointments</h2>
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                    {loadingOldAppointments ? (
+                        <Skeleton height={90} borderRadius={14} count={2} className="mb-3" />
+                    ) : oldAppointments.length === 0 ? (
+                        <p className="text-sm text-slate-500">No completed appointments yet.</p>
+                    ) : (
+                        <div className="space-y-3">
+                            {oldAppointments.map((apt) => (
+                                <div
+                                    key={apt.id}
+                                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-xl border border-slate-100 bg-slate-50 p-3"
+                                >
+                                    <div>
+                                        <p className="text-sm font-semibold text-slate-800">{apt.doctor_name || 'Doctor'}</p>
+                                        <p className="text-xs text-slate-500 mt-0.5">
+                                            {formatDate(apt.date)} • {apt.time_slot || '-'}
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Link 
+                                            to={`/prescription/${apt.id}`}
+                                            className="h-9 w-9 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center hover:bg-blue-200 transition"
+                                            title="View Prescription"
+                                        >
+                                            <Pill size={16} />
+                                        </Link>
+                                        <Link 
+                                            to="/records"
+                                            className="h-9 w-9 rounded-xl bg-cyan-100 text-cyan-600 flex items-center justify-center hover:bg-cyan-200 transition"
+                                            title="View Medical Reports"
+                                        >
+                                            <FileText size={16} />
+                                        </Link>
+                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border bg-emerald-50 text-emerald-600 border-emerald-100">
+                                            <CheckCircle2 size={11} />
+                                            Completed
+                                        </span>
+                                    </div>
                                 </div>
                             ))}
                         </div>
-
-                        {/* Change photo hint */}
-                        <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between">
-                            <p className="text-xs text-slate-400">
-                                Click the camera icon on your avatar to change your profile photo.
-                            </p>
-                            <button
-                                onClick={() => fileInputRef.current?.click()}
-                                disabled={uploadingAvatar}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-emerald-600 hover:bg-emerald-50 transition font-medium disabled:opacity-50"
-                            >
-                                {uploadingAvatar ? <Loader2 size={14} className="animate-spin" /> : <Camera size={14} />}
-                                {uploadingAvatar ? 'Uploading…' : 'Upload Photo'}
-                            </button>
-                        </div>
-                    </motion.div>
+                    )}
+                </div>
             </div>
             <ChangePasswordModal isOpen={changePwOpen} onClose={() => setChangePwOpen(false)} />
         </>
