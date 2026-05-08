@@ -6,7 +6,7 @@ import {
     ChevronLeft, ChevronRight, Menu, Plus, X, Filter, Trash2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 
 export default function DiagnosticDashboard() {
     const { profile, signOut } = useAuth();
@@ -32,12 +32,12 @@ export default function DiagnosticDashboard() {
         navigate('/');
     };
 
-    const stats = [
+    const stats = useMemo(() => [
         { title: "Today's Tests", value: "0", icon: Clock, color: "text-blue-600", bg: "bg-blue-100" },
         { title: "Today's Revenue", value: "₹0", icon: DollarSign, color: "text-emerald-600", bg: "bg-emerald-100" },
         { title: "Lifetime Tests", value: "0", icon: Activity, color: "text-purple-600", bg: "bg-purple-100" },
         { title: "Lifetime Revenue", value: "₹0", icon: DollarSign, color: "text-orange-600", bg: "bg-orange-100" }
-    ];
+    ], []);
 
     const [tests, setTests] = useState([
         { id: 1, name: 'Complete Blood Count (CBC)', price: '₹500', category: 'Blood Test', status: 'Active' },
