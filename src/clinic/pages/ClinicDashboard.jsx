@@ -209,25 +209,36 @@ export default function ClinicDashboard() {
       // Fetch timetables
       if (links.length > 0) {
         const { data: clinicRow } = await supabase.from('clinics').select('id').eq('profile_id', profile?.id).maybeSingle();
-        const orgId = clinicRow?.id;
-        setInternalOrgId(orgId);
-        
-        // Save the orgId to the profile so we can use it for the modal
-        if (profile && orgId) {
-            profile.internal_org_id = orgId;
+        // Use internal clinics.id if available, else fall back to profile.id
+        // Doctors may store timetables with org_id = profile_id when no clinics row exists yet
+        const internalId = clinicRow?.id || null;
+        const effectiveOrgId = internalId || profile?.id;
+        setInternalOrgId(effectiveOrgId);
+
+        // Save for the appointments modal
+        if (profile) {
+          profile.internal_org_id = effectiveOrgId;
         }
 
-        if (orgId) {
-          const docIds = links.map(l => l.doctor_id).filter(Boolean);
-          const { data: slots } = await supabase
+        const docIds = links.map(l => l.doctor_id).filter(Boolean);
+        if (docIds.length > 0) {
+          // If we have both an internal ID and a profile_id, match either
+          let ttQuery = supabase
             .from('doctor_timetables')
             .select('*')
             .in('doctor_id', docIds)
-            .eq('org_id', orgId)
             .eq('is_active', true)
             .order('day')
             .order('time_from');
-          
+
+          if (internalId && internalId !== profile?.id) {
+            ttQuery = ttQuery.or(`org_id.eq.${internalId},org_id.eq.${profile?.id}`);
+          } else {
+            ttQuery = ttQuery.eq('org_id', effectiveOrgId);
+          }
+
+          const { data: slots } = await ttQuery;
+
           const grouped = {};
           (slots || []).forEach(s => {
             if (!grouped[s.doctor_id]) grouped[s.doctor_id] = [];
