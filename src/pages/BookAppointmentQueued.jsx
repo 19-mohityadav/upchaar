@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
     Search, MapPin, Calendar as CalendarIcon, Clock, 
     Filter, ArrowRight, CheckCircle, ChevronLeft, 
-    Stethoscope, Info, AlertCircle, Loader2 
+    Stethoscope, Info, AlertCircle, Loader2, Building2
 } from 'lucide-react';
 import { toast, Toaster } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,8 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import Skeleton from 'react-loading-skeleton';
+import 'react-loading-skeleton/dist/skeleton.css';
 import { supabase } from '@/lib/supabase.js';
 import { useAuth } from '@/auth/AuthContext.jsx';
 import { getStorageUrl } from '@/lib/uploadImage.js';
@@ -45,6 +47,7 @@ export default function BookAppointmentQueued() {
     const [loading, setLoading] = useState(true);
     const [selectedDoctor, setSelectedDoctor] = useState(null);
     const [clinics, setClinics] = useState([]);
+    const [clinicsLoading, setClinicsLoading] = useState(false);
     const [selectedClinic, setSelectedClinic] = useState(null);
     const [selectedDate, setSelectedDate] = useState('');
     const [selectedSlot, setSelectedSlot] = useState('');
@@ -194,9 +197,11 @@ export default function BookAppointmentQueued() {
     const handleSelectDoctor = async (doc) => {
         setSelectedDoctor(doc);
         setLoading(true);
+        setClinicsLoading(true);
         setSelectedClinic(null);
         setSelectedDate('');
         setSelectedSlot('');
+        setClinics([]);
         
         // Fetch linked clinics via staff_links
         const { data: staffData, error: staffError } = await supabase
@@ -206,36 +211,58 @@ export default function BookAppointmentQueued() {
 
         if (!staffError && staffData && staffData.length > 0) {
             const orgPromises = staffData.map(async (link) => {
-                const table = link.organization_type === 'medical' ? 'medicals' : 'clinics';
-                const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(link.organization_id));
-                let { data, error } = await supabase
-                    .from(table)
-                    .select('*')
-                    .eq(isUUID ? 'profile_id' : 'id', link.organization_id)
-                    .maybeSingle();
-                
-                if (error) console.error(`Error fetching from ${table}:`, error);
-                
-                // Fallback to profiles table if not found in medicals/clinics
+                const orgId = link.organization_id;
+                const orgType = link.organization_type;
+                const table = orgType === 'medical' ? 'medicals' : 'clinics';
+                const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(orgId));
+
+                let data = null;
+
+                // Strategy 1: If UUID, try matching via profile_id column
+                if (isUUID) {
+                    const { data: d1 } = await supabase
+                        .from(table)
+                        .select('*')
+                        .eq('profile_id', orgId)
+                        .maybeSingle();
+                    data = d1 || null;
+                }
+
+                // Strategy 2: If still no data, try matching via id column directly
+                if (!data) {
+                    const { data: d2 } = await supabase
+                        .from(table)
+                        .select('*')
+                        .eq('id', orgId)
+                        .maybeSingle();
+                    data = d2 || null;
+                }
+
+                // Strategy 3: Fall back to profiles table (covers cases where no internal row exists)
                 if (!data && isUUID) {
                     const { data: profileData } = await supabase
                         .from('profiles')
                         .select('id, full_name, name, city, state, phone')
-                        .eq('id', link.organization_id)
+                        .eq('id', orgId)
                         .maybeSingle();
-                        
+
                     if (profileData) {
                         data = {
                             id: profileData.id,
                             name: profileData.full_name || profileData.name || 'Unnamed Facility',
                             address: [profileData.city, profileData.state].filter(Boolean).join(', ') || '',
-                            phone: profileData.phone || ''
+                            phone: profileData.phone || '',
                         };
                     }
                 }
 
-                return null;
+                if (!data) return null;
+
+                // Ensure the name field is always populated (clinics table uses 'name', not 'full_name')
+                const name = data.name || data.full_name || 'Unnamed Facility';
+                return { ...data, name, organization_type: orgType };
             });
+
             const list = (await Promise.all(orgPromises)).filter(Boolean);
             setClinics(list);
             if (list.length > 0) {
@@ -259,6 +286,7 @@ export default function BookAppointmentQueued() {
             setDoctorTimetables(ttData || []);
         }
 
+        setClinicsLoading(false);
         setLoading(false);
         setStep(2);
     };
@@ -660,34 +688,55 @@ export default function BookAppointmentQueued() {
                                             <CardTitle className="text-xl">Practice & Time Slot</CardTitle>
                                         </CardHeader>
                                         <CardContent className="p-6 space-y-8">
-                                            {/* Clinic Selection */}
+                                            {/* Clinic / Medical Selection */}
                                             <div className="space-y-4">
                                                 <label className="text-sm font-bold text-slate-500 uppercase flex items-center gap-2">
-                                                    <MapPin size={16} /> Select Clinic / Hospital
+                                                    <MapPin size={16} /> Select Linked Clinic / Medical
                                                 </label>
                                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                                    {clinics.length > 0 ? clinics.map((clinic) => (
-                                                        <div 
+                                                    {clinicsLoading ? (
+                                                        // Skeleton cards while fetching
+                                                        Array(2).fill(0).map((_, i) => (
+                                                            <div key={i} className="p-4 rounded-2xl border-2 border-slate-100 space-y-2">
+                                                                <Skeleton height={16} width="70%" borderRadius={8} />
+                                                                <Skeleton height={12} width="50%" borderRadius={8} />
+                                                            </div>
+                                                        ))
+                                                    ) : clinics.length > 0 ? clinics.map((clinic) => (
+                                                        <div
                                                             key={clinic.id}
                                                             onClick={() => setSelectedClinic(clinic)}
                                                             className={`p-4 rounded-2xl border-2 transition-all cursor-pointer ${
-                                                                selectedClinic?.id === clinic.id 
-                                                                ? 'border-blue-600 bg-blue-50/50 shadow-md' 
+                                                                selectedClinic?.id === clinic.id
+                                                                ? 'border-blue-600 bg-blue-50/50 shadow-md'
                                                                 : 'border-slate-100 hover:border-slate-200'
                                                             }`}
                                                         >
-                                                            <div className="flex items-start justify-between">
-                                                                <div>
-                                                                    <p className="font-bold text-slate-900">{clinic.name}</p>
-                                                                    <p className="text-xs text-slate-500 line-clamp-2 mt-1">{clinic.address}</p>
+                                                            <div className="flex items-start justify-between gap-3">
+                                                                <div className="flex items-start gap-3">
+                                                                    <div className="mt-0.5 h-8 w-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 flex-shrink-0">
+                                                                        <Building2 size={16} />
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="font-bold text-slate-900 text-sm">{clinic.name}</p>
+                                                                        <p className="text-xs text-slate-500 line-clamp-2 mt-0.5">{clinic.address || clinic.city || 'Facility'}</p>
+                                                                        <span className="inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide bg-slate-100 text-slate-500">
+                                                                            {clinic.organization_type || 'clinic'}
+                                                                        </span>
+                                                                    </div>
                                                                 </div>
-                                                                {selectedClinic?.id === clinic.id && <CheckCircle className="h-5 w-5 text-blue-600 shrink-0" />}
+                                                                {selectedClinic?.id === clinic.id && <CheckCircle className="h-5 w-5 text-blue-600 shrink-0 mt-1" />}
                                                             </div>
                                                         </div>
                                                     )) : (
-                                                        <div className="col-span-full p-4 bg-amber-50 rounded-xl flex items-center gap-3 text-amber-700 text-sm">
-                                                            <Info size={18} />
-                                                            This doctor is currently not linked to any specific clinic.
+                                                        <div className="col-span-full p-5 bg-amber-50 border border-amber-200 rounded-2xl flex items-center gap-3 text-amber-700">
+                                                            <div className="h-10 w-10 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
+                                                                <Info size={18} />
+                                                            </div>
+                                                            <div>
+                                                                <p className="font-bold text-sm">No linked facilities found</p>
+                                                                <p className="text-xs text-amber-600 mt-0.5">This doctor is not currently linked to any medical or clinic.</p>
+                                                            </div>
                                                         </div>
                                                     )}
                                                 </div>
@@ -698,9 +747,16 @@ export default function BookAppointmentQueued() {
                                                 <label className="text-sm font-bold text-slate-500 uppercase flex items-center gap-2">
                                                     <CalendarIcon size={16} /> Select Date
                                                 </label>
-                                                {daysWithSlots.size === 0 ? (
-                                                    <div className="text-sm text-amber-600 bg-amber-50 p-4 rounded-xl flex items-center gap-2 font-medium">
-                                                        <AlertCircle size={16} /> No schedule available for this clinic.
+                                                {clinicsLoading ? (
+                                                    // Skeleton date pills while loading
+                                                    <div className="flex gap-3">
+                                                        {Array(5).fill(0).map((_, i) => (
+                                                            <Skeleton key={i} width={64} height={80} borderRadius={16} />
+                                                        ))}
+                                                    </div>
+                                                ) : daysWithSlots.size === 0 ? (
+                                                    <div className="text-sm text-amber-600 bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-center gap-2 font-medium">
+                                                        <AlertCircle size={16} /> No schedule set up for the selected clinic yet.
                                                     </div>
                                                 ) : (
                                                     <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
