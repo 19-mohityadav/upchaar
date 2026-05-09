@@ -20,6 +20,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { isStrongPassword, PASSWORD_RULE_MESSAGE } from '@/lib/auth.js';
 import { sendOtp, verifyOtp, normalisePhone } from '@/lib/otpService.js';
 import { supabase } from '@/lib/supabase.js';
+import { checkRateLimit, clearRateLimit } from '@/lib/rateLimit.js';
 import {
     Heart, Mail, Lock, Eye, EyeOff, Loader2, AlertCircle,
     User, Phone, ChevronDown, Building2, Activity,
@@ -102,7 +103,11 @@ export default function LoginPage() {
         setSuccess('');
         setLoading(true);
         try {
+            // Rate limit: 5 attempts per 5 minutes
+            checkRateLimit('sign_in');
             const { profile } = await signIn(signInForm.email, signInForm.password);
+            // On success, clear the rate limit counter
+            clearRateLimit('sign_in');
             const from = location.state?.from;
             const redirectMap = { patient: '/patient/dashboard', doctor: '/doctor/dashboard' };
             navigate(from || (redirectMap[profile.profile_type] ?? getDashboardPath(profile)), { replace: true });
@@ -123,6 +128,9 @@ export default function LoginPage() {
         if (signUpForm.password.length < 6)                     { setError('Password must be at least 6 characters.'); return; }
         if (!isStrongPassword(signUpForm.password))             { setError(PASSWORD_RULE_MESSAGE); return; }
         if (!signUpForm.phone.trim())                           { setError('Phone number is required.'); return; }
+
+        // Rate limit: 3 sign-up attempts per 10 minutes
+        try { checkRateLimit('sign_up'); } catch (err) { setError(err.message); return; }
 
         setLoading(true);
         try {

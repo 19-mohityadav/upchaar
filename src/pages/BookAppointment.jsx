@@ -164,35 +164,56 @@ export default function BookAppointment() {
 
         if (!staffError && staffData && staffData.length > 0) {
             const orgPromises = staffData.map(async (link) => {
-                const table = link.organization_type === 'medical' ? 'medicals' : 'clinics';
-                const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(link.organization_id));
-                let { data, error } = await supabase
-                    .from(table)
-                    .select('*')
-                    .eq(isUUID ? 'profile_id' : 'id', link.organization_id)
-                    .maybeSingle();
-                
-                if (error) console.error(`Error fetching from ${table}:`, error);
-                
-                // Fallback to profiles table if not found in medicals/clinics
+                const orgId = link.organization_id;
+                const orgType = link.organization_type;
+                const table = orgType === 'medical' ? 'medicals' : 'clinics';
+                const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(orgId));
+
+                let data = null;
+
+                // Strategy 1: If UUID, try matching via profile_id column
+                if (isUUID) {
+                    const { data: d1 } = await supabase
+                        .from(table)
+                        .select('*')
+                        .eq('profile_id', orgId)
+                        .maybeSingle();
+                    data = d1 || null;
+                }
+
+                // Strategy 2: If still no data, try matching via id column directly
+                if (!data) {
+                    const { data: d2 } = await supabase
+                        .from(table)
+                        .select('*')
+                        .eq('id', orgId)
+                        .maybeSingle();
+                    data = d2 || null;
+                }
+
+                // Strategy 3: Fall back to profiles table (covers cases where no internal row exists)
                 if (!data && isUUID) {
                     const { data: profileData } = await supabase
                         .from('profiles')
                         .select('id, full_name, name, city, state, phone')
-                        .eq('id', link.organization_id)
+                        .eq('id', orgId)
                         .maybeSingle();
-                        
+
                     if (profileData) {
                         data = {
                             id: profileData.id,
                             name: profileData.full_name || profileData.name || 'Unnamed Facility',
                             address: [profileData.city, profileData.state].filter(Boolean).join(', ') || '',
-                            phone: profileData.phone || ''
+                            phone: profileData.phone || '',
                         };
                     }
                 }
-                
-                return data ? { ...data, organization_type: link.organization_type } : null;
+
+                if (!data) return null;
+
+                // Ensure name is always populated (clinics table uses 'name', not 'full_name')
+                const name = data.name || data.full_name || 'Unnamed Facility';
+                return { ...data, name, organization_type: orgType };
             });
             const list = (await Promise.all(orgPromises)).filter(Boolean);
             setClinics(list);

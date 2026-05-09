@@ -228,7 +228,7 @@ export default function DoctorDetailPage() {
     const [selectedSlot, setSelectedSlot] = useState('');
     const [selectedDate, setSelectedDate] = useState(today());
     const [bookingType, setBookingType] = useState('In-person');
-    const [selectedClinic, setSelectedClinic] = useState('');
+    const [selectedClinic, setSelectedClinic] = useState(null); // full object { id, name, type }
 
     // Step 1: pre-booking warning modal
     const [showWarning, setShowWarning] = useState(false);
@@ -252,27 +252,65 @@ export default function DoctorDetailPage() {
                     return;
                 }
 
-                // Fetch linked clinics via staff_links
+                // Fetch linked clinics/medicals via staff_links (3-strategy robust lookup)
                 const { data: staffData, error: staffError } = await supabase
                     .from('staff_links')
                     .select('organization_id, organization_type')
                     .eq('doctor_id', id);
 
+                let fetchedClinics = [];   // full objects { id, name, type }
                 let fetchedClinicNames = [];
                 if (!staffError && staffData && staffData.length > 0) {
                     const orgPromises = staffData.map(async (link) => {
-                        const table = link.organization_type === 'medical' ? 'medicals' : 'clinics';
-                        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(link.organization_id));
-                        const { data: orgData } = await supabase
-                            .from(table)
-                            .select('name')
-                            .eq(isUUID ? 'profile_id' : 'id', link.organization_id)
-                            .maybeSingle();
-                        
-                        return orgData?.name || null;
+                        const orgId  = link.organization_id;
+                        const orgType = link.organization_type;
+                        const table  = orgType === 'medical' ? 'medicals' : 'clinics';
+                        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(orgId));
+
+                        let data = null;
+
+                        // Strategy 1: UUID → match via profile_id column
+                        if (isUUID) {
+                            const { data: d1 } = await supabase
+                                .from(table).select('id, name, address, city, state')
+                                .eq('profile_id', orgId).maybeSingle();
+                            data = d1 || null;
+                        }
+
+                        // Strategy 2: try matching via id column directly
+                        if (!data) {
+                            const { data: d2 } = await supabase
+                                .from(table).select('id, name, address, city, state')
+                                .eq('id', orgId).maybeSingle();
+                            data = d2 || null;
+                        }
+
+                        // Strategy 3: fall back to profiles table
+                        if (!data && isUUID) {
+                            const { data: profileData } = await supabase
+                                .from('profiles')
+                                .select('id, full_name, name, city, state')
+                                .eq('id', orgId).maybeSingle();
+                            if (profileData) {
+                                data = {
+                                    id: profileData.id,
+                                    name: profileData.full_name || profileData.name || 'Unnamed Facility',
+                                    city: profileData.city || '',
+                                    state: profileData.state || '',
+                                };
+                            }
+                        }
+
+                        if (!data) return null;
+                        return {
+                            id:   data.id || orgId,
+                            name: data.name || data.full_name || 'Unnamed Facility',
+                            type: orgType,
+                        };
                     });
                     const list = (await Promise.all(orgPromises)).filter(Boolean);
-                    fetchedClinicNames = [...new Set(list)];
+                    fetchedClinics    = list;
+                    fetchedClinicNames = [...new Set(list.map(o => o.name))];
                 }
 
                 if (fetchedClinicNames.length === 0) {
@@ -293,6 +331,7 @@ export default function DoctorDetailPage() {
                     fees: data.consultation_fee || 0,
                     clinicName: data.clinic_name || '',
                     clinicNames: fetchedClinicNames,
+                    clinics: fetchedClinics,
                     languages: data.languages || [],
                     availableDays: data.available_days || [],
                     hoursFrom: data.hours_from || '09:00',
@@ -314,10 +353,11 @@ export default function DoctorDetailPage() {
     }, [id]);
 
     useEffect(() => {
-        if (doctor?.clinicNames?.length) {
-            setSelectedClinic(prev => prev || doctor.clinicNames[0]);
+        if (doctor?.clinics?.length) {
+            setSelectedClinic(prev => prev || doctor.clinics[0]);
         } else if (doctor?.clinicName) {
-            setSelectedClinic(prev => prev || doctor.clinicName);
+            // fallback: wrap plain name as object
+            setSelectedClinic(prev => prev || { id: null, name: doctor.clinicName, type: 'clinic' });
         }
     }, [doctor]);
 
@@ -378,7 +418,9 @@ export default function DoctorDetailPage() {
                 queue_number: queueNumber,
                 status: 'Confirmed',
                 type: bookingType,
-                clinic_name: selectedClinic || doctor.clinicName || null,
+                organization_id: selectedClinic?.id ?? null,
+                organization_type: selectedClinic?.type ?? 'clinic',
+                clinic_name: selectedClinic?.name || doctor.clinicName || null,
                 fee: doctor.fees,
                 platform_revenue: 50,
             };
@@ -612,22 +654,28 @@ export default function DoctorDetailPage() {
 
                             <div className="px-6 pb-6">
                                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                                    Select Clinic
+                                    Select Clinic / Medical
                                 </label>
                                 <div className="grid grid-cols-1 gap-2">
-                                    {(doctor.clinicNames.length > 0 ? doctor.clinicNames : [doctor.clinicName || 'Main Clinic']).map(name => (
+                                    {(doctor.clinics?.length > 0
+                                        ? doctor.clinics
+                                        : [{ id: null, name: doctor.clinicName || 'Main Clinic', type: 'clinic' }]
+                                    ).map(org => (
                                         <button
-                                            key={name}
-                                            onClick={() => setSelectedClinic(name)}
+                                            key={org.id || org.name}
+                                            onClick={() => setSelectedClinic(org)}
                                             className={cn(
-                                                "w-full px-4 py-3 rounded-xl border text-left text-sm font-medium transition-all flex items-center justify-between",
-                                                selectedClinic === name 
+                                                "w-full px-4 py-3 rounded-xl border text-left text-sm font-medium transition-all flex items-center justify-between gap-3",
+                                                selectedClinic?.name === org.name
                                                     ? "bg-teal-50 border-teal-500 text-teal-700 ring-4 ring-teal-500/10"
                                                     : "bg-white border-slate-100 text-slate-600 hover:border-teal-200"
                                             )}
                                         >
-                                            <span className="truncate">{name}</span>
-                                            {selectedClinic === name && <CheckCircle className="h-4 w-4 text-teal-500 shrink-0" />}
+                                            <div className="min-w-0">
+                                                <span className="truncate block font-semibold">{org.name}</span>
+                                                <span className="text-[10px] uppercase tracking-wide font-bold text-slate-400">{org.type}</span>
+                                            </div>
+                                            {selectedClinic?.name === org.name && <CheckCircle className="h-4 w-4 text-teal-500 shrink-0" />}
                                         </button>
                                     ))}
                                 </div>

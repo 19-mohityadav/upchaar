@@ -304,117 +304,6 @@ const CancelledAppointmentsBanner = React.memo(function CancelledAppointmentsBan
         </div>
     );
 });
-/* ── Medicals & Clinics Banner Section ── */
-const MedicalClinicsBanner = React.memo(function MedicalClinicsBanner() {
-    const [facilities, setFacilities] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const scrollRef = useRef(null);
-
-    useEffect(() => {
-        const fetchFacilities = async () => {
-            setLoading(true);
-            try {
-                const { data, error } = await supabase
-                    .from('profiles')
-                    .select('id, full_name, name, city, state, avatar_url, profile_type')
-                    .in('profile_type', ['medical', 'clinic'])
-                    .limit(5);
-                
-                if (!error && data) {
-                    setFacilities(data.map(f => ({
-                        id: f.id,
-                        name: f.full_name || f.name || 'Healthcare Facility',
-                        location: [f.city, f.state].filter(Boolean).join(', ') || 'Nearby',
-                        logo: getStorageUrl(f.avatar_url, 'avatars'),
-                        type: f.profile_type
-                    })));
-                }
-            } catch (err) {
-                console.error("Error fetching facilities:", err);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchFacilities();
-    }, []);
-
-    const scroll = useCallback((dir) => {
-        if (scrollRef.current) {
-            scrollRef.current.scrollBy({ left: dir === 'left' ? -250 : 250, behavior: 'smooth' });
-        }
-    }, []);
-
-    if (loading) {
-        return (
-            <div className="mb-8">
-                <h2 className="text-base font-semibold text-slate-700 mb-4">Nearby Medicals & Clinics</h2>
-                <Skeleton height={120} borderRadius={16} />
-            </div>
-        );
-    }
-
-    if (facilities.length === 0) return null;
-
-    return (
-        <div className="mb-8">
-            <div className="flex items-center justify-between mb-4">
-                <h2 className="text-base font-semibold text-slate-700">Nearby Medicals & Clinics</h2>
-                <div className="flex gap-1.5">
-                    <button
-                        onClick={() => scroll('left')}
-                        className="h-8 w-8 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-500 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-300 transition"
-                    >
-                        <ChevronLeft size={15} />
-                    </button>
-                    <button
-                        onClick={() => scroll('right')}
-                        className="h-8 w-8 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-500 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-300 transition"
-                    >
-                        <ChevronRightIcon size={15} />
-                    </button>
-                </div>
-            </div>
-
-            <div
-                ref={scrollRef}
-                className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide"
-                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-            >
-                {facilities.map((fac, i) => (
-                    <motion.div
-                        key={fac.id}
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.08, duration: 0.35 }}
-                        className="flex-shrink-0 w-64 bg-white border border-slate-100 rounded-2xl p-4 shadow-sm hover:shadow-md hover:border-rose-200 transition-all cursor-pointer"
-                        onClick={() => window.location.href = '/medicals'}
-                    >
-                        <div className="flex items-center gap-4 mb-3">
-                            <div className="h-12 w-12 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center overflow-hidden flex-shrink-0 text-rose-500">
-                                {fac.logo ? (
-                                    <img src={fac.logo} alt={fac.name} className="h-full w-full object-cover" />
-                                ) : (
-                                    <Store size={20} />
-                                )}
-                            </div>
-                            <div>
-                                <h3 className="font-bold text-sm text-slate-800 line-clamp-1">{fac.name}</h3>
-                                <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-                                    <MapPin size={10} /> {fac.location}
-                                </p>
-                            </div>
-                        </div>
-                        <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-50">
-                            <span className="text-xs font-semibold text-rose-600 capitalize">View {fac.type}</span>
-                            <ChevronRightIcon size={14} className="text-rose-600" />
-                        </div>
-                    </motion.div>
-                ))}
-            </div>
-        </div>
-    );
-});
 
 /* ── Diagnostic Centers Banner Section ── */
 const DiagnosticCentersBanner = React.memo(function DiagnosticCentersBanner() {
@@ -935,7 +824,6 @@ export default function PatientDashboard() {
                 <CancelledAppointmentsBanner key={`cancelled-${patient.id}-${upcomingRefreshKey}`} patientId={patient.id} refreshKey={upcomingRefreshKey} />
 
                 {/* ── Diagnostic Centers Banner ───── */}
-                <MedicalClinicsBanner />
                 <DiagnosticCentersBanner />
 
                 {/* ── Quick actions grid ────────────── */}
