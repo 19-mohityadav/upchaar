@@ -46,21 +46,38 @@ export default function DoctorsPage() {
             .order('approved_at', { ascending: false })
             .then(({ data, error }) => {
                 if (!error && data) {
-                    setAllDoctors(data.map(d => ({
-                        id: d.id,
-                        name: d.full_name,
-                        specialty: d.specialization,
-                        location: [d.clinic_name, d.city, d.state].filter(Boolean).join(', '),
-                        city: (d.city || '').toLowerCase(),
-                        availability: 'Available Today',
-                        avatar: getStorageUrl(d.avatar_url, 'doctor-avtar'),
-                        experience: d.experience || 0,
-                        rating: Number(d.rating) || 4.5,
-                        reviews: d.total_appointments || 0,
-                        verified: true,
-                        fees: d.consultation_fee || 0,
-                        languages: d.languages || [],
-                    })));
+                    setAllDoctors(data.map(d => {
+                        const todayShort = new Date().toLocaleDateString('en-US', { weekday: 'short' }); // e.g. 'Mon'
+                        const days = d.available_days || [];
+                        const availableToday = days.some(day => day.startsWith(todayShort));
+
+                        // Find next available day label
+                        const dayOrder = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+                        const todayIdx = dayOrder.indexOf(todayShort);
+                        const nextDay = days
+                            .map(day => ({ day, idx: dayOrder.findIndex(d => day.startsWith(d)) }))
+                            .filter(({ idx }) => idx > todayIdx)
+                            .sort((a, b) => a.idx - b.idx)[0]?.day
+                            || days[0] || null;
+
+                        return {
+                            id: d.id,
+                            name: d.full_name,
+                            specialty: d.specialization,
+                            location: [d.clinic_name, d.city, d.state].filter(Boolean).join(', '),
+                            city: (d.city || '').toLowerCase(),
+                            availableToday,
+                            nextAvailableDay: availableToday ? null : nextDay,
+                            availableDays: days,
+                            avatar: getStorageUrl(d.avatar_url, 'doctor-avtar'),
+                            experience: d.experience || 0,
+                            rating: Number(d.rating) || 4.5,
+                            reviews: d.total_appointments || 0,
+                            verified: true,
+                            fees: d.consultation_fee || 0,
+                            languages: d.languages || [],
+                        };
+                    }));
                 }
                 setLoading(false);
             });
@@ -394,10 +411,18 @@ function DoctorCard({ doctor }) {
                                 <span className="text-xs font-bold text-slate-500 line-clamp-1">{doctor.location}</span>
                             </div>
                             <div className="flex items-center gap-2">
-                                <div className="h-6 w-6 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600">
+                                <div className={`h-6 w-6 rounded-lg flex items-center justify-center ${
+                                    doctor.availableToday ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-50 text-slate-400'
+                                }`}>
                                     <Calendar className="h-3.5 w-3.5" />
                                 </div>
-                                <span className="text-xs font-bold text-emerald-600">Available Today</span>
+                                {doctor.availableToday ? (
+                                    <span className="text-xs font-bold text-emerald-600">Available Today</span>
+                                ) : doctor.nextAvailableDay ? (
+                                    <span className="text-xs font-bold text-slate-400">Next: {doctor.nextAvailableDay}</span>
+                                ) : (
+                                    <span className="text-xs font-bold text-slate-300">Schedule TBD</span>
+                                )}
                             </div>
                         </div>
                     </div>

@@ -517,8 +517,10 @@ export default function PatientDashboard() {
             .from('appointments')
             .select('*')
             .eq('patient_id', patient.id)
+            .eq('status', 'Confirmed')
             .gte('date', todayStart)
             .order('date', { ascending: true })
+            .order('queue_number', { ascending: true })
             .limit(1)
             .then(({ data }) => {
                 if (data?.[0]) {
@@ -527,9 +529,11 @@ export default function PatientDashboard() {
                         return data[0];
                     });
                     fetchCurrentServing(data[0]);
+                } else {
+                    setActiveAppointment(null);
                 }
             });
-    }, [patient?.id, fetchCurrentServing]);
+    }, [patient?.id, fetchCurrentServing, upcomingRefreshKey]);
 
     useEffect(() => {
         fetchOldAppointments();

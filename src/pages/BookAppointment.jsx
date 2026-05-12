@@ -293,27 +293,88 @@ export default function BookAppointment() {
         try {
             const normalizedPhone = patientInfo.phone?.trim() || null;
 
-            let duplicateQuery = supabase
-                .from('appointments')
-                .select('id', { count: 'exact', head: true })
-                .eq('doctor_id', selectedDoctor.id)
-                .eq('date', selectedDate)
-                .eq('time_slot', selectedSlot)
-                .neq('status', 'Cancelled');
+            // Helper functions for time parsing
+            const parseTimeToMinutes = (timeStr) => {
+                if (!timeStr) return 0;
+                const [time, ampm] = timeStr.split(' ');
+                if (!time || !ampm) return 0;
+                let [h, m] = time.split(':').map(Number);
+                if (ampm === 'PM' && h !== 12) h += 12;
+                if (ampm === 'AM' && h === 12) h = 0;
+                return h * 60 + m;
+            };
 
-            if (user?.id) {
-                duplicateQuery = duplicateQuery.eq('patient_id', user.id);
-            } else if (normalizedPhone) {
-                duplicateQuery = duplicateQuery.eq('patient_phone', normalizedPhone);
+            const parseTimetableTime = (timeStr) => {
+                if (!timeStr) return 0;
+                let [h, m] = timeStr.split(':').map(Number);
+                return h * 60 + m;
+            };
+
+            // 1. Determine current timetable range
+            const slotMin = parseTimeToMinutes(selectedSlot);
+            const dStr = new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long' });
+            const matchedOrgId = selectedClinic?.id;
+            const matchedRanges = doctorTimetables.filter(t => t.org_id === matchedOrgId && t.day === dStr);
+
+            let currentRange = null;
+            for (const range of matchedRanges) {
+                const startMin = parseTimetableTime(range.time_from);
+                const endMin = parseTimetableTime(range.time_to);
+                if (slotMin >= startMin && slotMin < endMin) {
+                    currentRange = range;
+                    break;
+                }
             }
 
-            const { count: existingCount, error: duplicateError } = await duplicateQuery;
+            // 2. Fetch all appointments for the day to check duplicates
+            const { data: dayAppointments, error: dayAppointmentsError } = await supabase
+                .from('appointments')
+                .select('id, time_slot, patient_id, patient_phone')
+                .eq('doctor_id', selectedDoctor.id)
+                .eq('date', selectedDate)
+                .neq('status', 'Cancelled');
 
-            if (duplicateError) throw duplicateError;
+            if (dayAppointmentsError) throw dayAppointmentsError;
 
-            if ((existingCount ?? 0) > 0) {
-                toast.error('Duplicate booking not allowed.', {
-                    description: 'You already have an appointment with this doctor on the same date and time slot.',
+            // 3. Check for duplicates in the same range
+            let isDuplicate = false;
+            const existingAppts = dayAppointments || [];
+
+            if (currentRange) {
+                const startMin = parseTimetableTime(currentRange.time_from);
+                const endMin = parseTimetableTime(currentRange.time_to);
+                
+                for (const app of existingAppts) {
+                    const appMin = parseTimeToMinutes(app.time_slot);
+                    if (appMin >= startMin && appMin < endMin) {
+                        // Check if it's the same patient
+                        if (user?.id && app.patient_id === user.id) {
+                            isDuplicate = true;
+                            break;
+                        } else if (!user?.id && normalizedPhone && app.patient_phone === normalizedPhone) {
+                            isDuplicate = true;
+                            break;
+                        }
+                    }
+                }
+            } else {
+                // Fallback if no range found: check exact time slot
+                for (const app of existingAppts) {
+                    if (app.time_slot === selectedSlot) {
+                        if (user?.id && app.patient_id === user.id) {
+                            isDuplicate = true;
+                            break;
+                        } else if (!user?.id && normalizedPhone && app.patient_phone === normalizedPhone) {
+                            isDuplicate = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (isDuplicate) {
+                toast.error('You have already booked the appointment', {
+                    description: 'You cannot book another appointment with this doctor in the same time block.',
                 });
                 return;
             }
@@ -354,11 +415,19 @@ export default function BookAppointment() {
                 setStep(5);
             } else {
                 console.error('Booking error:', error);
-                toast.error(`Booking failed: ${error.message}`);
+                if (error?.code === '23505' || error?.message?.toLowerCase().includes('duplicate')) {
+                    toast.error('You have already booked the appointment');
+                } else {
+                    toast.error(`Booking failed: ${error.message}`);
+                }
             }
         } catch (err) {
             console.error('Unexpected error:', err);
-            toast.error('Something went wrong. Please try again.');
+            if (err?.code === '23505' || err?.message?.toLowerCase().includes('duplicate')) {
+                toast.error('You have already booked the appointment');
+            } else {
+                toast.error('Something went wrong. Please try again.');
+            }
         } finally {
             setBookingLoading(false);
         }
