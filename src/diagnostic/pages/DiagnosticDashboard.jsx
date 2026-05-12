@@ -1,1044 +1,312 @@
-import { useAuth } from '@/auth/AuthContext.jsx';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useEffect, useRef, useState, useMemo } from 'react';
-import { SignOutModal } from '@/components/landing/SignOutModal';
-import { useNavigate } from 'react-router-dom';
-import {
-    Activity, Clock, DollarSign, Users, LogOut, CheckCircle, XCircle,
-    Search, Edit, LayoutDashboard, TestTubes, FileText, Settings,
-    ChevronLeft, ChevronRight, Menu, Plus, X, Filter, Trash2,
-    Camera, Loader2, User, Phone, MapPin, Globe, Save
-} from 'lucide-react';
-
-
 import { supabase } from '@/lib/supabase.js';
-import { uploadAvatar, getStorageUrl } from '@/lib/uploadImage.js';
+import { useAuth } from '@/auth/AuthContext.jsx';
+import { 
+    FlaskConical, Calendar, Clock, User, Phone, 
+    FileText, CheckCircle2, XCircle, Search, 
+    Filter, ExternalLink, Paperclip, Bell
+} from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { toast, Toaster } from 'sonner';
 
 export default function DiagnosticDashboard() {
-    const { profile, signOut, refreshProfile } = useAuth();
-    const navigate = useNavigate();
+    const { user } = useAuth();
+    const [bookings, setBookings] = useState([]);
+    const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterCategory, setFilterCategory] = useState('All');
-    const [activeTab, setActiveTab] = useState('Dashboard');
-    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-    const [isAddTestModalOpen, setIsAddTestModalOpen] = useState(false);
-    const [editingTest, setEditingTest] = useState(null);
-    const [testToDelete, setTestToDelete] = useState(null);
-    const [isSignOutModalOpen, setIsSignOutModalOpen] = useState(false);
-    const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
-    const profileRef = useRef(null);
-    const [newTest, setNewTest] = useState({
-        name: '',
-        price: '',
-        category: 'Blood Test',
-        description: '',
-        status: 'Active'
-    });
-
-    // Profile/Settings State
-    const [profileData, setProfileData] = useState({
-        full_name: '',
-        phone: '',
-        bio: '',
-        address: '',
-        avatar_url: ''
-    });
-    const [isSavingProfile, setIsSavingProfile] = useState(false);
-    const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
-    const fileInputRef = useRef(null);
+    const [statusFilter, setStatusFilter] = useState('All');
 
     useEffect(() => {
-        if (profile) {
-            setProfileData({
-                full_name: profile.full_name || '',
-                phone: profile.phone || '',
-                bio: profile.bio || '',
-                address: profile.address || '',
-                avatar_url: profile.avatar_url || ''
-            });
-        }
-    }, [profile]);
+        if (!user) return;
 
-    const handleUpdateProfile = async (e) => {
-        e.preventDefault();
-        setIsSavingProfile(true);
-        try {
-            const { error } = await supabase
-                .from('profiles')
-                .update({
-                    full_name: profileData.full_name,
-                    phone: profileData.phone,
-                    bio: profileData.bio,
-                    address: profileData.address,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', profile.id);
+        const fetchBookings = async () => {
+            setLoading(true);
+            try {
+                const { data, error } = await supabase
+                    .from('appointments')
+                    .select('*')
+                    .eq('organization_id', user.id)
+                    .eq('organization_type', 'diagnostic')
+                    .order('created_at', { ascending: false });
 
-            if (error) throw error;
-            
-            // Refresh global auth state
-            await refreshProfile();
-            toast.success('Profile updated successfully!');
-        } catch (err) {
-            console.error('Detailed error updating profile:', err);
-            toast.error(err.message || 'Failed to update profile.');
-        } finally {
-            setIsSavingProfile(false);
-        }
-    };
-
-    const handleAvatarUpload = async (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        setIsUploadingAvatar(true);
-        try {
-            const url = await uploadAvatar(file, profile.id);
-            const { error } = await supabase
-                .from('profiles')
-                .update({ avatar_url: url })
-                .eq('id', profile.id);
-
-            if (error) throw error;
-            
-            setProfileData(prev => ({ ...prev, avatar_url: url }));
-            await refreshProfile();
-            toast.success('Profile picture updated!');
-        } catch (err) {
-            console.error('Error uploading avatar:', err);
-            toast.error('Failed to upload image.');
-        } finally {
-            setIsUploadingAvatar(false);
-        }
-    };
-
-    const handleSignOut = () => {
-        setIsSignOutModalOpen(true);
-    };
-
-    const handleConfirmSignOut = async () => {
-        setIsSignOutModalOpen(false);
-        setIsProfileDropdownOpen(false);
-        await signOut();
-        navigate('/');
-    };
-
-    // Close dropdown on outside click
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (profileRef.current && !profileRef.current.contains(event.target)) {
-                setIsProfileDropdownOpen(false);
+                if (error) throw error;
+                setBookings(data || []);
+            } catch (err) {
+                console.error('Error fetching bookings:', err);
+                toast.error('Failed to load bookings');
+            } finally {
+                setLoading(false);
             }
         };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
 
-    const stats = useMemo(() => [
-        { title: "Today's Tests", value: "0", icon: Clock, color: "text-blue-600", bg: "bg-blue-100" },
-        { title: "Today's Revenue", value: "₹0", icon: DollarSign, color: "text-emerald-600", bg: "bg-emerald-100" },
-        { title: "Lifetime Tests", value: "0", icon: Activity, color: "text-purple-600", bg: "bg-purple-100" },
-        { title: "Lifetime Revenue", value: "₹0", icon: DollarSign, color: "text-orange-600", bg: "bg-orange-100" }
-    ], []);
+        fetchBookings();
 
+        // Real-time subscription for new bookings
+        const channel = supabase
+            .channel('diagnostic-bookings')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'appointments',
+                    filter: `organization_id=eq.${user.id}`
+                },
+                (payload) => {
+                    console.log('Real-time booking update:', payload);
+                    if (payload.eventType === 'INSERT') {
+                        setBookings(prev => [payload.new, ...prev]);
+                        toast.success('New test booking received!');
+                    } else if (payload.eventType === 'UPDATE') {
+                        setBookings(prev => prev.map(b => b.id === payload.new.id ? payload.new : b));
+                    } else if (payload.eventType === 'DELETE') {
+                        setBookings(prev => prev.filter(b => b.id === payload.old.id));
+                    }
+                }
+            )
+            .subscribe();
 
-    const [tests, setTests] = useState([]);
-    const [testsLoading, setTestsLoading] = useState(true);
-    const [dcId, setDcId] = useState(null); // diagnostic_centers.id
-
-    // Load tests from Supabase on mount
-    useEffect(() => {
-        if (!profile?.id) return;
-        const loadTests = async () => {
-            setTestsLoading(true);
-            // Get or create the diagnostic_centers row for this profile
-            let { data: dc, error } = await supabase
-                .from('diagnostic_centers')
-                .select('id, tests')
-                .eq('profile_id', profile.id)
-                .maybeSingle();
-
-            if (!dc) {
-                // Create the row if it doesn't exist yet
-                const { data: created } = await supabase
-                    .from('diagnostic_centers')
-                    .insert([{ profile_id: profile.id, name: profile.full_name }])
-                    .select('id, tests')
-                    .single();
-                dc = created;
-            }
-
-            if (dc) {
-                setDcId(dc.id);
-                // tests column is an array of objects: [{id, name, price, category, status}]
-                const rawTests = Array.isArray(dc.tests) ? dc.tests : [];
-                setTests(rawTests.filter(t => t && typeof t === 'object'));
-            }
-            setTestsLoading(false);
+        return () => {
+            supabase.removeChannel(channel);
         };
-        loadTests();
-    }, [profile?.id]);
+    }, [user]);
 
-    // Persist updated tests array back to Supabase
-    const persistTests = async (updatedTests) => {
-        setTests(updatedTests);
-        if (!dcId) return;
-        await supabase
-            .from('diagnostic_centers')
-            .update({ tests: updatedTests })
-            .eq('id', dcId);
+    const handleUpdateStatus = async (bookingId, newStatus) => {
+        try {
+            const { error } = await supabase
+                .from('appointments')
+                .update({ status: newStatus })
+                .eq('id', bookingId);
+
+            if (error) throw error;
+            toast.success(`Booking ${newStatus.toLowerCase()} successfully`);
+        } catch (err) {
+            console.error('Error updating status:', err);
+            toast.error('Failed to update status');
+        }
     };
 
-    const filteredTests = tests.filter(test => {
-        const name = test?.name || '';
-        const category = test?.category || '';
-        const matchesSearch = name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                            category.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesCategory = filterCategory === 'All' || category === filterCategory;
-        return matchesSearch && matchesCategory;
+    const filteredBookings = bookings.filter(b => {
+        const matchesSearch = 
+            b.patient_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            b.specialization?.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesStatus = statusFilter === 'All' || b.status === statusFilter;
+        return matchesSearch && matchesStatus;
     });
-
-    const handleToggleStatus = (id) => {
-        const updated = tests.map(test =>
-            test.id === id ? { ...test, status: test.status === 'Active' ? 'Inactive' : 'Active' } : test
-        );
-        persistTests(updated);
-    };
-
-    const handleDeleteTest = () => {
-        if (testToDelete) {
-            persistTests(tests.filter(t => t.id !== testToDelete.id));
-            setTestToDelete(null);
-        }
-    };
-
-    const handleSaveNewTest = () => {
-        if (!newTest.name || !newTest.price) {
-            alert('Please provide at least a Test Name and Price.');
-            return;
-        }
-        const newId = tests.length > 0 ? Math.max(...tests.map(t => t.id)) + 1 : 1;
-        const updated = [...tests, {
-            id: newId,
-            name: newTest.name,
-            price: `₹${newTest.price}`,
-            category: newTest.category,
-            status: newTest.status
-        }];
-        persistTests(updated);
-        setNewTest({ name: '', price: '', category: 'Blood Test', description: '', status: 'Active' });
-        setIsAddTestModalOpen(false);
-    };
-
-    const navItems = [
-        { name: 'Dashboard', icon: LayoutDashboard },
-        { name: 'Available Tests', icon: TestTubes },
-        { name: 'Patients', icon: Users },
-        { name: 'Reports', icon: FileText },
-        { name: 'Settings', icon: Settings }
-    ];
 
     return (
-        <div className="h-screen bg-slate-50 flex overflow-hidden">
-            {/* Sidebar */}
-            <motion.div
-                animate={{ width: isSidebarOpen ? 260 : 80 }}
-                className="bg-white border-r border-slate-200 h-full flex flex-col shadow-sm relative z-20 flex-shrink-0 transition-all duration-300"
-            >
-                {/* Sidebar Header */}
-                <div className="h-24 flex items-center px-4 border-b border-slate-50/50">
-                    <div className="flex items-center gap-3 overflow-hidden w-full">
-                        <motion.div 
-                            whileHover={{ scale: 1.05 }}
-                            className="w-12 h-12 min-w-[48px] rounded-full border-2 border-[#a7f3d0] flex items-center justify-center p-1.5 bg-white overflow-hidden shadow-sm"
-                        >
-                            <img src="/logo.png" alt="Upchar Logo" className="w-full h-full object-contain" />
-                        </motion.div>
-                        <AnimatePresence mode="wait">
-                            {isSidebarOpen && (
-                                <motion.div
-                                    initial={{ opacity: 0, x: -10 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    exit={{ opacity: 0, x: -10 }}
-                                    transition={{ duration: 0.2 }}
-                                    className="flex items-baseline gap-1 select-none"
-                                >
-                                    <span className="text-xl sm:text-2xl font-black text-[#0d9488] tracking-tighter leading-none">Upchar</span>
-                                    <span className="text-xl sm:text-2xl font-black text-[#dc2626] tracking-tighter leading-none">Health</span>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
+        <div className="space-y-8 pb-10">
+            <Toaster richColors position="top-right" />
+            
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <h1 className="text-3xl font-black text-slate-900 flex items-center gap-3">
+                            <FlaskConical className="text-emerald-600 w-8 h-8" />
+                            Diagnostic Dashboard
+                        </h1>
+                        <p className="text-slate-500 mt-1 font-medium">Manage your test bookings and prescriptions</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <Button variant="outline" className="rounded-xl gap-2 font-bold bg-white border-slate-200">
+                            <Bell size={18} className="text-slate-500" />
+                            Notifications
+                        </Button>
                     </div>
                 </div>
 
-                {/* Sidebar Toggle Button */}
-                <button
-                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                    className="absolute -right-3 top-24 w-6 h-6 bg-white border border-slate-200 rounded-full flex items-center justify-center text-slate-500 hover:text-teal-600 hover:border-teal-200 shadow-sm z-30 transition-colors"
-                >
-                    {isSidebarOpen ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
-                </button>
-
-                {/* Sidebar Links */}
-                <div className="flex-1 py-6 flex flex-col gap-2 px-3 overflow-y-auto">
-                    {navItems.map((item) => (
-                        <button
-                            key={item.name}
-                            onClick={() => setActiveTab(item.name)}
-                            className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 group ${activeTab === item.name
-                                    ? 'bg-teal-50 text-teal-700 font-medium'
-                                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                                }`}
-                            title={!isSidebarOpen ? item.name : ''}
-                        >
-                            <item.icon
-                                size={20}
-                                className={`min-w-[20px] transition-colors ${activeTab === item.name ? 'text-teal-600' : 'text-slate-400 group-hover:text-slate-600'}`}
-                            />
-                            <AnimatePresence>
-                                {isSidebarOpen && (
-                                    <motion.span
-                                        initial={{ opacity: 0, width: 0 }}
-                                        animate={{ opacity: 1, width: 'auto' }}
-                                        exit={{ opacity: 0, width: 0 }}
-                                        className="whitespace-nowrap"
-                                    >
-                                        {item.name}
-                                    </motion.span>
-                                )}
-                            </AnimatePresence>
-                            {activeTab === item.name && isSidebarOpen && (
-                                <motion.div
-                                    layoutId="sidebar-active-indicator"
-                                    className="ml-auto w-1.5 h-1.5 rounded-full bg-teal-600"
-                                />
-                            )}
-                        </button>
+                {/* Stats */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {[
+                        { label: 'Total Bookings', value: bookings.length, color: 'bg-blue-500' },
+                        { label: 'Pending', value: bookings.filter(b => b.status === 'Pending').length, color: 'bg-amber-500' },
+                        { label: 'Confirmed', value: bookings.filter(b => b.status === 'Confirmed').length, color: 'bg-emerald-500' },
+                        { label: 'Completed', value: bookings.filter(b => b.status === 'Completed').length, color: 'bg-slate-500' },
+                    ].map((stat, i) => (
+                        <Card key={i} className="border-none shadow-sm rounded-3xl overflow-hidden bg-white">
+                            <CardContent className="p-6">
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{stat.label}</p>
+                                <p className="text-3xl font-black text-slate-900 mt-1">{stat.value}</p>
+                                <div className={`h-1.5 w-12 rounded-full mt-3 ${stat.color}`} />
+                            </CardContent>
+                        </Card>
                     ))}
                 </div>
-            </motion.div>
 
-            {/* Main Content */}
-            <div className="flex-1 flex flex-col h-full overflow-hidden">
-                {/* Topbar */}
-                <div className="bg-white border-b border-slate-200 h-20 px-8 flex items-center justify-between shadow-sm flex-shrink-0">
-                    <div className="flex items-center gap-4">
-                        <button
-                            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                            className="lg:hidden p-2 text-slate-500 hover:bg-slate-100 rounded-lg"
-                        >
-                            <Menu size={24} />
-                        </button>
-                        <div>
-                            <h2 className="text-xl font-bold text-slate-800">{activeTab}</h2>
+                {/* Filters */}
+                <Card className="border-none shadow-sm rounded-3xl bg-white">
+                    <CardContent className="p-4 md:p-6 flex flex-col md:flex-row gap-4">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3 top-3 text-slate-400" size={18} />
+                            <input 
+                                type="text"
+                                placeholder="Search patient name or test..."
+                                className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-slate-50 border-transparent focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all outline-none text-slate-700"
+                                value={searchTerm}
+                                onChange={e => setSearchTerm(e.target.value)}
+                            />
                         </div>
-                    </div>
-                    <div className="flex items-center gap-4 relative" ref={profileRef}>
-                        <button
-                            onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
-                            className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center border border-slate-200 hover:border-teal-500 transition-all overflow-hidden focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2"
-                        >
-                            {profile?.avatar_url ? (
-                                <img src={profile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
-                            ) : (
-                                <div className="w-full h-full bg-gradient-to-br from-teal-500 to-emerald-400 flex items-center justify-center text-white font-bold text-sm">
-                                    {profile?.full_name?.charAt(0) || 'D'}
-                                </div>
-                            )}
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <Filter size={18} className="text-slate-400" />
+                            <div className="flex bg-slate-50 p-1 rounded-2xl border border-slate-100">
+                                {['All', 'Pending', 'Confirmed', 'Completed', 'Cancelled'].map(s => (
+                                    <button
+                                        key={s}
+                                        onClick={() => setStatusFilter(s)}
+                                        className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                                            statusFilter === s 
+                                                ? 'bg-white text-emerald-600 shadow-sm' 
+                                                : 'text-slate-500 hover:text-slate-700'
+                                        }`}
+                                    >
+                                        {s}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
 
-                        <AnimatePresence>
-                            {isProfileDropdownOpen && (
+                {/* Bookings List */}
+                <div className="space-y-4">
+                    {loading ? (
+                        <div className="flex flex-col items-center justify-center py-20 gap-4">
+                            <div className="w-10 h-10 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin" />
+                            <p className="text-slate-500 font-medium">Fetching bookings...</p>
+                        </div>
+                    ) : filteredBookings.length === 0 ? (
+                        <Card className="border-none shadow-sm rounded-3xl bg-white py-20">
+                            <CardContent className="flex flex-col items-center gap-4">
+                                <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200">
+                                    <FlaskConical size={40} />
+                                </div>
+                                <div className="text-center">
+                                    <h3 className="text-xl font-bold text-slate-800">No bookings found</h3>
+                                    <p className="text-slate-500 max-w-xs mx-auto mt-1">
+                                        Try adjusting your filters or wait for new patient requests.
+                                    </p>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    ) : (
+                        <AnimatePresence mode="popLayout">
+                            {filteredBookings.map((booking) => (
                                 <motion.div
-                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                    transition={{ duration: 0.2 }}
-                                    className="absolute right-0 top-full mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 z-50"
+                                    key={booking.id}
+                                    layout
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, scale: 0.95 }}
+                                    className="group"
                                 >
-                                    <div className="px-4 py-3 border-b border-slate-50 mb-1">
-                                        <p className="text-sm font-bold text-slate-800 truncate">{profile?.full_name || 'Diagnostic Admin'}</p>
-                                        <p className="text-[11px] text-slate-500 font-medium">Diagnostic Center Manager</p>
-                                    </div>
-                                    <button
-                                        onClick={() => {
-                                            setIsProfileDropdownOpen(false);
-                                            handleSignOut();
-                                        }}
-                                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors text-left"
-                                    >
-                                        <LogOut size={16} />
-                                        Sign Out
-                                    </button>
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
-                    </div>
-                </div>
-
-                {/* Scrollable Content Area */}
-                <div className="flex-1 overflow-y-auto p-6 sm:p-10 w-full">
-                    <div className="max-w-7xl mx-auto w-full">
-
-                        {activeTab === 'Dashboard' && (
-                            <motion.div
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                            >
-                                <div className="mb-8">
-                                    <h3 className="text-xl font-bold text-slate-800">Overview</h3>
-                                    <p className="text-slate-500">Your diagnostic center activity at a glance.</p>
-                                </div>
-
-                                {/* Stats Grid */}
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-                                    {stats.map((stat, idx) => (
-                                        <div
-                                            key={idx}
-                                            className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm hover:shadow-md transition-shadow"
-                                        >
-                                            <div className="flex items-center justify-between mb-4">
-                                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${stat.bg} ${stat.color}`}>
-                                                    <stat.icon size={24} />
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <h3 className="text-3xl font-bold text-slate-800 mb-1">{stat.value}</h3>
-                                                <p className="text-sm font-medium text-slate-500">{stat.title}</p>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </motion.div>
-                        )}
-
-                        {(activeTab === 'Dashboard' || activeTab === 'Available Tests') && (
-                            <motion.div
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: 0.1 }}
-                                className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden"
-                            >
-                                <div className="p-6 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                                    <div>
-                                        <h2 className="text-xl font-bold text-slate-800">Available Tests</h2>
-                                        <p className="text-sm text-slate-500">Manage and view your diagnostic test catalogue</p>
-                                    </div>
-                                    <div className="flex flex-wrap items-center gap-3">
-                                        <div className="relative">
-                                            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                            <select
-                                                value={filterCategory}
-                                                onChange={(e) => setFilterCategory(e.target.value)}
-                                                className="pl-10 pr-8 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-white appearance-none cursor-pointer"
-                                            >
-                                                <option value="All">All Categories</option>
-                                                <option value="Blood Test">Blood Test</option>
-                                                <option value="Radiology">Radiology</option>
-                                                <option value="Pathology">Pathology</option>
-                                                <option value="Imaging">Imaging</option>
-                                                <option value="Cardiology">Cardiology</option>
-                                            </select>
-                                        </div>
-                                        <div className="relative">
-                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                            <input
-                                                type="text"
-                                                placeholder="Search tests..."
-                                                value={searchTerm}
-                                                onChange={(e) => setSearchTerm(e.target.value)}
-                                                className="pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent w-full sm:w-64"
-                                            />
-                                        </div>
-                                        <button
-                                            onClick={() => setIsAddTestModalOpen(true)}
-                                            className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 transition-colors shadow-sm whitespace-nowrap ml-auto"
-                                        >
-                                            <Plus size={18} />
-                                            Add Test
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-left border-collapse">
-                                        <thead>
-                                            <tr className="bg-slate-50 text-slate-500 text-sm border-b border-slate-200">
-                                                <th className="px-6 py-4 font-medium">Test Name</th>
-                                                <th className="px-6 py-4 font-medium">Category</th>
-                                                <th className="px-6 py-4 font-medium">Price</th>
-                                                <th className="px-6 py-4 font-medium">Status</th>
-                                                <th className="px-6 py-4 font-medium text-right">Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100">
-                                            {testsLoading ? (
-                                                <tr>
-                                                    <td colSpan="5" className="px-6 py-12 text-center text-slate-400">
-                                                        <div className="flex items-center justify-center gap-2">
-                                                            <div className="w-4 h-4 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
-                                                            Loading tests...
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            ) : tests.length === 0 ? (
-                                                <tr>
-                                                    <td colSpan="5" className="px-6 py-16 text-center">
-                                                        <div className="flex flex-col items-center justify-center">
-                                                            <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
-                                                                <TestTubes size={32} className="text-slate-400" />
+                                    <Card className="border-none shadow-sm rounded-3xl bg-white hover:shadow-md transition-all overflow-hidden">
+                                        <CardContent className="p-0">
+                                            <div className="flex flex-col lg:flex-row">
+                                                {/* Left: Patient & Test Info */}
+                                                <div className="flex-1 p-6 border-b lg:border-b-0 lg:border-r border-slate-50">
+                                                    <div className="flex items-start justify-between">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 font-black text-xl">
+                                                                {booking.patient_name?.[0] || 'P'}
                                                             </div>
-                                                            <h3 className="text-lg font-bold text-slate-700 mb-1">No tests available yet</h3>
-                                                            <p className="text-slate-500 mb-4 max-w-sm">You haven't added any diagnostic tests to your catalogue. Click 'Add Test' to get started.</p>
-                                                            <button
-                                                                onClick={() => setIsAddTestModalOpen(true)}
-                                                                className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 transition-colors shadow-sm"
-                                                            >
-                                                                <Plus size={18} />
-                                                                Add Test
-                                                            </button>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            ) : filteredTests.length > 0 ? (
-                                                filteredTests.map((test) => (
-                                                    <tr key={test.id} className="hover:bg-slate-50 transition-colors group">
-                                                        <td className="px-6 py-4">
-                                                            <p className="font-semibold text-slate-800">{test.name}</p>
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-medium">
-                                                                {test.category}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-6 py-4 font-medium text-slate-700">
-                                                            {test.price}
-                                                        </td>
-                                                        <td className="px-6 py-4">
-                                                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${test.status === 'Active'
-                                                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                                                    : 'bg-rose-50 text-rose-700 border border-rose-200'
-                                                                }`}>
-                                                                {test.status === 'Active' ? <CheckCircle size={12} /> : <XCircle size={12} />}
-                                                                {test.status}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-6 py-4 text-right">
-                                                            <div className="flex items-center justify-end gap-2">
-                                                                <div className="flex items-center gap-2 mr-2 border-r border-slate-200 pr-4">
-                                                                    <span className={`text-xs font-medium ${test.status === 'Active' ? 'text-teal-600' : 'text-slate-400'}`}>
-                                                                        {test.status === 'Active' ? 'On' : 'Off'}
+                                                            <div>
+                                                                <h4 className="text-lg font-bold text-slate-900">{booking.patient_name}</h4>
+                                                                <div className="flex items-center gap-3 text-slate-500 text-sm mt-0.5">
+                                                                    <span className="flex items-center gap-1"><Phone size={14} /> {booking.patient_phone}</span>
+                                                                    <span className="w-1 h-1 rounded-full bg-slate-300" />
+                                                                    <span className="flex items-center gap-1 font-bold text-emerald-600">
+                                                                        <FlaskConical size={14} /> {booking.specialization}
                                                                     </span>
-                                                                    <label className="relative inline-flex items-center cursor-pointer">
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            className="sr-only peer"
-                                                                            checked={test.status === 'Active'}
-                                                                            onChange={() => handleToggleStatus(test.id)}
-                                                                        />
-                                                                        <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-teal-500"></div>
-                                                                    </label>
                                                                 </div>
-                                                                <button
-                                                                    onClick={() => setEditingTest(test)}
-                                                                    className="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors"
-                                                                    title="Edit Test"
-                                                                >
-                                                                    <Edit size={18} />
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => setTestToDelete(test)}
-                                                                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                                                                    title="Delete Test"
-                                                                >
-                                                                    <Trash2 size={18} />
-                                                                </button>
                                                             </div>
-                                                        </td>
-                                                    </tr>
-                                                ))
-                                            ) : (
-                                                <tr>
-                                                    <td colSpan="5" className="px-6 py-12 text-center text-slate-500">
-                                                        No tests found matching your search or filter.
-                                                    </td>
-                                                </tr>
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </motion.div>
-                        )}
+                                                        </div>
+                                                        <Badge className={`rounded-xl border-none font-bold uppercase tracking-wider text-[10px] ${
+                                                            booking.status === 'Confirmed' ? 'bg-emerald-100 text-emerald-700' :
+                                                            booking.status === 'Pending' ? 'bg-amber-100 text-amber-700' :
+                                                            booking.status === 'Cancelled' ? 'bg-rose-100 text-rose-700' :
+                                                            'bg-slate-100 text-slate-700'
+                                                        }`}>
+                                                            {booking.status}
+                                                        </Badge>
+                                                    </div>
+                                                </div>
 
-                        {activeTab === 'Settings' && (
-                            <motion.div
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className="max-w-4xl mx-auto pb-10"
-                            >
-                                <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-200/50 overflow-hidden">
-                                    {/* Profile Header */}
-                                    <div className="bg-gradient-to-br from-teal-600 via-teal-500 to-emerald-500 px-8 py-12 text-white relative overflow-hidden">
-                                        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/3 blur-3xl" />
-                                        <div className="absolute bottom-0 left-0 w-48 h-48 bg-teal-400/20 rounded-full translate-y-1/2 -translate-x-1/4 blur-2xl" />
-                                        
-                                        <div className="relative flex flex-col md:flex-row items-center gap-8">
-                                            {/* Avatar Section */}
-                                            <div className="relative group">
-                                                <div className="w-36 h-36 rounded-[2rem] bg-white/20 backdrop-blur-md border-4 border-white/30 flex items-center justify-center overflow-hidden shadow-2xl transition-transform duration-500 group-hover:scale-[1.02]">
-                                                    {profileData.avatar_url ? (
-                                                        <img 
-                                                            src={getStorageUrl(profileData.avatar_url, 'avatars')} 
-                                                            alt="Profile" 
-                                                            className="w-full h-full object-cover"
-                                                        />
+                                                {/* Middle: Appointment Details */}
+                                                <div className="p-6 lg:w-72 bg-slate-50/50 flex flex-col justify-center gap-3">
+                                                    <div className="flex items-center gap-2 text-slate-600">
+                                                        <Calendar size={16} className="text-slate-400" />
+                                                        <span className="text-sm font-medium">
+                                                            {new Date(booking.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 text-slate-600">
+                                                        <Clock size={16} className="text-slate-400" />
+                                                        <span className="text-sm font-medium">{booking.time_slot}</span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Right: Prescription & Actions */}
+                                                <div className="p-6 lg:w-80 flex flex-col justify-center gap-4">
+                                                    {booking.prescription_url ? (
+                                                        <a 
+                                                            href={booking.prescription_url} 
+                                                            target="_blank" 
+                                                            rel="noopener noreferrer"
+                                                            className="flex items-center justify-between p-3 rounded-2xl bg-emerald-50 border border-emerald-100 group/pres"
+                                                        >
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-600">
+                                                                    <Paperclip size={16} />
+                                                                </div>
+                                                                <span className="text-sm font-bold text-emerald-700">Prescription</span>
+                                                            </div>
+                                                            <ExternalLink size={16} className="text-emerald-400 group-hover/pres:text-emerald-600 transition-colors" />
+                                                        </a>
                                                     ) : (
-                                                        <div className="w-full h-full bg-gradient-to-br from-teal-400 to-emerald-300 flex items-center justify-center text-white text-4xl font-bold">
-                                                            {profileData.full_name?.charAt(0) || 'D'}
+                                                        <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100 flex items-center gap-3 text-slate-400 italic">
+                                                            <Paperclip size={16} />
+                                                            <span className="text-xs font-medium">No prescription uploaded</span>
                                                         </div>
                                                     )}
-                                                    
-                                                    {isUploadingAvatar && (
-                                                        <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center">
-                                                            <Loader2 size={32} className="text-white animate-spin" />
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <button 
-                                                    onClick={() => fileInputRef.current?.click()}
-                                                    disabled={isUploadingAvatar}
-                                                    className="absolute -bottom-3 -right-3 w-12 h-12 bg-white rounded-2xl shadow-lg flex items-center justify-center text-teal-600 hover:scale-110 active:scale-95 transition-all duration-200 disabled:opacity-50 z-10"
-                                                    title="Change Center Photo"
-                                                >
-                                                    <Camera size={20} />
-                                                </button>
-                                                <input 
-                                                    type="file" 
-                                                    ref={fileInputRef} 
-                                                    className="hidden" 
-                                                    accept="image/*" 
-                                                    onChange={handleAvatarUpload} 
-                                                />
-                                            </div>
 
-                                            {/* Header Info */}
-                                            <div className="text-center md:text-left space-y-3">
-                                                <div className="space-y-1">
-                                                    <h2 className="text-4xl font-black tracking-tight">{profileData.full_name || 'Diagnostic Center'}</h2>
-                                                    <p className="text-teal-50/80 font-medium flex items-center justify-center md:justify-start gap-2 text-lg">
-                                                        <MapPin size={18} className="text-teal-200" /> {profileData.address || 'Location not set'}
-                                                    </p>
-                                                </div>
-                                                <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 pt-2">
-                                                    <span className="px-4 py-1.5 bg-white/20 backdrop-blur-md rounded-xl text-xs font-black uppercase tracking-widest border border-white/10">
-                                                        Healthcare Provider
-                                                    </span>
-                                                    <span className="px-4 py-1.5 bg-emerald-400/20 backdrop-blur-md text-emerald-100 rounded-xl text-xs font-black uppercase tracking-widest border border-emerald-400/20">
-                                                        Verified Diagnostic Center
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Settings Form */}
-                                    <form onSubmit={handleUpdateProfile} className="p-10 space-y-12">
-                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-                                            {/* Left Column: Core Info */}
-                                            <div className="space-y-8">
-                                                <div className="flex items-center gap-3 pb-2 border-b border-slate-50">
-                                                    <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center text-teal-600">
-                                                        <User size={18} />
-                                                    </div>
-                                                    <h3 className="text-lg font-bold text-slate-800">Basic Information</h3>
-                                                </div>
-                                                
-                                                <div className="space-y-6">
-                                                    <div className="space-y-2">
-                                                        <label className="text-sm font-bold text-slate-500 ml-1">Center Name</label>
-                                                        <input 
-                                                            type="text" 
-                                                            value={profileData.full_name}
-                                                            onChange={(e) => setProfileData({...profileData, full_name: e.target.value})}
-                                                            className="w-full px-6 py-4 bg-slate-50/50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500 outline-none transition-all font-semibold text-slate-700 placeholder:text-slate-300"
-                                                            placeholder="e.g. LifeCare Diagnostics"
-                                                        />
-                                                    </div>
-                                                    
-                                                    <div className="space-y-2">
-                                                        <label className="text-sm font-bold text-slate-500 ml-1">Contact Number</label>
-                                                        <div className="relative">
-                                                            <input 
-                                                                type="tel" 
-                                                                value={profileData.phone}
-                                                                onChange={(e) => setProfileData({...profileData, phone: e.target.value})}
-                                                                className="w-full px-6 py-4 pl-14 bg-slate-50/50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500 outline-none transition-all font-semibold text-slate-700 placeholder:text-slate-300"
-                                                                placeholder="+91 00000 00000"
-                                                            />
-                                                            <Phone size={20} className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" />
-                                                        </div>
+                                                    <div className="flex gap-2">
+                                                        {booking.status === 'Pending' && (
+                                                            <Button 
+                                                                onClick={() => handleUpdateStatus(booking.id, 'Confirmed')}
+                                                                className="flex-1 bg-emerald-600 hover:bg-emerald-700 rounded-xl h-10 font-bold"
+                                                            >
+                                                                Confirm
+                                                            </Button>
+                                                        )}
+                                                        {booking.status === 'Confirmed' && (
+                                                            <Button 
+                                                                onClick={() => handleUpdateStatus(booking.id, 'Completed')}
+                                                                className="flex-1 bg-slate-900 hover:bg-black rounded-xl h-10 font-bold"
+                                                            >
+                                                                Mark Done
+                                                            </Button>
+                                                        )}
+                                                        {['Pending', 'Confirmed'].includes(booking.status) && (
+                                                            <Button 
+                                                                variant="outline"
+                                                                onClick={() => handleUpdateStatus(booking.id, 'Cancelled')}
+                                                                className="px-3 rounded-xl h-10 border-slate-200 text-rose-500 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 transition-all"
+                                                            >
+                                                                <XCircle size={18} />
+                                                            </Button>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>
-
-                                            {/* Right Column: Location */}
-                                            <div className="space-y-8">
-                                                <div className="flex items-center gap-3 pb-2 border-b border-slate-50">
-                                                    <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600">
-                                                        <MapPin size={18} />
-                                                    </div>
-                                                    <h3 className="text-lg font-bold text-slate-800">Location Details</h3>
-                                                </div>
-                                                
-                                                <div className="space-y-2">
-                                                    <label className="text-sm font-bold text-slate-500 ml-1">Full Office Address</label>
-                                                    <textarea 
-                                                        rows={5}
-                                                        value={profileData.address}
-                                                        onChange={(e) => setProfileData({...profileData, address: e.target.value})}
-                                                        className="w-full px-6 py-4 bg-slate-50/50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500 outline-none transition-all font-semibold text-slate-700 placeholder:text-slate-300 resize-none leading-relaxed"
-                                                        placeholder="Enter the complete operational address..."
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Bottom Section: Description */}
-                                        <div className="space-y-8 pt-4">
-                                            <div className="flex items-center gap-3 pb-2 border-b border-slate-50">
-                                                <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
-                                                    <FileText size={18} />
-                                                </div>
-                                                <h3 className="text-lg font-bold text-slate-800">Center Description</h3>
-                                            </div>
-                                            
-                                            <div className="space-y-2">
-                                                <label className="text-sm font-bold text-slate-500 ml-1">About the Center</label>
-                                                <textarea 
-                                                    rows={4}
-                                                    value={profileData.bio}
-                                                    onChange={(e) => setProfileData({...profileData, bio: e.target.value})}
-                                                    className="w-full px-6 py-4 bg-slate-50/50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500 outline-none transition-all font-semibold text-slate-700 placeholder:text-slate-300 resize-none leading-relaxed"
-                                                    placeholder="Highlight your specialties, high-end equipment, or center history..."
-                                                />
-                                            </div>
-                                        </div>
-
-                                        {/* Submit Button */}
-                                        <div className="flex justify-end pt-8 border-t border-slate-50">
-                                            <button 
-                                                type="submit"
-                                                disabled={isSavingProfile}
-                                                className="group relative flex items-center gap-3 bg-slate-900 hover:bg-teal-600 text-white px-10 py-4 rounded-[1.5rem] font-black text-lg transition-all duration-300 shadow-xl shadow-slate-200 hover:shadow-teal-500/25 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none overflow-hidden"
-                                            >
-                                                <div className="absolute inset-0 bg-gradient-to-r from-teal-500 to-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                                                <span className="relative flex items-center gap-3">
-                                                    {isSavingProfile ? <Loader2 size={22} className="animate-spin" /> : <Save size={22} />}
-                                                    Update Profile
-                                                </span>
-                                            </button>
-                                        </div>
-                                    </form>
-                                </div>
-                            </motion.div>
-                        )}
-
-                        {['Patients', 'Reports'].includes(activeTab) && (
-                            <motion.div
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className="bg-white rounded-2xl border border-dashed border-slate-300 flex flex-col items-center justify-center p-16 text-center mt-10"
-                            >
-                                <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-6">
-                                    {activeTab === 'Patients' && <Users size={40} className="text-slate-400" />}
-                                    {activeTab === 'Reports' && <FileText size={40} className="text-slate-400" />}
-                                </div>
-                                <h3 className="text-xl font-bold text-slate-700 mb-2">{activeTab} Module</h3>
-                                <p className="text-slate-500 max-w-sm">This section is currently under development. Check back later for updates.</p>
-                            </motion.div>
-                        )}
-
-                    </div>
+                                        </CardContent>
+                                    </Card>
+                                </motion.div>
+                            ))}
+                        </AnimatePresence>
+                    )}
                 </div>
-            </div>
-
-            {/* Add Test Modal */}
-            <AnimatePresence>
-                {isAddTestModalOpen && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-0">
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            onClick={() => setIsAddTestModalOpen(false)}
-                            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm"
-                        />
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="bg-white rounded-2xl shadow-xl w-full max-w-lg relative z-10 overflow-hidden flex flex-col max-h-[90vh]"
-                        >
-                            <div className="flex items-center justify-between p-6 border-b border-slate-100">
-                                <h3 className="text-xl font-bold text-slate-800">Add New Test</h3>
-                                <button
-                                    onClick={() => setIsAddTestModalOpen(false)}
-                                    className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors"
-                                >
-                                    <X size={18} />
-                                </button>
-                            </div>
-
-                            <div className="p-6 overflow-y-auto flex-1">
-                                <form className="space-y-5">
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">Test Name</label>
-                                        <input
-                                            type="text"
-                                            value={newTest.name}
-                                            onChange={(e) => setNewTest({ ...newTest, name: e.target.value })}
-                                            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all"
-                                            placeholder="e.g. Complete Blood Count"
-                                        />
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Price (₹)</label>
-                                            <input
-                                                type="number"
-                                                value={newTest.price}
-                                                onChange={(e) => setNewTest({ ...newTest, price: e.target.value })}
-                                                className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all"
-                                                placeholder="500"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
-                                            <select
-                                                value={newTest.category}
-                                                onChange={(e) => setNewTest({ ...newTest, category: e.target.value })}
-                                                className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all bg-white"
-                                            >
-                                                <option>Blood Test</option>
-                                                <option>Radiology</option>
-                                                <option>Pathology</option>
-                                                <option>Imaging</option>
-                                                <option>Cardiology</option>
-                                            </select>
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
-                                        <textarea
-                                            rows="3"
-                                            value={newTest.description}
-                                            onChange={(e) => setNewTest({ ...newTest, description: e.target.value })}
-                                            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all resize-none"
-                                            placeholder="Brief description about the test..."
-                                        ></textarea>
-                                    </div>
-
-                                    <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
-                                        <div>
-                                            <p className="font-medium text-slate-800">Status</p>
-                                            <p className="text-xs text-slate-500">Determine if this test is currently available</p>
-                                        </div>
-                                        <label className="relative inline-flex items-center cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                className="sr-only peer"
-                                                checked={newTest.status === 'Active'}
-                                                onChange={(e) => setNewTest({ ...newTest, status: e.target.checked ? 'Active' : 'Inactive' })}
-                                            />
-                                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-teal-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
-                                        </label>
-                                    </div>
-                                </form>
-                            </div>
-
-                            <div className="p-6 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-3 rounded-b-2xl">
-                                <button
-                                    onClick={() => setIsAddTestModalOpen(false)}
-                                    type="button"
-                                    className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-200 bg-slate-100 rounded-lg transition-colors"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={handleSaveNewTest}
-                                    className="px-5 py-2.5 text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 rounded-lg transition-colors shadow-sm"
-                                >
-                                    Save Test
-                                </button>
-                            </div>
-                        </motion.div>
-                    </div>
-                )}
-            </AnimatePresence>
-
-            {/* Edit Test Modal */}
-            <AnimatePresence>
-                {editingTest && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-0">
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            onClick={() => setEditingTest(null)}
-                            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm"
-                        />
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="bg-white rounded-2xl shadow-xl w-full max-w-lg relative z-10 overflow-hidden flex flex-col max-h-[90vh]"
-                        >
-                            <div className="flex items-center justify-between p-6 border-b border-slate-100">
-                                <h3 className="text-xl font-bold text-slate-800">Edit Test</h3>
-                                <button
-                                    onClick={() => setEditingTest(null)}
-                                    className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors"
-                                >
-                                    <X size={18} />
-                                </button>
-                            </div>
-
-                            <div className="p-6 overflow-y-auto flex-1">
-                                <form className="space-y-5">
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-700 mb-1">Test Name</label>
-                                        <input 
-                                            type="text" 
-                                            value={editingTest.name} 
-                                            onChange={(e) => setEditingTest({...editingTest, name: e.target.value})}
-                                            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all" 
-                                        />
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Price</label>
-                                            <input 
-                                                type="text" 
-                                                value={editingTest.price} 
-                                                onChange={(e) => setEditingTest({...editingTest, price: e.target.value})}
-                                                className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all" 
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
-                                            <select 
-                                                value={editingTest.category} 
-                                                onChange={(e) => setEditingTest({...editingTest, category: e.target.value})}
-                                                className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all bg-white"
-                                            >
-                                                <option>Blood Test</option>
-                                                <option>Radiology</option>
-                                                <option>Pathology</option>
-                                                <option>Imaging</option>
-                                                <option>Cardiology</option>
-                                            </select>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
-                                        <div>
-                                            <p className="font-medium text-slate-800">Status</p>
-                                            <p className="text-xs text-slate-500">Determine if this test is currently available</p>
-                                        </div>
-                                        <label className="relative inline-flex items-center cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                className="sr-only peer"
-                                                checked={editingTest.status === 'Active'}
-                                                onChange={(e) => setEditingTest({...editingTest, status: e.target.checked ? 'Active' : 'Inactive'})}
-                                            />
-                                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-teal-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
-                                        </label>
-                                    </div>
-                                </form>
-                            </div>
-
-                            <div className="p-6 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-3 rounded-b-2xl">
-                                <button
-                                    onClick={() => setEditingTest(null)}
-                                    type="button"
-                                    className="px-5 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-200 bg-slate-100 rounded-lg transition-colors"
-                                >
-                                    Cancel
-                                </button>
-                                <button 
-                                    type="button" 
-                                    onClick={() => {
-                                        const updated = tests.map(t => t.id === editingTest.id ? editingTest : t);
-                                        persistTests(updated);
-                                        setEditingTest(null);
-                                    }}
-                                    className="px-5 py-2.5 text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 rounded-lg transition-colors shadow-sm"
-                                >
-                                    Save Changes
-                                </button>
-                            </div>
-                        </motion.div>
-                    </div>
-                )}
-            </AnimatePresence>
-
-            {/* Delete Confirmation Modal */}
-            <AnimatePresence>
-                {testToDelete && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-0">
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            onClick={() => setTestToDelete(null)}
-                            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm"
-                        />
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="bg-white rounded-2xl shadow-xl w-full max-w-sm relative z-10 overflow-hidden"
-                        >
-                            <div className="p-6 text-center">
-                                <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                                    <Trash2 size={24} />
-                                </div>
-                                <h3 className="text-xl font-bold text-slate-800 mb-2">Delete Test</h3>
-                                <p className="text-slate-500 mb-6">Are you sure you want to delete <span className="font-semibold text-slate-700">{testToDelete.name}</span>? This action cannot be undone.</p>
-
-                                <div className="flex gap-3">
-                                    <button
-                                        onClick={() => setTestToDelete(null)}
-                                        className="flex-1 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-100 bg-slate-50 rounded-lg transition-colors border border-slate-200"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        onClick={handleDeleteTest}
-                                        className="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition-colors shadow-sm"
-                                    >
-                                        Delete
-                                    </button>
-                                </div>
-                            </div>
-                        </motion.div>
-                    </div>
-                )}
-            </AnimatePresence>
-
-            {/* Toaster & Modals */}
-            <Toaster position="top-right" richColors />
-            <SignOutModal
-                isOpen={isSignOutModalOpen}
-                onClose={() => setIsSignOutModalOpen(false)}
-                onConfirm={handleConfirmSignOut}
-            />
         </div>
     );
 }
